@@ -61,6 +61,8 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.navigation.NavHostController
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
@@ -122,7 +124,12 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     BackHandler(enabled = true) {
-        navController.popBackStack()
+        if (!navController.popBackStack()) {
+            navController.navigate("home") {
+                popUpTo("login") { inclusive = false }
+                launchSingleTop = true
+            }
+        }
     }
 
     LaunchedEffect(overlayVisible) {
@@ -150,7 +157,14 @@ fun PlayerScreen(navController: NavHostController) {
         error = PlaybackManager.errorMessage
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) {
+                detectTapGestures { overlayVisible = !overlayVisible }
+            }
+    ) {
         AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
 
         if (isBuffering) {
@@ -175,7 +189,7 @@ fun PlayerScreen(navController: NavHostController) {
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { activity?.finish() }) {
+                    IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Geri",
