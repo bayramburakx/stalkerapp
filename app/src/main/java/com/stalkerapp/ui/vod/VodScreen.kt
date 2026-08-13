@@ -78,6 +78,10 @@ fun VodScreen(
     LaunchedEffect(Unit) {
         try {
             categories = vm.repository.loadVodCategories(profile)
+            if (filterIsSeries == true && selectedCategory == 0L) {
+                categories?.firstOrNull { it.title.contains("dizi", ignoreCase = true) }
+                    ?.let { selectedCategory = it.id }
+            }
         } catch (e: Exception) {
             error = e.message
             categories = emptyList()
@@ -109,19 +113,26 @@ fun VodScreen(
         )
 
         val catList = categories.orEmpty()
-        if (catList.isNotEmpty()) {
+        val shownCats = when (filterIsSeries) {
+            true -> catList.filter { it.title.contains("dizi", ignoreCase = true) }
+            false -> catList.filter { !it.title.contains("dizi", ignoreCase = true) }
+            else -> catList
+        }
+        if (shownCats.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
-                    FilterChip(
-                        selected = selectedCategory == 0L,
-                        onClick = { selectedCategory = 0L },
-                        label = { Text("Tümü") }
-                    )
+                if (filterIsSeries != true) {
+                    item {
+                        FilterChip(
+                            selected = selectedCategory == 0L,
+                            onClick = { selectedCategory = 0L },
+                            label = { Text("Tümü") }
+                        )
+                    }
                 }
-                items(catList) { c ->
+                items(shownCats) { c ->
                     FilterChip(
                         selected = selectedCategory == c.id,
                         onClick = { selectedCategory = c.id },
@@ -136,10 +147,7 @@ fun VodScreen(
             error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
             items.orEmpty().isEmpty() -> EmptyState("İçerik bulunamadı")
             else -> {
-                val typeFiltered = items.orEmpty().let { list ->
-                    if (filterIsSeries == null) list
-                    else list.filter { it.isSeries == filterIsSeries }
-                }
+                val typeFiltered = items.orEmpty()
                 val filtered = typeFiltered.let { list ->
                     if (query.isBlank()) list
                     else list.filter {

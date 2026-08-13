@@ -92,6 +92,9 @@ object PlaybackManager {
     var currentSubtitle: String = ""
         private set
 
+    var currentStreamUrl: String = ""
+        private set
+
     @Volatile var errorMessage: String? = null
         private set
 
@@ -175,6 +178,7 @@ object PlaybackManager {
 
     fun play(url: String, title: String, artwork: String = "", subtitle: String = "") {
         setError(null)
+        currentStreamUrl = url
         currentTitle = title
         currentSubtitle = subtitle
         val p = ensureActivePlayer()
@@ -208,6 +212,10 @@ object PlaybackManager {
     fun togglePlayPause() {
         val p = activePlayer ?: return
         p.playWhenReady = !p.playWhenReady
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        activePlayer?.setPlaybackSpeed(speed)
     }
 
     fun isPlaying(): Boolean = activePlayer?.playWhenReady == true

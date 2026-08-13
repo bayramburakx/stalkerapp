@@ -59,17 +59,40 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
+import android.os.BatteryManager
 import android.view.WindowManager
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tv
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.Profile
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxHeight
 import com.stalkerapp.playback.ChannelQueue
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.components.ChannelLogo
@@ -93,6 +116,14 @@ fun PlayerScreen(navController: NavHostController) {
     var showTracks by remember { mutableStateOf(false) }
     var showSubs by remember { mutableStateOf(false) }
     var showEpg by remember { mutableStateOf(false) }
+    var showInfo by remember { mutableStateOf(false) }
+    var showPlayerSettings by remember { mutableStateOf(false) }
+    var showChannels by remember { mutableStateOf(false) }
+    var locked by remember { mutableStateOf(false) }
+    var clock by remember { mutableStateOf(nowTime()) }
+    var battery by remember { mutableStateOf(100) }
+    var playbackSpeed by remember { mutableStateOf(1f) }
+    var aspectMode by remember { mutableStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
 
     val playerView = remember {
         PlayerView(context).apply {
@@ -152,10 +183,38 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     LaunchedEffect(overlayVisible) {
-        if (overlayVisible) {
+        if (overlayVisible && !locked) {
             delay(5000)
             overlayVisible = false
         }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            clock = nowTime()
+            delay(1000)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context?, intent: Intent?) {
+                val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+                battery.value = if (scale > 0) (level * 100 / scale) else level
+            }
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    LaunchedEffect(aspectMode) {
+        playerView.resizeMode = aspectMode
+    }
+
+    LaunchedEffect(playbackSpeed) {
+        PlaybackManager.setPlaybackSpeed(playbackSpeed)
     }
 
     val queueChannels = ChannelQueue.channels
@@ -181,7 +240,7 @@ fun PlayerScreen(navController: NavHostController) {
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectTapGestures { overlayVisible = !overlayVisible }
+                detectTapGestures { if (!locked) overlayVisible = !overlayVisible }
             }
     ) {
         AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
@@ -194,28 +253,40 @@ fun PlayerScreen(navController: NavHostController) {
         }
 
         if (overlayVisible) {
-            // Top gradient
+            // ---------- TOP BAR ----------
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)
+                            listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
                         )
                     )
                     .statusBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier.size(36.dp)
+                    ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Geri",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Column(modifier = Modifier.weight(1f)) {
+                    ChannelLogo(
+                        logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
+                        modifier = Modifier.size(30.dp)
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 6.dp)
+                    ) {
                         Text(
                             text = currentChannel?.name ?: PlaybackManager.currentTitle,
                             color = Color.White,
@@ -225,105 +296,144 @@ fun PlayerScreen(navController: NavHostController) {
                         )
                         if (currentChannel != null) {
                             Text(
-                                text = "Kanal ${currentChannel?.number ?: ""} — ${profile?.portal?.name ?: ""}",
+                                text = "${currentChannel?.tvGenreTitle ?: ""}  •  Kanal ${currentChannel?.number ?: ""}",
                                 color = Color.White.copy(alpha = 0.7f),
-                                style = MaterialTheme.typography.bodySmall
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                    IconButton(onClick = {
-                        val key = "ch:${currentChannel?.id}"
-                        if (key != "ch:null") {
-                            isFav = vm.toggleFavorite(key)
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(clock, color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("${battery}%", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = {
+                                val key = "ch:${currentChannel?.id}"
+                                if (key != "ch:null") isFav = vm.toggleFavorite(key)
+                            },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "Favori",
+                                tint = if (isFav) Color(0xFFFF5252) else Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
-                    }) {
-                        Icon(
-                            imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favori",
-                            tint = if (isFav) Color(0xFFFF5252) else Color.White
-                        )
-                    }
-                    IconButton(onClick = { PlaybackManager.enterPip(activity) }) {
-                        Icon(
-                            Icons.Default.PictureInPictureAlt,
-                            contentDescription = "PiP",
-                            tint = Color.White
-                        )
+                        IconButton(
+                            onClick = { Toast.makeText(context, "Chromecast yakında", Toast.LENGTH_SHORT).show() },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(Icons.Default.Cast, contentDescription = "Chromecast", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = {
+                                val url = PlaybackManager.currentStreamUrl
+                                if (url.isNotBlank()) {
+                                    runCatching {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setType("video/*") }
+                                        context.startActivity(Intent.createChooser(intent, "Oynatıcı seç"))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = "Harici oynatıcı", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = { locked = true; overlayVisible = false },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = "Kilit", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = { showInfo = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = "Bilgi", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = { showPlayerSettings = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = "Ayarlar", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }
 
-            // Bottom gradient with controls
+            // ---------- BOTTOM BAR ----------
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
                         )
                     )
-                    .padding(horizontal = 8.dp, vertical = 16.dp)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = {
-                        val p = queueProfile ?: return@IconButton
-                        val idx = ChannelQueue.index - 1
-                        if (idx >= 0) switchTo(idx)
-                    }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Önceki",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            val p = queueProfile ?: return@IconButton
+                            val idx = ChannelQueue.index - 1
+                            if (idx >= 0) switchTo(idx)
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Önceki", tint = Color.White, modifier = Modifier.size(36.dp))
+                        }
+                        IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "Oynat/Duraklat",
+                                tint = Color.White,
+                                modifier = Modifier.size(52.dp)
+                            )
+                        }
+                        IconButton(onClick = {
+                            val p = queueProfile ?: return@IconButton
+                            val idx = ChannelQueue.index + 1
+                            if (idx < ChannelQueue.channels.size) switchTo(idx)
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Sonraki", tint = Color.White, modifier = Modifier.size(36.dp))
+                        }
+                        IconButton(onClick = { showTracks = true }) {
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Ses", tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
+                        IconButton(onClick = { showSubs = true }) {
+                            Icon(Icons.Default.Subtitles, contentDescription = "Altyazı", tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
                     }
-                    IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "Oynat/Duraklat",
-                            tint = Color.White,
-                            modifier = Modifier.size(56.dp)
-                        )
-                    }
-                    IconButton(onClick = {
-                        val p = queueProfile ?: return@IconButton
-                        val idx = ChannelQueue.index + 1
-                        if (idx < ChannelQueue.channels.size) switchTo(idx)
-                    }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Sonraki",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                    IconButton(onClick = { showTracks = true }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = "Ses",
-                            tint = Color.White
-                        )
-                    }
-                    IconButton(onClick = { showSubs = true }) {
-                        Icon(
-                            Icons.Default.Subtitles,
-                            contentDescription = "Altyazı",
-                            tint = Color.White
-                        )
-                    }
-                    IconButton(onClick = { showEpg = true }) {
-                        Text("EPG", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showEpg = true }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Tv, contentDescription = "Rehber", tint = Color.White, modifier = Modifier.size(22.dp))
+                                Text("Rehber", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        IconButton(onClick = { showChannels = true }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.List, contentDescription = "Kanallar", tint = Color.White, modifier = Modifier.size(22.dp))
+                                Text("Kanallar", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                     }
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // Zapping bar
                 LazyRow(
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(zappingList, key = { it.id }) { ch ->
@@ -349,6 +459,23 @@ fun PlayerScreen(navController: NavHostController) {
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // ---------- LOCK OVERLAY ----------
+        if (locked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.TopStart
+            ) {
+                IconButton(
+                    onClick = { locked = false; overlayVisible = true },
+                    modifier = Modifier.statusBarsPadding().padding(8.dp)
+                ) {
+                    Icon(Icons.Default.LockOpen, contentDescription = "Kiliti aç", tint = Color.White)
                 }
             }
         }
@@ -394,6 +521,31 @@ fun PlayerScreen(navController: NavHostController) {
             vm = vm
         )
     }
+
+    if (showInfo) {
+        PlayerInfoSheet(
+            channel = currentChannel,
+            profile = profile,
+            vm = vm,
+            onDismiss = { showInfo = false }
+        )
+    }
+
+    if (showPlayerSettings) {
+        PlayerSettingsSheet(
+            currentSpeed = playbackSpeed,
+            currentAspect = aspectMode,
+            onSpeed = { playbackSpeed = it; showPlayerSettings = false },
+            onAspect = { aspectMode = it; showPlayerSettings = false },
+            onDismiss = { showPlayerSettings = false }
+        )
+    }
+
+    ChannelListPanel(
+        visible = showChannels,
+        onClose = { showChannels = false },
+        onSelect = { idx -> switchTo(idx); showChannels = false }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -547,6 +699,194 @@ fun EpgSheet(
                             }
                         }
                         HorizontalDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun nowTime(): String {
+    return runCatching {
+        java.time.LocalTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    }.getOrDefault("")
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlayerInfoSheet(
+    channel: Channel?,
+    profile: Profile?,
+    vm: MainViewModel,
+    onDismiss: () -> Unit
+) {
+    if (channel == null || profile == null) {
+        onDismiss()
+        return
+    }
+    var programs by remember { mutableStateOf<List<com.stalkerapp.data.EpgProgram>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(channel.id) {
+        try {
+            programs = vm.repository.loadEpg(profile, channel.id)
+        } catch (e: Exception) {
+            error = e.message
+        }
+    }
+
+    val current = programs?.firstOrNull { it.isCurrent }
+    val next = programs?.let { list ->
+        val idx = list.indexOfFirst { it.isCurrent }
+        if (idx >= 0) list.getOrNull(idx + 1) else null
+    }
+
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelLogo(logo = resolveUrl(channel.logo, profile.baseUrl), modifier = Modifier.size(56.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(channel.name, style = MaterialTheme.typography.titleLarge)
+                    if (channel.tvGenreTitle.isNotBlank()) {
+                        Text(
+                            channel.tvGenreTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            when {
+                programs == null && error == null -> CircularProgressIndicator()
+                error != null -> Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                else -> {
+                    Text("Şu an", style = MaterialTheme.typography.titleMedium)
+                    if (current != null) {
+                        Text(
+                            "${vm.repository.formatEpoch(current.startTs)} — ${vm.repository.formatEpoch(current.stopTs)}  ${current.name}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        Text("Yayın bilgisi yok", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Sonraki", style = MaterialTheme.typography.titleMedium)
+                    if (next != null) {
+                        Text(
+                            "${vm.repository.formatEpoch(next.startTs)} — ${vm.repository.formatEpoch(next.stopTs)}  ${next.name}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        Text("Sonraki program yok", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlayerSettingsSheet(
+    currentSpeed: Float,
+    currentAspect: Int,
+    onSpeed: (Float) -> Unit,
+    onAspect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val speeds = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+    val aspects = listOf(
+        "Sığdır" to AspectRatioFrameLayout.RESIZE_MODE_FIT,
+        "Doldur" to AspectRatioFrameLayout.RESIZE_MODE_FILL,
+        "Yakınlaştır" to AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    )
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text("Oynatma Hızı", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+            speeds.forEach { s ->
+                ListItem(
+                    headlineContent = { Text("${if (s == 1f) "Normal" else s}⨉") },
+                    trailingContent = if (s == currentSpeed) {
+                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                    } else null,
+                    modifier = Modifier.clickable { onSpeed(s) }
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Text("Görüntü Oranı", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+            aspects.forEach { (label, mode) ->
+                ListItem(
+                    headlineContent = { Text(label) },
+                    trailingContent = if (mode == currentAspect) {
+                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                    } else null,
+                    modifier = Modifier.clickable { onAspect(mode) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ChannelListPanel(
+    visible: Boolean,
+    onClose: () -> Unit,
+    onSelect: (Int) -> Unit
+) {
+    val channels = ChannelQueue.channels
+    val profile = ChannelQueue.profile
+    var query by remember { mutableStateOf("") }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInHorizontally(initialOffsetX = { -it }),
+        exit = slideOutHorizontally(targetOffsetX = { -it })
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))) {
+            Box(modifier = Modifier.fillMaxSize().clickable { onClose() })
+            Surface(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(340.dp)
+                    .align(Alignment.CenterStart),
+                color = Color(0xFF141414)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Kanallar", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.Default.Close, contentDescription = "Kapat", tint = Color.White)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Kanal ara…") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                    val filtered = if (query.isBlank()) channels else channels.filter {
+                        it.name.contains(query.trim(), ignoreCase = true)
+                    }
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filtered, key = { it.id }) { ch ->
+                            ChannelRow(
+                                channel = ch,
+                                baseUrl = profile?.baseUrl.orEmpty()
+                            ) {
+                                onSelect(channels.indexOfFirst { c -> c.id == ch.id })
+                            }
+                        }
                     }
                 }
             }

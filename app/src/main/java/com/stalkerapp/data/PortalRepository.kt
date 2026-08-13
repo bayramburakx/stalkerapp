@@ -448,14 +448,16 @@ class PortalRepository(
                 name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
                 originalName = o["o_name"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 sname = o["sname"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                poster = o["poster"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                poster = o["screenshot_uri"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["pic"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["poster"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 description = o["description"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 year = o["year"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 director = o["director"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 country = o["country"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 rating = o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                isSeries = o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
+                isSeries = o["is_series"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
                 cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
