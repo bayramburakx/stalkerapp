@@ -17,6 +17,7 @@ import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -457,6 +458,7 @@ object PlaybackManager {
 
     private fun mediaItem(url: String, title: String, artwork: String = ""): MediaItem {
         val builder = MediaItem.Builder().setUri(url)
+            .setMimeType(MimeTypes.APPLICATION_MP2T)
         val metaBuilder = MediaMetadata.Builder().setTitle(title)
         val resolvedArtwork = resolveUrl(artwork)
         if (!resolvedArtwork.isNullOrBlank()) {
