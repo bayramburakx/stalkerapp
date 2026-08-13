@@ -21,12 +21,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.stalkerapp.ui.LiveTvScreen
 import com.stalkerapp.ui.PlayerScreen
-import com.stalkerapp.ui.VodDetailScreen
 import com.stalkerapp.ui.home.HomeScreen
+import com.stalkerapp.ui.live.LiveTvScreen
 import com.stalkerapp.ui.login.LoginScreen
 import com.stalkerapp.ui.theme.StalkerTheme
+import com.stalkerapp.ui.vod.VodDetailScreen
+import com.stalkerapp.playback.PlaybackManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,6 +41,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        PlaybackManager.enterPip(this)
     }
 }
 

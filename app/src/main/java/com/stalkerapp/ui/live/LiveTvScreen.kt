@@ -13,7 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -122,17 +123,17 @@ fun LiveTvScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    AssistChip(
+                    FilterChip(
+                        selected = selectedGenre == 0L,
                         onClick = { selectedGenre = 0L },
-                        label = { Text("Tümü") },
-                        selected = selectedGenre == 0L
+                        label = { Text("Tümü") }
                     )
                 }
                 items(genreList) { g ->
-                    AssistChip(
+                    FilterChip(
+                        selected = selectedGenre == g.id,
                         onClick = { selectedGenre = g.id },
-                        label = { Text(g.title) },
-                        selected = selectedGenre == g.id
+                        label = { Text(g.title) }
                     )
                 }
             }

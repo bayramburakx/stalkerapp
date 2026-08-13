@@ -1,5 +1,6 @@
 package com.stalkerapp.playback
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -25,7 +26,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
-import androidx.media3.extractor.ts.DefaultTsExtractor
+import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
 import com.stalkerapp.R
 import com.stalkerapp.data.Channel
@@ -65,7 +66,6 @@ object PlaybackManager {
     private var stateListeners = CopyOnWriteArrayList<(Boolean, Boolean) -> Unit>()
 
     @Volatile var service: PlaybackService? = null
-        private set
 
     var currentTitle: String = ""
     var currentSubtitle: String = ""
@@ -102,13 +102,9 @@ object PlaybackManager {
     }
 
     private fun buildPlayer(): ExoPlayer {
-        val tsFlags = DefaultTsExtractor.FLAG_DETECT_ACCESS_UNITS or
-            DefaultTsExtractor.FLAG_ENABLE_HD_AUDIO or
-            DefaultTsExtractor.FLAG_ALLOW_NON_IDR_KEYFRAMES
-
         val extractorsFactory = DefaultExtractorsFactory()
-            .setTsExtractorFlags(tsFlags)
-            .setTsExtractorTimestampSearchBytes(DefaultTsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
+            .setTsExtractorMode(TsExtractor.MODE_SINGLE_PMT)
+            .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
 
         val bufferMs = store.settings().maxBufferMs
         val loadControl = DefaultLoadControl.Builder()
@@ -274,14 +270,14 @@ object PlaybackManager {
         val b = p.trackSelectionParameters.buildUpon()
         if (lang.isNullOrBlank()) b.setPreferredTextLanguage(null)
         else b.setPreferredTextLanguage(lang)
-        b.setTrackTypeEnabled(C.TRACK_TYPE_TEXT, lang != null)
+        b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, lang == null)
         p.trackSelectionParameters = b.build()
     }
 
     fun setSubtitlesEnabled(enabled: Boolean) {
         val p = activePlayer ?: return
         val b = p.trackSelectionParameters.buildUpon()
-            .setTrackTypeEnabled(C.TRACK_TYPE_TEXT, enabled)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !enabled)
         p.trackSelectionParameters = b.build()
     }
 
@@ -295,7 +291,8 @@ object PlaybackManager {
 
     // ---------- PiP ----------
 
-    fun enterPip(activity: android.app.Activity) {
+    fun enterPip(activity: Activity?) {
+        if (activity == null) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity.isInPictureInPictureMode.not()) {
             runCatching {
                 activity.enterPictureInPictureMode(

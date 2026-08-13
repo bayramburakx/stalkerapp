@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
@@ -74,7 +75,6 @@ fun PlayerScreen() {
     val app = context.applicationContext as StalkerApp
     val vm: MainViewModel = viewModel { MainViewModel(app) }
     val profile = vm.repository.cachedProfile()
-    val scope = rememberCoroutineScope()
 
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
@@ -89,7 +89,6 @@ fun PlayerScreen() {
     val playerView = remember {
         PlayerView(context).apply {
             useController = false
-            setEnablePip(true)
         }
     }
 
@@ -254,7 +253,7 @@ fun PlayerScreen() {
                     }
                     IconButton(onClick = { showTracks = true }) {
                         Icon(
-                            Icons.Default.VolumeUp,
+                            Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = "Ses",
                             tint = Color.White
                         )

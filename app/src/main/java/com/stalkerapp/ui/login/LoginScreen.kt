@@ -196,7 +196,7 @@ fun LoginScreen(onConnected: () -> Unit) {
                     Button(
                         onClick = {
                             if (name.isBlank() || url.isBlank()) {
-                                snackbar.showSnackbar("Portal adı ve URL zorunludur")
+                                scope.launch { snackbar.showSnackbar("Portal adı ve URL zorunludur") }
                                 return@Button
                             }
                             scope.launch {

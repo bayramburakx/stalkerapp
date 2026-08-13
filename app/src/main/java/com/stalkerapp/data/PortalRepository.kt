@@ -145,7 +145,7 @@ class PortalRepository(
             mapOf("js" to "1")
         )
         val list = parseGenres(resp)
-        genresCache[profile.portal?.id] = list
+        genresCache[profile.portal?.id ?: ""] = list
         return list
     }
 
@@ -226,7 +226,7 @@ class PortalRepository(
             mapOf("js" to "1")
         )
         val list = parseGenres(resp)
-        vodGenresCache[profile.portal?.id] = list
+        vodGenresCache[profile.portal?.id ?: ""] = list
         return list
     }
 

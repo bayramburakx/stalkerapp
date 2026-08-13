@@ -19,8 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -111,17 +111,17 @@ fun VodScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    AssistChip(
+                    FilterChip(
+                        selected = selectedCategory == 0L,
                         onClick = { selectedCategory = 0L },
-                        label = { Text("Tümü") },
-                        selected = selectedCategory == 0L
+                        label = { Text("Tümü") }
                     )
                 }
                 items(catList) { c ->
-                    AssistChip(
+                    FilterChip(
+                        selected = selectedCategory == c.id,
                         onClick = { selectedCategory = c.id },
-                        label = { Text(c.title) },
-                        selected = selectedCategory == c.id
+                        label = { Text(c.title) }
                     )
                 }
             }
