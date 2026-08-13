@@ -34,6 +34,10 @@ import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Store
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 object ChannelQueue {
     var channels: List<Channel> = emptyList()
@@ -57,6 +61,8 @@ object PlaybackManager {
     private lateinit var appContext: Context
     private lateinit var store: Store
     private lateinit var repository: PortalRepository
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var activePlayer: ExoPlayer? = null
     private var standbyPlayer: ExoPlayer? = null
@@ -134,7 +140,7 @@ object PlaybackManager {
 
     // ---------- Public playback control ----------
 
-    suspend fun playChannel(
+    fun playChannel(
         channels: List<Channel>,
         index: Int,
         profile: Profile,
@@ -145,13 +151,15 @@ object PlaybackManager {
         ChannelQueue.index = index
         ChannelQueue.profile = profile
         val ch = channels.getOrNull(index) ?: return
-        val url = repository.channelStreamUrl(ch, profile)
-        if (url.isBlank()) {
-            errorMessage = "Kanal akış URL'si boş"
-            return
+        scope.launch {
+            val url = repository.channelStreamUrl(ch, profile)
+            if (url.isBlank()) {
+                errorMessage = "Kanal akış URL'si boş"
+                return@launch
+            }
+            play(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle })
+            prebufferNext()
         }
-        play(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle })
-        prebufferNext()
     }
 
     fun play(url: String, title: String, artwork: String = "", subtitle: String = "") {
@@ -181,19 +189,19 @@ object PlaybackManager {
         sp.seekTo(0)
     }
 
-    suspend fun nextChannel(): Boolean {
+    fun nextChannel(): Boolean {
         if (ChannelQueue.next == null) return false
         ChannelQueue.index += 1
         swapPlayers()
-        prebufferNext()
+        scope.launch { prebufferNext() }
         return true
     }
 
-    suspend fun previousChannel(): Boolean {
+    fun previousChannel(): Boolean {
         if (ChannelQueue.previous == null) return false
         ChannelQueue.index -= 1
         swapPlayers()
-        prebufferNext()
+        scope.launch { prebufferNext() }
         return true
     }
 

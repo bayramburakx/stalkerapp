@@ -8,10 +8,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+
+fun JsonElement?.asJsonPrimitiveOrNull(): JsonPrimitive? = this as? JsonPrimitive
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -121,7 +123,7 @@ class PortalRepository(
                 method = "GET",
                 token = ""
             )
-            val hToken = handshake.jsonObject["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val hToken = handshake.jsonObject["token"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             if (hToken.isEmpty()) {
                 throw StalkerException("Handshake başarısız: token alınamadı. Sunucu erişimi engelliyor olabilir.")
             }
@@ -147,8 +149,8 @@ class PortalRepository(
             val profile = parseProfile(profileResp, base, portal, mac)
 
             val profileObj = profileResp.jsonObject
-            val profileError = profileObj["error"]?.jsonPrimitive?.contentOrNull
-                ?: profileObj["message"]?.jsonPrimitive?.contentOrNull
+            val profileError = profileObj["error"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                ?: profileObj["message"]?.asJsonPrimitiveOrNull()?.contentOrNull
             if (!profileError.isNullOrBlank() && profile.serverAddress.isBlank() && profile.mac.isBlank()) {
                 throw StalkerException(
                     "Portal MAC'i kabul etmedi: ${profileError}. Portalda bu MAC'in kayıtlı ve aktif olduğundan emin olun."
@@ -169,7 +171,7 @@ class PortalRepository(
                     token = hToken,
                     body = body
                 )
-                tResp.jsonObject["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                tResp.jsonObject["token"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             } catch (e: Exception) {
                 ""
             }
@@ -207,23 +209,28 @@ class PortalRepository(
     }
 
     suspend fun loadChannels(profile: Profile, genreId: Long = 0): List<Channel> {
-        channelsCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }
-            .get(genreId)?.let { return it }
+        val pid = profile.portal?.id ?: ""
+        val genreCache = channelsCache.getOrPut(pid) { mutableMapOf() }
+        genreCache[genreId]?.let { return it }
 
-        val body = buildMap {
-            if (genreId > 0) put("genre", genreId.toString())
-            put("force_ch_link_check", "1")
+        val all = genreCache.getOrElse(0L) {
+            val resp = client.request(
+                profile.baseUrl,
+                "portal.php?type=itv&action=get_all_channels",
+                "POST",
+                tokenFor(profile),
+                mapOf(
+                    "period" to "1",
+                    "page" to "0",
+                    "force_ch_link_check" to "0"
+                )
+            )
+            parseChannels(resp).also { genreCache[0L] = it }
         }
-        val resp = client.request(
-            profile.baseUrl,
-            "portal.php?type=itv&action=get_all_channels",
-            "POST",
-            tokenFor(profile),
-            body
-        )
-        val list = parseChannels(resp)
-        channelsCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[genreId] = list
-        return list
+
+        val result = if (genreId <= 0) all else all.filter { it.tvGenreId == genreId }
+        genreCache[genreId] = result
+        return result
     }
 
     suspend fun loadEpg(profile: Profile, channelId: Long): List<EpgProgram> {
@@ -248,19 +255,19 @@ class PortalRepository(
         val data = parseDataArray(resp)
         val programs = data.mapNotNull { p ->
             val o = p.jsonObject
-            val startStr = o["start"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            val stopStr = o["stop"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            val stopStr = o["stop"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             if (startStr.isEmpty()) return@mapNotNull null
             val startTs = epgToEpoch(startStr, zone)
             val stopTs = epgToEpoch(stopStr, zone)
             EpgProgram(
-                chId = o["ch_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: channelId,
-                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "—",
+                chId = o["ch_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: channelId,
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
                 start = startStr,
                 stop = stopStr,
-                desc = o["descr"]?.jsonPrimitive?.contentOrNull
-                    ?: o["desc"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                category = o["category"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                desc = o["descr"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["desc"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                category = o["category"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 startTs = startTs + offsetHours * 3600,
                 stopTs = stopTs + offsetHours * 3600,
                 isCurrent = startTs <= System.currentTimeMillis() / 1000 &&
@@ -386,11 +393,11 @@ class PortalRepository(
         val serverInfo = obj["server_info"]?.jsonArray?.mapNotNull { e ->
             val o = e.jsonObject
             ServerInfo(
-                address = o["address"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                city = o["city"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                address = o["address"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                city = o["city"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }.orEmpty()
-        val tz = obj["timezone"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val tz = obj["timezone"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
         return Profile(
             mac = mac,
             timezone = tz,
@@ -411,10 +418,10 @@ class PortalRepository(
     private fun parseGenres(el: JsonElement): List<Genre> {
         return parseDataArray(el).mapNotNull { o ->
             Genre(
-                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
-                title = o["title"]?.jsonPrimitive?.contentOrNull ?: "—",
-                censored = o["censored"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true,
-                number = o["number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+                id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                title = o["title"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
+                censored = o["censored"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
+                number = o["number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0
             )
         }
     }
@@ -422,15 +429,15 @@ class PortalRepository(
     private fun parseChannels(el: JsonElement): List<Channel> {
         return parseDataArray(el).mapNotNull { o ->
             Channel(
-                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
-                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
-                number = o["number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
-                logo = o["logo"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                cmd = o["cmd"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                tvGenreId = o["tv_genre_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
-                tvGenreTitle = o["tv_genre_title"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                isTvArchive = o["is_tv_archive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true,
-                archiveDuration = o["tv_archive_duration"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+                id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
+                number = o["number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0,
+                logo = o["logo"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                tvGenreId = o["tv_genre_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                tvGenreTitle = o["tv_genre_title"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                isTvArchive = o["is_tv_archive"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
+                archiveDuration = o["tv_archive_duration"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0
             )
         }.filter { it.id > 0 }
     }
@@ -438,21 +445,21 @@ class PortalRepository(
     private fun parseVodList(el: JsonElement): List<VodItem> {
         return parseDataArray(el).mapNotNull { o ->
             VodItem(
-                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
-                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
-                originalName = o["o_name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                sname = o["sname"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                poster = o["poster"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                description = o["description"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                year = o["year"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                director = o["director"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                country = o["country"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                rating = o["rating"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                genres = o["genres"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                isSeries = o["series"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true,
-                cmd = o["cmd"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                selectedSeason = o["selected_season"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                seriesData = o["series_data"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
+                originalName = o["o_name"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                sname = o["sname"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                poster = o["poster"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                description = o["description"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                year = o["year"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                director = o["director"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                country = o["country"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                rating = o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                isSeries = o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
+                cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }.filter { it.id > 0 }
     }
@@ -460,8 +467,8 @@ class PortalRepository(
     private fun parseSeasons(el: JsonElement): List<Season> {
         return parseDataArray(el).mapNotNull { o ->
             Season(
-                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
-                name = o["name"]?.jsonPrimitive?.contentOrNull ?: ""
+                id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: ""
             )
         }
     }
@@ -469,11 +476,11 @@ class PortalRepository(
     private fun parseEpisodes(el: JsonElement): List<Episode> {
         return parseDataArray(el).mapNotNull { o ->
             Episode(
-                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
-                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
-                episodeNumber = o["episode_number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-                    ?: o["series_number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
-                cmd = o["cmd"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
+                episodeNumber = o["episode_number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull()
+                    ?: o["series_number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0,
+                cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }
     }

@@ -46,7 +46,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,7 +57,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -124,12 +122,11 @@ fun PlayerScreen() {
 
     val queueChannels = ChannelQueue.channels
     val queueProfile = ChannelQueue.profile
-    val scope = rememberCoroutineScope()
 
     fun switchTo(index: Int) {
         val ch = queueChannels.getOrNull(index) ?: return
         val p = queueProfile ?: return
-        scope.launch { PlaybackManager.playChannel(queueChannels, index, p) }
+        PlaybackManager.playChannel(queueChannels, index, p)
         currentChannel = ch
         isFav = vm.store.isFavorite("ch:${ch.id}")
         error = PlaybackManager.errorMessage
