@@ -458,7 +458,7 @@ object PlaybackManager {
 
     private fun mediaItem(url: String, title: String, artwork: String = ""): MediaItem {
         val builder = MediaItem.Builder().setUri(url)
-            .setMimeType(MimeTypes.APPLICATION_MP2T)
+            .setMimeType(MimeTypes.VIDEO_MP2T)
         val metaBuilder = MediaMetadata.Builder().setTitle(title)
         val resolvedArtwork = resolveUrl(artwork)
         if (!resolvedArtwork.isNullOrBlank()) {
