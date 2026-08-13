@@ -129,9 +129,8 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
         val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
         val payload = root?.get("js") ?: root
 
-        val hasError = root?.get("error") != null || payload?.let {
-            (it as? JsonObject)?.get("error") != null
-        } == true
+        val errNode = (root as? JsonObject)?.get("error") ?: (payload as? JsonObject)?.get("error")
+        val hasError = (errNode as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
 
         if (respCode == 429 || respCode == 403 || respCode == 451 || hasError) {
             triggerCooldown()
