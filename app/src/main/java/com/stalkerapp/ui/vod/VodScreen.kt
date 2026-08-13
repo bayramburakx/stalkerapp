@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,7 +53,8 @@ import com.stalkerapp.ui.components.resolveUrl
 fun VodScreen(
     profile: Profile?,
     onOpenVod: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    filterIsSeries: Boolean? = null
 ) {
     if (profile == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -132,7 +134,11 @@ fun VodScreen(
             error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
             items.orEmpty().isEmpty() -> EmptyState("İçerik bulunamadı")
             else -> {
-                val filtered = items.orEmpty().let { list ->
+                val typeFiltered = items.orEmpty().let { list ->
+                    if (filterIsSeries == null) list
+                    else list.filter { it.isSeries == filterIsSeries }
+                }
+                val filtered = typeFiltered.let { list ->
                     if (query.isBlank()) list
                     else list.filter {
                         it.name.contains(query.trim(), ignoreCase = true) ||
@@ -165,6 +171,21 @@ fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, width: Int? =
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
+                if (item.isSeries) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .background(Color(0xFFE50914), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "DİZİ",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
             }
             Column(modifier = Modifier.padding(6.dp)) {
                 Text(

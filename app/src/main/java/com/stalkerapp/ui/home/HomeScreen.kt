@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -50,17 +51,23 @@ fun HomeScreen(
                     selected = tab == 1,
                     onClick = { tab = 1 },
                     icon = { Icon(Icons.Default.Movie, contentDescription = null) },
-                    label = { Text("VOD") }
+                    label = { Text("Filmler") }
                 )
                 NavigationBarItem(
                     selected = tab == 2,
                     onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
-                    label = { Text("Favoriler") }
+                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
+                    label = { Text("Diziler") }
                 )
                 NavigationBarItem(
                     selected = tab == 3,
                     onClick = { tab = 3 },
+                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
+                    label = { Text("Favoriler") }
+                )
+                NavigationBarItem(
+                    selected = tab == 4,
+                    onClick = { tab = 4 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                     label = { Text("Ayarlar") }
                 )
@@ -70,9 +77,10 @@ fun HomeScreen(
         val contentModifier = Modifier.padding(padding)
         when (tab) {
             0 -> LiveTvScreen(profile, onOpenPlayer, contentModifier)
-            1 -> VodScreen(profile, onOpenVod, contentModifier)
-            2 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier)
-            3 -> SettingsScreen(vm, contentModifier)
+            1 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = false)
+            2 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = true)
+            3 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier)
+            4 -> SettingsScreen(vm, contentModifier)
         }
     }
 }

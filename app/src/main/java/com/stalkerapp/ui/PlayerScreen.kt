@@ -63,7 +63,11 @@ import androidx.media3.ui.PlayerView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
+import android.view.WindowManager
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.playback.ChannelQueue
@@ -129,6 +133,21 @@ fun PlayerScreen(navController: NavHostController) {
                 popUpTo("login") { inclusive = false }
                 launchSingleTop = true
             }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val window = activity?.window
+        window?.let { WindowCompat.setDecorFitsSystemWindows(it, false) }
+        val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+        controller?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window?.let { WindowCompat.setDecorFitsSystemWindows(it, true) }
         }
     }
 
