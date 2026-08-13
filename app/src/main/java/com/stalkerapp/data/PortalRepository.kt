@@ -53,11 +53,25 @@ class PortalRepository(
     }
 
     fun channelStreamUrl(ch: Channel, profile: Profile): String {
-        StalkerClient.parseCmd(ch.cmd)?.let { return it }
+        StalkerClient.parseCmd(ch.cmd)?.let { return rewriteLocalhost(it, profile) }
         val server = profile.serverAddress
         if (server.isBlank()) return ""
         val s = if (server.startsWith("http")) server else "http://$server"
         return "$s/${ch.id}"
+    }
+
+    private fun rewriteLocalhost(url: String, profile: Profile): String {
+        if (!url.contains("localhost") && !url.contains("127.0.0.1")) return url
+        val host = baseHost(profile.baseUrl)
+        if (host.isBlank()) return url
+        return url.replace(
+            Regex("https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?", setOf(RegexOption.IGNORE_CASE)),
+            "http://$host"
+        )
+    }
+
+    private fun baseHost(baseUrl: String): String {
+        return Regex("https?://([^/]+)").find(baseUrl)?.groupValues?.get(1).orEmpty()
     }
 
     fun cachedChannels(genreId: Long): List<Channel>? {
@@ -82,6 +96,8 @@ class PortalRepository(
         _status.value = PortalStatus.Connecting(portal.name)
         return try {
             val base = StalkerClient.normalizeBase(portal.url)
+            val mac = portal.mac.ifEmpty { StalkerClient.generateMac() }
+            client.setDevice(mac)
             val handshake = client.request(
                 base,
                 "portal.php?type=stb&action=handshake",
@@ -93,7 +109,6 @@ class PortalRepository(
                 throw StalkerException("Handshake başarısız: token alınamadı. Sunucu erişimi engelliyor olabilir.")
             }
 
-            val mac = portal.mac.ifEmpty { StalkerClient.generateMac() }
             val body = buildMap {
                 put("login", mac)
                 put("sn", mac)
@@ -320,9 +335,9 @@ class PortalRepository(
         episode: Episode? = null
     ): String {
         if (!episode?.cmd.isNullOrBlank() && episode != null) {
-            StalkerClient.parseCmd(episode.cmd)?.let { return it }
+            StalkerClient.parseCmd(episode.cmd)?.let { return rewriteLocalhost(it, profile) }
         }
-        StalkerClient.parseCmd(item.cmd)?.let { return it }
+        StalkerClient.parseCmd(item.cmd)?.let { return rewriteLocalhost(it, profile) }
         val resp = client.request(
             profile.baseUrl,
             "portal.php?type=vod&action=create_link",
@@ -333,9 +348,11 @@ class PortalRepository(
                 "series" to if (item.isSeries) "1" else "0"
             )
         )
-        StalkerClient.urlFromJson(resp.jsonObject)?.let { return it }
+        StalkerClient.urlFromJson(resp.jsonObject)?.let { return rewriteLocalhost(it, profile) }
         if (resp is JsonObject) {
-            resp["js"]?.let { if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return u } }
+            resp["js"]?.let {
+                if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return rewriteLocalhost(u, profile) }
+            }
         }
         val server = profile.serverAddress
         if (server.isNotBlank()) {

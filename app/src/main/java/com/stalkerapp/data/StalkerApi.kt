@@ -33,6 +33,11 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
 
     @Volatile private var lastRequestAt = 0L
     @Volatile private var cooldownUntil = 0L
+    @Volatile private var deviceMac: String = ""
+
+    fun setDevice(mac: String) {
+        deviceMac = mac
+    }
 
     fun cooldownRemainingMs(): Long =
         (cooldownUntil - System.currentTimeMillis()).coerceAtLeast(0)
@@ -85,6 +90,13 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             .append("preferred_api_version=1")
             .append("&JsHttpRequest=1-xml")
             .append("&token=${token.orEmpty()}")
+        if (deviceMac.isNotEmpty()) {
+            sb.append("&device_id=1")
+                .append("&hw_version=1.0.0")
+                .append("&mac=$deviceMac")
+                .append("&login=$deviceMac")
+                .append("&sn=$deviceMac")
+        }
 
         val builder = Request.Builder().url(sb.toString())
         val request = if (method.equals("POST", ignoreCase = true)) {
