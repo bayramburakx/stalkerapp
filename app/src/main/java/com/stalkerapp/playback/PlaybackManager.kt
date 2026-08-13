@@ -23,6 +23,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsExtractor
 import androidx.media3.session.MediaSession
@@ -119,10 +120,12 @@ object PlaybackManager {
             )
             .build()
 
-        return ExoPlayer.Builder(appContext)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(appContext, extractorsFactory))
-            .setLoadControl(loadControl)
+        val mediaSourceFactory = DefaultMediaSourceFactory(appContext, extractorsFactory)
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+
+        return ExoPlayer.Builder(appContext)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .setRenderersFactory(
                 DefaultRenderersFactory(appContext)
                     .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
