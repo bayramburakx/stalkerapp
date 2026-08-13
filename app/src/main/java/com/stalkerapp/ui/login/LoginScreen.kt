@@ -73,12 +73,17 @@ fun LoginScreen(onConnected: () -> Unit) {
         password = p.password
     }
 
+    fun errorText(t: Throwable?): String =
+        t?.message?.takeIf { it.isNotBlank() }
+            ?: t?.javaClass?.simpleName
+            ?: "Bağlantı hatası"
+
     LaunchedEffect(Unit) {
         val active = vm.store.activePortal()
         if (active != null && status is PortalStatus.Idle) {
             val result = vm.connect(active)
             if (result.isSuccess) onConnected()
-            else snackbar.showSnackbar(result.exceptionOrNull()?.message ?: "Bağlantı hatası")
+            else snackbar.showSnackbar(errorText(result.exceptionOrNull()))
         }
     }
 
@@ -211,7 +216,7 @@ fun LoginScreen(onConnected: () -> Unit) {
                                 vm.savePortal(portal)
                                 val result = vm.connect(portal)
                                 if (result.isSuccess) onConnected()
-                                else snackbar.showSnackbar(result.exceptionOrNull()?.message ?: "Bağlantı hatası")
+                                else snackbar.showSnackbar(errorText(result.exceptionOrNull()))
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(48.dp)

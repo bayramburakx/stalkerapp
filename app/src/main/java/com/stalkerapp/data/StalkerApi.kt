@@ -94,7 +94,21 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             builder.get().build()
         }
 
-        val resp = withContext(Dispatchers.IO) { okHttp.newCall(request).execute() }
+        val resp = try {
+            withContext(Dispatchers.IO) { okHttp.newCall(request).execute() }
+        } catch (e: java.io.IOException) {
+            val msg = when (e) {
+                is java.net.UnknownHostException ->
+                    "Sunucu adresi bulunamadı (DNS). Portal adresini kontrol edin."
+                is java.net.ConnectException ->
+                    "Sunucuya bağlanılamadı. Adres/port yanlış veya sunucu çalışmıyor."
+                is java.net.SocketTimeoutException ->
+                    "Sunucu yanıt vermedi (zaman aşımı). Ağ bağlantınızı ve adresi kontrol edin."
+                else ->
+                    "Sunucuya ulaşılamadı (${e::class.simpleName ?: "ağ hatası"}). İnternet bağlantınızı ve portal adresini kontrol edin."
+            }
+            throw StalkerException(msg)
+        }
         val text = resp.use { it.body?.string().orEmpty() }
 
         val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()

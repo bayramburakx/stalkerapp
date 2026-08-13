@@ -31,6 +31,7 @@ class PortalRepository(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val handshakeTokens = mutableMapOf<String, String>()
+    private val streamTokens = mutableMapOf<String, String>()
     private val profiles = mutableMapOf<String, Profile>()
     private val genresCache = mutableMapOf<String, List<Genre>>()
     private val channelsCache = mutableMapOf<String, MutableMap<Long, List<Channel>>>()
@@ -113,12 +114,36 @@ class PortalRepository(
             )
             val profile = parseProfile(profileResp, base, portal, mac)
 
+            val profileObj = profileResp.jsonObject
+            val profileError = profileObj["error"]?.jsonPrimitive?.contentOrNull
+                ?: profileObj["message"]?.jsonPrimitive?.contentOrNull
+            if (!profileError.isNullOrBlank() && profile.serverAddress.isBlank() && profile.mac.isBlank()) {
+                throw StalkerException(
+                    "Portal MAC'i kabul etmedi: ${profileError}. Portalda bu MAC'in kayıtlı ve aktif olduğundan emin olun."
+                )
+            }
+
             if (profile.serverAddress.isBlank() && profile.mac.isBlank()) {
-                client.triggerCooldown()
-                throw StalkerException("Profil alınamadı. Portal adresi veya MAC hatalı olabilir.")
+                throw StalkerException(
+                    "Profil alınamadı. Portal adresi doğru mu? Portal, bu MAC ile kayıtlı bir cihaz bekliyor olabilir."
+                )
+            }
+
+            val streamToken = try {
+                val tResp = client.request(
+                    base,
+                    "portal.php?type=stb&action=get_token",
+                    method = "POST",
+                    token = hToken,
+                    body = body
+                )
+                tResp.jsonObject["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            } catch (e: Exception) {
+                ""
             }
 
             handshakeTokens[portal.id] = hToken
+            streamTokens[portal.id] = streamToken
             profiles[portal.id] = profile
             store.savePortal(portal.copy(mac = mac))
             store.setActivePortalId(portal.id)
