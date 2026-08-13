@@ -81,6 +81,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.BatteryManager
+import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.material.icons.filled.Cast
@@ -96,6 +97,7 @@ import androidx.compose.material.icons.filled.Tv
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Profile
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.stalkerapp.playback.ChannelQueue
@@ -131,6 +133,10 @@ fun PlayerScreen(navController: NavHostController) {
     var battery by remember { mutableStateOf(100) }
     var playbackSpeed by remember { mutableStateOf(1f) }
     var aspectMode by remember { mutableStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var position by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    var seeking by remember { mutableStateOf(false) }
+    val isLive = !PlaybackManager.isVod()
 
     val playerView = remember {
         PlayerView(context).apply {
@@ -189,6 +195,13 @@ fun PlayerScreen(navController: NavHostController) {
         }
     }
 
+    DisposableEffect(Unit) {
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
     LaunchedEffect(overlayVisible) {
         if (overlayVisible && !locked) {
             delay(5000)
@@ -222,6 +235,17 @@ fun PlayerScreen(navController: NavHostController) {
 
     LaunchedEffect(playbackSpeed) {
         PlaybackManager.setPlaybackSpeed(playbackSpeed)
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val p = PlaybackManager.player
+            if (!seeking && p != null) {
+                position = p.currentPosition
+                duration = if (p.duration > 0) p.duration else 0L
+            }
+            delay(500)
+        }
     }
 
     val queueChannels = ChannelQueue.channels
@@ -317,19 +341,21 @@ fun PlayerScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("${battery}%", color = Color.White, style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(
-                            onClick = {
-                                val key = "ch:${currentChannel?.id}"
-                                if (key != "ch:null") isFav = vm.toggleFavorite(key)
-                            },
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                contentDescription = "Favori",
-                                tint = if (isFav) Color(0xFFFF5252) else Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                        if (isLive) {
+                            IconButton(
+                                onClick = {
+                                    val key = "ch:${currentChannel?.id}"
+                                    if (key != "ch:null") isFav = vm.toggleFavorite(key)
+                                },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Favori",
+                                    tint = if (isFav) Color(0xFFFF5252) else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                         IconButton(
                             onClick = { Toast.makeText(context, "Chromecast yakında", Toast.LENGTH_SHORT).show() },
@@ -356,6 +382,12 @@ fun PlayerScreen(navController: NavHostController) {
                             modifier = Modifier.size(34.dp)
                         ) {
                             Icon(Icons.Default.Lock, contentDescription = "Kilit", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = { PlaybackManager.enterPip(activity) },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = "Resim içinde resim", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         IconButton(
                             onClick = { showInfo = true },
@@ -385,18 +417,45 @@ fun PlayerScreen(navController: NavHostController) {
                     )
                     .padding(horizontal = 8.dp, vertical = 10.dp)
             ) {
+                if (!isLive && duration > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatMs(position), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                        Text(formatMs(duration), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Slider(
+                        value = position.toFloat(),
+                        onValueChange = { seeking = true; position = it.toLong() },
+                        onValueChangeFinished = {
+                            PlaybackManager.player?.seekTo(position)
+                            seeking = false
+                        },
+                        valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                    )
+                } else if (isLive) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                        Text("● CANLI", color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = {
-                            val p = queueProfile ?: return@IconButton
-                            val idx = ChannelQueue.index - 1
-                            if (idx >= 0) switchTo(idx)
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Önceki", tint = Color.White, modifier = Modifier.size(36.dp))
+                        if (isLive) {
+                            IconButton(onClick = {
+                                val p = queueProfile ?: return@IconButton
+                                val idx = ChannelQueue.index - 1
+                                if (idx >= 0) switchTo(idx)
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Önceki", tint = Color.White, modifier = Modifier.size(36.dp))
+                            }
                         }
                         IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
                             Icon(
@@ -406,12 +465,14 @@ fun PlayerScreen(navController: NavHostController) {
                                 modifier = Modifier.size(52.dp)
                             )
                         }
-                        IconButton(onClick = {
-                            val p = queueProfile ?: return@IconButton
-                            val idx = ChannelQueue.index + 1
-                            if (idx < ChannelQueue.channels.size) switchTo(idx)
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Sonraki", tint = Color.White, modifier = Modifier.size(36.dp))
+                        if (isLive) {
+                            IconButton(onClick = {
+                                val p = queueProfile ?: return@IconButton
+                                val idx = ChannelQueue.index + 1
+                                if (idx < ChannelQueue.channels.size) switchTo(idx)
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Sonraki", tint = Color.White, modifier = Modifier.size(36.dp))
+                            }
                         }
                         IconButton(onClick = { showTracks = true }) {
                             Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Ses", tint = Color.White, modifier = Modifier.size(22.dp))
@@ -420,32 +481,34 @@ fun PlayerScreen(navController: NavHostController) {
                             Icon(Icons.Default.Subtitles, contentDescription = "Altyazı", tint = Color.White, modifier = Modifier.size(22.dp))
                         }
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Box(
+                    if (isLive) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clickable { showEpg = true }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
+                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Tv, contentDescription = "Rehber", tint = Color.White, modifier = Modifier.size(22.dp))
-                                Text("Rehber", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            Box(
+                                modifier = Modifier
+                                    .clickable { showEpg = true }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Tv, contentDescription = "Rehber", tint = Color.White, modifier = Modifier.size(22.dp))
+                                    Text("Rehber", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                }
                             }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clickable { showChannels = true }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.List, contentDescription = "Kanallar", tint = Color.White, modifier = Modifier.size(22.dp))
-                                Text("Kanallar", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            Box(
+                                modifier = Modifier
+                                    .clickable { showChannels = true }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.List, contentDescription = "Kanallar", tint = Color.White, modifier = Modifier.size(22.dp))
+                                    Text("Kanallar", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
                     }
@@ -703,6 +766,16 @@ private fun nowTime(): String {
         java.time.LocalTime.now()
             .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
     }.getOrDefault("")
+}
+
+private fun formatMs(ms: Long): String {
+    if (ms < 0) return "0:00"
+    val totalSec = ms / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+    else String.format("%d:%02d", m, s)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

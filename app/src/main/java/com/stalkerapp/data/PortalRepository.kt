@@ -98,16 +98,19 @@ class PortalRepository(
     }
 
     fun findChannelById(id: Long): Channel? {
-        val portal = store.activePortal() ?: return null
-        channelsCache[portal.id]?.values?.forEach { list ->
-            list.firstOrNull { it.id == id }?.let { return it }
+        channelsCache.values.forEach { genreMap ->
+            genreMap.values.forEach { list ->
+                list.firstOrNull { it.id == id }?.let { return it }
+            }
         }
         return null
     }
 
     fun findVodById(id: Long): VodItem? {
-        val portal = store.activePortal() ?: return null
-        return vodItemsById[portal.id]?.get(id)
+        vodItemsById.values.forEach { map ->
+            map[id]?.let { return it }
+        }
+        return null
     }
 
     suspend fun connect(portal: Portal): Profile {
@@ -357,10 +360,9 @@ class PortalRepository(
         profile: Profile,
         episode: Episode? = null
     ): String {
-        if (!episode?.cmd.isNullOrBlank() && episode != null) {
-            StalkerClient.parseCmd(episode.cmd)?.let { return rewriteLocalhost(it, profile) }
+        episode?.cmd?.takeIf { it.isNotBlank() }?.let {
+            StalkerClient.parseCmd(it)?.let { u -> return fixLocalhost(u, profile) }
         }
-        StalkerClient.parseCmd(item.cmd)?.let { return rewriteLocalhost(it, profile) }
         val resp = client.request(
             profile.baseUrl,
             "portal.php?type=vod&action=create_link",
@@ -372,9 +374,9 @@ class PortalRepository(
             )
         )
         if (resp is JsonObject) {
-            StalkerClient.urlFromJson(resp)?.let { return rewriteLocalhost(it, profile) }
-            resp["js"]?.let {
-                if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return rewriteLocalhost(u, profile) }
+            StalkerClient.urlFromJson(resp)?.let { return fixLocalhost(it, profile) }
+            (resp["js"] as? JsonObject)?.let {
+                StalkerClient.urlFromJson(it)?.let { u -> return fixLocalhost(u, profile) }
             }
         }
         val server = profile.serverAddress
@@ -383,6 +385,12 @@ class PortalRepository(
             return "$s/${item.id}"
         }
         throw StalkerException("VOD akış URL'si alınamadı")
+    }
+
+    private fun fixLocalhost(url: String, profile: Profile): String {
+        return if (url.contains("localhost", true) || url.contains("127.0.0.1", true)) {
+            rewriteLocalhost(url, profile)
+        } else url
     }
 
     // ---------- Parsers ----------

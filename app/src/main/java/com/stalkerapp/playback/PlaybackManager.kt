@@ -68,6 +68,9 @@ object PlaybackManager {
     private var activePlayer: ExoPlayer? = null
     private var standbyPlayer: ExoPlayer? = null
 
+    private var vodPlayback: Boolean = false
+    fun isVod(): Boolean = vodPlayback
+
     private val playerListeners = CopyOnWriteArrayList<(ExoPlayer?) -> Unit>()
     private var stateListeners = CopyOnWriteArrayList<(Boolean, Boolean) -> Unit>()
     private val errorListeners = CopyOnWriteArrayList<(String?) -> Unit>()
@@ -160,6 +163,7 @@ object PlaybackManager {
         ChannelQueue.channels = channels
         ChannelQueue.index = index
         ChannelQueue.profile = profile
+        vodPlayback = false
         val ch = channels.getOrNull(index) ?: return
         scope.launch {
             val url = try {
@@ -178,6 +182,7 @@ object PlaybackManager {
 
     fun play(url: String, title: String, artwork: String = "", subtitle: String = "") {
         setError(null)
+        vodPlayback = true
         currentStreamUrl = url
         currentTitle = title
         currentSubtitle = subtitle
