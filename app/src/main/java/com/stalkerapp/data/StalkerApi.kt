@@ -94,22 +94,25 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             builder.get().build()
         }
 
-        val resp = try {
-            withContext(Dispatchers.IO) { okHttp.newCall(request).execute() }
-        } catch (e: java.io.IOException) {
-            val msg = when (e) {
-                is java.net.UnknownHostException ->
-                    "Sunucu adresi bulunamadı (DNS). Portal adresini kontrol edin."
-                is java.net.ConnectException ->
-                    "Sunucuya bağlanılamadı. Adres/port yanlış veya sunucu çalışmıyor."
-                is java.net.SocketTimeoutException ->
-                    "Sunucu yanıt vermedi (zaman aşımı). Ağ bağlantınızı ve adresi kontrol edin."
-                else ->
-                    "Sunucuya ulaşılamadı (${e::class.simpleName ?: "ağ hatası"}). İnternet bağlantınızı ve portal adresini kontrol edin."
+        val (respCode, text) = withContext(Dispatchers.IO) {
+            try {
+                okHttp.newCall(request).execute().use { r ->
+                    r.code to (r.body?.string().orEmpty())
+                }
+            } catch (e: java.io.IOException) {
+                val msg = when (e) {
+                    is java.net.UnknownHostException ->
+                        "Sunucu adresi bulunamadı (DNS). Portal adresini kontrol edin."
+                    is java.net.ConnectException ->
+                        "Sunucuya bağlanılamadı. Adres/port yanlış veya sunucu çalışmıyor."
+                    is java.net.SocketTimeoutException ->
+                        "Sunucu yanıt vermedi (zaman aşımı). Ağ bağlantınızı ve adresi kontrol edin."
+                    else ->
+                        "Sunucuya ulaşılamadı (${e::class.simpleName ?: "ağ hatası"}). İnternet bağlantınızı ve portal adresini kontrol edin."
+                }
+                throw StalkerException(msg)
             }
-            throw StalkerException(msg)
         }
-        val text = resp.use { it.body?.string().orEmpty() }
 
         val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
         val payload = root?.get("js") ?: root
@@ -118,7 +121,7 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             (it as? JsonObject)?.get("error") != null
         } == true
 
-        if (resp.code == 429 || resp.code == 403 || resp.code == 451 || hasError) {
+        if (respCode == 429 || respCode == 403 || respCode == 451 || hasError) {
             triggerCooldown()
             throw StalkerException(
                 "Sunucu istekleri engelledi (cooldown). ${settingsProvider().cooldownMs / 1000} sn bekleniyor.",
@@ -126,8 +129,8 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             )
         }
 
-        if (!resp.isSuccessful) {
-            throw StalkerException("HTTP ${resp.code}")
+        if (respCode !in 200..299) {
+            throw StalkerException("HTTP $respCode")
         }
 
         return payload ?: throw StalkerException("Geçersiz sunucu yanıtı")
