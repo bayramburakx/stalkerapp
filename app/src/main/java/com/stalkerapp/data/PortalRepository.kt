@@ -52,7 +52,24 @@ class PortalRepository(
         return profiles[portal.id]
     }
 
-    fun channelStreamUrl(ch: Channel, profile: Profile): String {
+    suspend fun channelStreamUrl(ch: Channel, profile: Profile): String {
+        val base = profile.baseUrl
+        val resp = client.request(
+            base,
+            "portal.php?type=itv&action=create_link",
+            "POST",
+            tokenFor(profile),
+            mapOf(
+                "cmd" to ch.cmd.ifEmpty { "http://localhost/ch/${ch.id}_" },
+                "series" to "0"
+            )
+        )
+        StalkerClient.urlFromJson(resp.jsonObject)?.let { return it }
+        if (resp is JsonObject) {
+            resp["js"]?.let {
+                if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return u }
+            }
+        }
         StalkerClient.parseCmd(ch.cmd)?.let { return rewriteLocalhost(it, profile) }
         val server = profile.serverAddress
         if (server.isBlank()) return ""

@@ -134,7 +134,7 @@ object PlaybackManager {
 
     // ---------- Public playback control ----------
 
-    fun playChannel(
+    suspend fun playChannel(
         channels: List<Channel>,
         index: Int,
         profile: Profile,
@@ -168,7 +168,7 @@ object PlaybackManager {
         updateNotification()
     }
 
-    fun prebufferNext() {
+    suspend fun prebufferNext() {
         val next = ChannelQueue.next ?: return
         val profile = ChannelQueue.profile ?: return
         val url = repository.channelStreamUrl(next, profile)
@@ -181,7 +181,7 @@ object PlaybackManager {
         sp.seekTo(0)
     }
 
-    fun nextChannel(): Boolean {
+    suspend fun nextChannel(): Boolean {
         if (ChannelQueue.next == null) return false
         ChannelQueue.index += 1
         swapPlayers()
@@ -189,7 +189,7 @@ object PlaybackManager {
         return true
     }
 
-    fun previousChannel(): Boolean {
+    suspend fun previousChannel(): Boolean {
         if (ChannelQueue.previous == null) return false
         ChannelQueue.index -= 1
         swapPlayers()
