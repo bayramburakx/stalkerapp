@@ -67,10 +67,24 @@ object PlaybackManager {
 
     private var activePlayer: ExoPlayer? = null
     private var standbyPlayer: ExoPlayer? = null
-    private var mediaSession: MediaSession? = null
 
     private val playerListeners = CopyOnWriteArrayList<(ExoPlayer?) -> Unit>()
     private var stateListeners = CopyOnWriteArrayList<(Boolean, Boolean) -> Unit>()
+    private val errorListeners = CopyOnWriteArrayList<(String?) -> Unit>()
+
+    fun addErrorListener(l: (String?) -> Unit) {
+        errorListeners.add(l)
+        l(errorMessage)
+    }
+
+    fun removeErrorListener(l: (String?) -> Unit) {
+        errorListeners.remove(l)
+    }
+
+    private fun setError(msg: String?) {
+        errorMessage = msg
+        errorListeners.forEach { it(msg) }
+    }
 
     @Volatile var service: PlaybackService? = null
 
@@ -96,15 +110,7 @@ object PlaybackManager {
         val p = buildPlayer()
         activePlayer = p
         attachListener(p)
-        mediaSession = MediaSession.Builder(appContext, p).build()
         notifyPlayerChanged()
-        return p
-    }
-
-    private fun ensureStandbyPlayer(): ExoPlayer {
-        standbyPlayer?.let { return it }
-        val p = buildPlayer()
-        standbyPlayer = p
         return p
     }
 
@@ -113,13 +119,13 @@ object PlaybackManager {
             .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
 
-        val bufferMs = store.settings().maxBufferMs
+        val bufferMs = store.settings().maxBufferMs.coerceAtMost(30_000)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                15_000,
+                5_000,
                 bufferMs,
-                2_500,
-                5_000
+                1_000,
+                2_000
             )
             .build()
 
@@ -131,7 +137,7 @@ object PlaybackManager {
             .setLoadControl(loadControl)
             .setRenderersFactory(
                 DefaultRenderersFactory(appContext)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             )
             .build()
             .apply {
@@ -156,20 +162,19 @@ object PlaybackManager {
             val url = try {
                 repository.channelStreamUrl(ch, profile)
             } catch (e: Exception) {
-                errorMessage = "Akış alınamadı: ${e.message ?: e::class.simpleName}"
+                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
                 return@launch
             }
             if (url.isBlank()) {
-                errorMessage = "Kanal akış URL'si boş"
+                setError("Kanal akış URL'si boş")
                 return@launch
             }
             play(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle })
-            prebufferNext()
         }
     }
 
     fun play(url: String, title: String, artwork: String = "", subtitle: String = "") {
-        errorMessage = null
+        setError(null)
         currentTitle = title
         currentSubtitle = subtitle
         val p = ensureActivePlayer()
@@ -182,53 +187,22 @@ object PlaybackManager {
         updateNotification()
     }
 
-    suspend fun prebufferNext() {
-        val next = ChannelQueue.next ?: return
-        val profile = ChannelQueue.profile ?: return
-        val url = try {
-            repository.channelStreamUrl(next, profile)
-        } catch (e: Exception) {
-            return
-        }
-        if (url.isBlank()) return
-        val sp = ensureStandbyPlayer()
-        sp.stop()
-        sp.setMediaItem(mediaItem(url, next.name, next.logo))
-        sp.prepare()
-        sp.playWhenReady = false
-        sp.seekTo(0)
-    }
-
     fun nextChannel(): Boolean {
-        if (ChannelQueue.next == null) return false
-        ChannelQueue.index += 1
-        swapPlayers()
-        scope.launch { prebufferNext() }
+        val channels = ChannelQueue.channels
+        val nextIndex = ChannelQueue.index + 1
+        if (nextIndex >= channels.size) return false
+        val profile = ChannelQueue.profile ?: return false
+        playChannel(channels, nextIndex, profile)
         return true
     }
 
     fun previousChannel(): Boolean {
-        if (ChannelQueue.previous == null) return false
-        ChannelQueue.index -= 1
-        swapPlayers()
-        scope.launch { prebufferNext() }
+        val channels = ChannelQueue.channels
+        val prevIndex = ChannelQueue.index - 1
+        if (prevIndex < 0) return false
+        val profile = ChannelQueue.profile ?: return false
+        playChannel(channels, prevIndex, profile)
         return true
-    }
-
-    private fun swapPlayers() {
-        val active = ensureActivePlayer()
-        val standby = ensureStandbyPlayer()
-        val wasPlaying = active.playWhenReady
-        active.stop()
-        active.pause()
-        standby.playWhenReady = wasPlaying
-        val tmp = activePlayer
-        activePlayer = standbyPlayer
-        standbyPlayer = tmp
-        currentTitle = ChannelQueue.current?.name ?: currentTitle
-        notifyPlayerChanged()
-        notifyStateChanged()
-        updateNotification()
     }
 
     fun togglePlayPause() {
@@ -251,10 +225,8 @@ object PlaybackManager {
     fun release() {
         activePlayer?.release()
         standbyPlayer?.release()
-        mediaSession?.release()
         activePlayer = null
         standbyPlayer = null
-        mediaSession = null
         notifyPlayerChanged()
     }
 
@@ -394,7 +366,6 @@ object PlaybackManager {
             .addAction(action("Sonraki", R.drawable.ic_next, ACTION_NEXT))
             .addAction(action("Kapat", R.drawable.ic_close, ACTION_STOP))
             .setStyle(MediaNotificationCompat.MediaStyle()
-                .setMediaSession(mediaSession?.sessionCompatToken)
                 .setShowActionsInCompactView(0, 1, 2))
             .build()
     }
@@ -418,7 +389,7 @@ object PlaybackManager {
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                errorMessage = error.message ?: "Oynatma hatası"
+                setError(error.message ?: "Oynatma hatası")
                 notifyStateChanged()
             }
 

@@ -73,7 +73,7 @@ private fun AppNav() {
     NavHost(navController = navController, startDestination = "login") {
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
         composable("home") { HomeScreen(onOpenPlayer = { navController.navigate("player") }, onOpenVod = { id -> navController.navigate("vod/$id") }) }
-        composable("player") { PlayerScreen() }
+        composable("player") { PlayerScreen(navController) }
         composable(
             route = "vod/{vodId}",
             arguments = listOf(navArgument("vodId") { type = NavType.LongType })

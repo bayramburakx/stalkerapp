@@ -60,6 +60,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.activity.compose.BackHandler
+import androidx.navigation.NavHostController
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.playback.ChannelQueue
@@ -69,7 +71,7 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerScreen() {
+fun PlayerScreen(navController: NavHostController) {
     val context = LocalContext.current
     val activity = context as? Activity
     val app = context.applicationContext as StalkerApp
@@ -113,6 +115,16 @@ fun PlayerScreen() {
         onDispose { PlaybackManager.removeStateListener(stateListener) }
     }
 
+    DisposableEffect(Unit) {
+        val el: (String?) -> Unit = { error = it }
+        PlaybackManager.addErrorListener(el)
+        onDispose { PlaybackManager.removeErrorListener(el) }
+    }
+
+    BackHandler(enabled = true) {
+        navController.popBackStack()
+    }
+
     LaunchedEffect(overlayVisible) {
         if (overlayVisible) {
             delay(5000)
@@ -122,6 +134,12 @@ fun PlayerScreen() {
 
     val queueChannels = ChannelQueue.channels
     val queueProfile = ChannelQueue.profile
+
+    val zappingList = remember(queueChannels, currentChannel) {
+        val idx = queueChannels.indexOfFirst { it.id == currentChannel?.id }
+        if (idx < 0) queueChannels.take(31)
+        else queueChannels.drop((idx - 15).coerceAtLeast(0)).take(31)
+    }
 
     fun switchTo(index: Int) {
         val ch = queueChannels.getOrNull(index) ?: return
@@ -275,7 +293,7 @@ fun PlayerScreen() {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(queueChannels, key = { it.id }) { ch ->
+                    items(zappingList, key = { it.id }) { ch ->
                         Column(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
