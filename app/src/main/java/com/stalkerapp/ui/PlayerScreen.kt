@@ -863,7 +863,12 @@ fun ChannelListPanel(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Kanallar", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
+                        Text(
+                            "Kanallar",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
                         IconButton(onClick = onClose) {
                             Icon(Icons.Default.Close, contentDescription = "Kapat", tint = Color.White)
                         }
@@ -880,17 +885,14 @@ fun ChannelListPanel(
                     val filtered = if (query.isBlank()) channels else channels.filter {
                         it.name.contains(query.trim(), ignoreCase = true)
                     }
-                    androidx.compose.foundation.lazy.LazyColumn(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                    items(filtered, key = { it.id }) { ch ->
-                        ChannelRow(
-                            channel = ch,
-                            baseUrl = profile?.baseUrl.orEmpty()
-                        ) {
-                            onSelect(channels.indexOfFirst { c -> c.id == ch.id })
-                        }
-                    }
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(filtered, key = { it.id }) { ch ->
+                            ChannelRow(
+                                channel = ch,
+                                baseUrl = profile?.baseUrl.orEmpty()
+                            ) {
+                                onSelect(channels.indexOfFirst { c -> c.id == ch.id })
+                            }
                         }
                     }
                 }
