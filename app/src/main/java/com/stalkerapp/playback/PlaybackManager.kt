@@ -152,7 +152,12 @@ object PlaybackManager {
         ChannelQueue.profile = profile
         val ch = channels.getOrNull(index) ?: return
         scope.launch {
-            val url = repository.channelStreamUrl(ch, profile)
+            val url = try {
+                repository.channelStreamUrl(ch, profile)
+            } catch (e: Exception) {
+                errorMessage = "Akış alınamadı: ${e.message ?: e::class.simpleName}"
+                return@launch
+            }
             if (url.isBlank()) {
                 errorMessage = "Kanal akış URL'si boş"
                 return@launch
@@ -179,7 +184,11 @@ object PlaybackManager {
     suspend fun prebufferNext() {
         val next = ChannelQueue.next ?: return
         val profile = ChannelQueue.profile ?: return
-        val url = repository.channelStreamUrl(next, profile)
+        val url = try {
+            repository.channelStreamUrl(next, profile)
+        } catch (e: Exception) {
+            return
+        }
         if (url.isBlank()) return
         val sp = ensureStandbyPlayer()
         sp.stop()

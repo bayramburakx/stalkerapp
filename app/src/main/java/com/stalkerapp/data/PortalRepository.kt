@@ -10,7 +10,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -66,8 +65,8 @@ class PortalRepository(
                 "series" to "0"
             )
         )
-        StalkerClient.urlFromJson(resp.jsonObject)?.let { return it }
         if (resp is JsonObject) {
+            StalkerClient.urlFromJson(resp)?.let { return it }
             resp["js"]?.let {
                 if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return u }
             }
@@ -372,8 +371,8 @@ class PortalRepository(
                 "series" to if (item.isSeries) "1" else "0"
             )
         )
-        StalkerClient.urlFromJson(resp.jsonObject)?.let { return rewriteLocalhost(it, profile) }
         if (resp is JsonObject) {
+            StalkerClient.urlFromJson(resp)?.let { return rewriteLocalhost(it, profile) }
             resp["js"]?.let {
                 if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return rewriteLocalhost(u, profile) }
             }
@@ -390,7 +389,7 @@ class PortalRepository(
 
     private fun parseProfile(resp: JsonElement, base: String, portal: Portal, mac: String): Profile {
         val obj = resp.jsonObject
-        val serverInfo = obj["server_info"]?.jsonArray?.mapNotNull { e ->
+        val serverInfo = (obj["server_info"] as? JsonArray)?.mapNotNull { e ->
             val o = e.jsonObject
             ServerInfo(
                 address = o["address"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
@@ -409,7 +408,7 @@ class PortalRepository(
 
     private fun parseDataArray(el: JsonElement): List<JsonObject> {
         return when (el) {
-            is JsonObject -> el["data"]?.jsonArray?.mapNotNull { it as? JsonObject }.orEmpty()
+            is JsonObject -> (el["data"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
             is JsonArray -> el.mapNotNull { it as? JsonObject }
             else -> emptyList()
         }

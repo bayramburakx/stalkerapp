@@ -6,9 +6,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -174,16 +174,16 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             val trimmed = raw.trim()
             if (trimmed.startsWith("ffmpeg", ignoreCase = true)) {
                 val idx = trimmed.indexOf("http")
-                return trimmed.substring(idx).substringBefore(' ')
+                if (idx >= 0) return trimmed.substring(idx).substringBefore(' ')
+                return null
             }
             val match = Regex("https?://\\S+").find(trimmed)
             return match?.value?.trimEnd(',', ';')
         }
 
         fun urlFromJson(obj: JsonObject): String? {
-            obj["cmd"]?.jsonPrimitive?.contentOrNull?.let { return parseCmd(it) }
-            obj["url"]?.jsonPrimitive?.contentOrNull?.let { return parseCmd(it) }
-            obj["cmd"].let { }
+            (obj["cmd"] as? JsonPrimitive)?.contentOrNull?.let { return parseCmd(it) }
+            (obj["url"] as? JsonPrimitive)?.contentOrNull?.let { return parseCmd(it) }
             return null
         }
     }
