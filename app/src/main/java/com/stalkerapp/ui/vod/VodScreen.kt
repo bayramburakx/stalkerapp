@@ -147,7 +147,18 @@ fun VodScreen(
             error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
             items.orEmpty().isEmpty() -> EmptyState("İçerik bulunamadı")
             else -> {
-                val typeFiltered = items.orEmpty()
+                val seriesCatIds = categories.orEmpty()
+                    .filter { it.title.contains("dizi", ignoreCase = true) }
+                    .map { it.id }
+                    .toSet()
+                val isSeriesItem: (VodItem) -> Boolean = { it ->
+                    it.isSeries || it.seriesData.isNotBlank() || it.selectedSeason.isNotBlank() || seriesCatIds.contains(selectedCategory)
+                }
+                val typeFiltered = when (filterIsSeries) {
+                    true -> items.orEmpty().filter(isSeriesItem)
+                    false -> items.orEmpty().filter { !isSeriesItem(it) }
+                    else -> items.orEmpty()
+                }
                 val filtered = typeFiltered.let { list ->
                     if (query.isBlank()) list
                     else list.filter {
@@ -162,7 +173,12 @@ fun VodScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filtered, key = { it.id }) { item ->
-                        VodPoster(item = item, baseUrl = profile.baseUrl, onClick = { onOpenVod(item.id) })
+                        VodPoster(
+                            item = item,
+                            baseUrl = profile.baseUrl,
+                            isSeries = filterIsSeries == true || item.isSeries,
+                            onClick = { onOpenVod(item.id) }
+                        )
                     }
                 }
             }
@@ -171,7 +187,7 @@ fun VodScreen(
 }
 
 @Composable
-fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, width: Int? = null) {
+fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boolean = item.isSeries, width: Int? = null) {
     Card(modifier = Modifier.then(if (width != null) Modifier.width(width.dp) else Modifier.fillMaxWidth()).clickable(onClick = onClick)) {
         Column {
             Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
@@ -181,7 +197,7 @@ fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, width: Int? =
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
-                if (item.isSeries) {
+                if (isSeries) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)

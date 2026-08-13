@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -418,14 +420,29 @@ fun PlayerScreen(navController: NavHostController) {
                             Icon(Icons.Default.Subtitles, contentDescription = "Altyazı", tint = Color.White, modifier = Modifier.size(22.dp))
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { showEpg = true }) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clickable { showEpg = true }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.Tv, contentDescription = "Rehber", tint = Color.White, modifier = Modifier.size(22.dp))
                                 Text("Rehber", color = Color.White, style = MaterialTheme.typography.labelSmall)
                             }
                         }
-                        IconButton(onClick = { showChannels = true }) {
+                        Box(
+                            modifier = Modifier
+                                .clickable { showChannels = true }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.List, contentDescription = "Kanallar", tint = Color.White, modifier = Modifier.size(22.dp))
                                 Text("Kanallar", color = Color.White, style = MaterialTheme.typography.labelSmall)
@@ -435,36 +452,6 @@ fun PlayerScreen(navController: NavHostController) {
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-
-                // Zapping bar
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(zappingList, key = { it.id }) { ch ->
-                        Column(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (ch.id == currentChannel?.id) Color.White.copy(alpha = 0.25f)
-                                    else Color.Black.copy(alpha = 0.45f)
-                                )
-                                .clickable { switchTo(queueChannels.indexOfFirst { it.id == ch.id }) }
-                                .padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            ChannelLogo(logo = ch.logo, modifier = Modifier.size(36.dp))
-                            Text(
-                                text = ch.name,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.width(72.dp).padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
             }
         }
 
@@ -531,7 +518,6 @@ fun PlayerScreen(navController: NavHostController) {
         PlayerInfoSheet(
             channel = currentChannel,
             profile = profile,
-            vm = vm,
             onDismiss = { showInfo = false }
         )
     }
@@ -548,6 +534,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     ChannelListPanel(
         visible = showChannels,
+        currentId = currentChannel?.id,
         onClose = { showChannels = false },
         onSelect = { idx -> switchTo(idx); showChannels = false }
     )
@@ -723,32 +710,48 @@ private fun nowTime(): String {
 fun PlayerInfoSheet(
     channel: Channel?,
     profile: Profile?,
-    vm: MainViewModel,
     onDismiss: () -> Unit
 ) {
     if (channel == null || profile == null) {
         onDismiss()
         return
     }
-    var programs by remember { mutableStateOf<List<com.stalkerapp.data.EpgProgram>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val rows = remember { mutableStateListOf<Pair<String, String>>() }
 
-    LaunchedEffect(channel.id) {
-        try {
-            programs = vm.repository.loadEpg(profile, channel.id)
-        } catch (e: Exception) {
-            error = e.message
+    fun rebuild() {
+        val p = PlaybackManager.player
+        val v = p?.videoFormat
+        val a = p?.audioFormat
+        val url = PlaybackManager.currentStreamUrl
+        val bufSec = (p?.totalBufferedDuration ?: 0) / 1000f
+        rows.clear()
+        rows.add("source" to "tv")
+        rows.add(
+            "video" to buildString {
+                append(if (v?.height != null && v.height > 0) "${v.height}p" else "—")
+                append(" | ")
+                append(mimeLabel(v?.sampleMimeType))
+                append(" | ")
+                append(if (v != null) "hw" else "—")
+            }
+        )
+        rows.add("Engine" to "exo player")
+        rows.add("audio" to mimeLabel(a?.sampleMimeType))
+        rows.add("BUFFER" to "%.1f sn".format(bufSec))
+        rows.add("DECODER" to (v?.codecs ?: "MediaCodec"))
+        if (url.isNotBlank()) rows.add("URL" to url)
+    }
+
+    LaunchedEffect(Unit) {
+        rebuild()
+        while (true) {
+            delay(1000)
+            rebuild()
         }
     }
 
-    val current = programs?.firstOrNull { it.isCurrent }
-    val next = programs?.let { list ->
-        val idx = list.indexOfFirst { it.isCurrent }
-        if (idx >= 0) list.getOrNull(idx + 1) else null
-    }
-
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ChannelLogo(logo = resolveUrl(channel.logo, profile.baseUrl), modifier = Modifier.size(56.dp))
                 Spacer(modifier = Modifier.width(12.dp))
@@ -764,32 +767,42 @@ fun PlayerInfoSheet(
                 }
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-            when {
-                programs == null && error == null -> CircularProgressIndicator()
-                error != null -> Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
-                else -> {
-                    Text("Şu an", style = MaterialTheme.typography.titleMedium)
-                    if (current != null) {
-                        Text(
-                            "${vm.repository.formatEpoch(current.startTs)} — ${vm.repository.formatEpoch(current.stopTs)}  ${current.name}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    } else {
-                        Text("Yayın bilgisi yok", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Sonraki", style = MaterialTheme.typography.titleMedium)
-                    if (next != null) {
-                        Text(
-                            "${vm.repository.formatEpoch(next.startTs)} — ${vm.repository.formatEpoch(next.stopTs)}  ${next.name}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    } else {
-                        Text("Sonraki program yok", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            rows.forEach { (k, v) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        k,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(90.dp)
+                    )
+                    Text(
+                        v,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
+    }
+}
+
+private fun mimeLabel(mime: String?): String {
+    return when (mime) {
+        "video/avc" -> "h.264"
+        "video/hevc" -> "hevc"
+        "video/av01" -> "av1"
+        "video/vp9" -> "vp9"
+        "video/mp4v-es" -> "mpeg-4"
+        "video/mpeg", "video/mpeg2" -> "mpeg-2"
+        "audio/mp4a-latm", "audio/aac" -> "aac-lc"
+        "audio/mpeg" -> "mp3"
+        "audio/ac3" -> "ac3"
+        "audio/eac3" -> "eac3"
+        else -> mime ?: "—"
     }
 }
 
@@ -838,12 +851,21 @@ fun PlayerSettingsSheet(
 @Composable
 fun ChannelListPanel(
     visible: Boolean,
+    currentId: Long? = null,
     onClose: () -> Unit,
     onSelect: (Int) -> Unit
 ) {
     val channels = ChannelQueue.channels
     val profile = ChannelQueue.profile
     var query by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            val idx = channels.indexOfFirst { it.id == currentId }
+            if (idx >= 0) listState.scrollToItem(idx)
+        }
+    }
 
     AnimatedVisibility(
         visible = visible,
@@ -886,11 +908,15 @@ fun ChannelListPanel(
                     val filtered = if (query.isBlank()) channels else channels.filter {
                         it.name.contains(query.trim(), ignoreCase = true)
                     }
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                         items(filtered, key = { it.id }) { ch ->
                             ChannelRow(
                                 channel = ch,
-                                baseUrl = profile?.baseUrl.orEmpty()
+                                baseUrl = profile?.baseUrl.orEmpty(),
+                                highlight = ch.id == currentId
                             ) {
                                 onSelect(channels.indexOfFirst { c -> c.id == ch.id })
                             }

@@ -78,11 +78,13 @@ fun ChannelRow(
     channel: Channel,
     baseUrl: String,
     modifier: Modifier = Modifier,
+    highlight: Boolean = false,
     onClick: (Channel) -> Unit
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(if (highlight) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .clickable { onClick(channel) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -90,7 +92,7 @@ fun ChannelRow(
     ) {
         Text(
             text = channel.number.toString(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (highlight) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.size(28.dp)
         )
@@ -99,6 +101,7 @@ fun ChannelRow(
             Text(
                 text = channel.name,
                 style = MaterialTheme.typography.bodyLarge,
+                color = if (highlight) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -106,7 +109,7 @@ fun ChannelRow(
                 Text(
                     text = channel.tvGenreTitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (highlight) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
