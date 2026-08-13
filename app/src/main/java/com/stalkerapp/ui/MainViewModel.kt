@@ -4,12 +4,14 @@ import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stalkerapp.StalkerApp
+import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.PortalStatus
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Settings
 import com.stalkerapp.data.Store
+import com.stalkerapp.data.VodItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
