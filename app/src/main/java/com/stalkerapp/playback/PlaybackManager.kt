@@ -109,7 +109,7 @@ object PlaybackManager {
 
     private fun buildPlayer(): ExoPlayer {
         val extractorsFactory = DefaultExtractorsFactory()
-            .setTsExtractorMode(TsExtractor.MODE_SINGLE_PMT)
+            .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
 
         val bufferMs = store.settings().maxBufferMs
