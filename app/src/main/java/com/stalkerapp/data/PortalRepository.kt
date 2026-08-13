@@ -1,0 +1,449 @@
+package com.stalkerapp.data
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
+sealed class PortalStatus {
+    data object Idle : PortalStatus()
+    data class Connecting(val portalName: String) : PortalStatus()
+    data class Connected(val profile: Profile) : PortalStatus()
+    data class Error(val message: String) : PortalStatus()
+}
+
+class PortalRepository(
+    private val store: Store,
+    private val client: StalkerClient
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val handshakeTokens = mutableMapOf<String, String>()
+    private val profiles = mutableMapOf<String, Profile>()
+    private val genresCache = mutableMapOf<String, List<Genre>>()
+    private val channelsCache = mutableMapOf<String, MutableMap<Long, List<Channel>>>()
+    private val vodGenresCache = mutableMapOf<String, List<Genre>>()
+    private val vodCache = mutableMapOf<String, MutableMap<Long, List<VodItem>>>()
+    private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
+    private val epgCache = mutableMapOf<Long, List<EpgProgram>>()
+
+    private val _status = MutableStateFlow<PortalStatus>(PortalStatus.Idle)
+    val status: StateFlow<PortalStatus> = _status
+
+    fun cooldownRemainingSeconds(): Long = client.cooldownRemainingSeconds()
+
+    fun clearCooldown() = client.clearCooldown()
+
+    fun cachedProfile(): Profile? {
+        val portal = store.activePortal() ?: return null
+        return profiles[portal.id]
+    }
+
+    fun channelStreamUrl(ch: Channel, profile: Profile): String {
+        StalkerClient.parseCmd(ch.cmd)?.let { return it }
+        val server = profile.serverAddress
+        if (server.isBlank()) return ""
+        val s = if (server.startsWith("http")) server else "http://$server"
+        return "$s/${ch.id}"
+    }
+
+    fun cachedChannels(genreId: Long): List<Channel>? {
+        val portal = store.activePortal() ?: return null
+        return channelsCache[portal.id]?.get(genreId)
+    }
+
+    fun findChannelById(id: Long): Channel? {
+        val portal = store.activePortal() ?: return null
+        channelsCache[portal.id]?.values?.forEach { list ->
+            list.firstOrNull { it.id == id }?.let { return it }
+        }
+        return null
+    }
+
+    fun findVodById(id: Long): VodItem? {
+        val portal = store.activePortal() ?: return null
+        return vodItemsById[portal.id]?.get(id)
+    }
+
+    suspend fun connect(portal: Portal): Profile {
+        _status.value = PortalStatus.Connecting(portal.name)
+        return try {
+            val base = StalkerClient.normalizeBase(portal.url)
+            val handshake = client.request(
+                base,
+                "portal.php?type=stb&action=handshake",
+                method = "GET",
+                token = ""
+            )
+            val hToken = handshake.jsonObject["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            if (hToken.isEmpty()) {
+                throw StalkerException("Handshake başarısız: token alınamadı. Sunucu erişimi engelliyor olabilir.")
+            }
+
+            val mac = portal.mac.ifEmpty { StalkerClient.generateMac() }
+            val body = buildMap {
+                put("login", mac)
+                put("sn", mac)
+                put("mac", mac)
+                put("hw_version", "1.0.0")
+                put("hw_id", mac.replace(":", ""))
+                put("app_name", "StalkerPlayer")
+                if (portal.username.isNotBlank()) put("username", portal.username)
+                if (portal.password.isNotBlank()) put("password", portal.password)
+            }
+
+            val profileResp = client.request(
+                base,
+                "portal.php?type=stb&action=get_profile",
+                method = "POST",
+                token = hToken,
+                body = body
+            )
+            val profile = parseProfile(profileResp, base, portal, mac)
+
+            if (profile.serverAddress.isBlank() && profile.mac.isBlank()) {
+                client.triggerCooldown()
+                throw StalkerException("Profil alınamadı. Portal adresi veya MAC hatalı olabilir.")
+            }
+
+            handshakeTokens[portal.id] = hToken
+            profiles[portal.id] = profile
+            store.savePortal(portal.copy(mac = mac))
+            store.setActivePortalId(portal.id)
+            _status.value = PortalStatus.Connected(profile)
+            profile
+        } catch (e: Exception) {
+            _status.value = PortalStatus.Error(e.message ?: "Bağlantı hatası")
+            throw e
+        }
+    }
+
+    private fun tokenFor(profile: Profile): String =
+        handshakeTokens[profile.portal?.id] ?: ""
+
+    // ---------- LIVE TV ----------
+
+    suspend fun loadGenres(profile: Profile): List<Genre> {
+        genresCache[profile.portal?.id].let { if (it != null) return it }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=itv&action=get_genres",
+            "POST",
+            tokenFor(profile),
+            mapOf("js" to "1")
+        )
+        val list = parseGenres(resp)
+        genresCache[profile.portal?.id] = list
+        return list
+    }
+
+    suspend fun loadChannels(profile: Profile, genreId: Long = 0): List<Channel> {
+        channelsCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }
+            .get(genreId)?.let { return it }
+
+        val body = buildMap {
+            if (genreId > 0) put("genre", genreId.toString())
+            put("force_ch_link_check", "1")
+        }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=itv&action=get_all_channels",
+            "POST",
+            tokenFor(profile),
+            body
+        )
+        val list = parseChannels(resp)
+        channelsCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[genreId] = list
+        return list
+    }
+
+    suspend fun loadEpg(profile: Profile, channelId: Long): List<EpgProgram> {
+        epgCache[channelId]?.let { return it }
+        val zone = portalZone(profile)
+        val now = System.currentTimeMillis() / 1000
+        val from = now - 3 * 3600
+        val to = now + 24 * 3600
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=itv&action=get_epg_info",
+            "POST",
+            tokenFor(profile),
+            mapOf(
+                "ch_id" to channelId.toString(),
+                "period" to "240",
+                "from" to from.toString(),
+                "to" to to.toString()
+            )
+        )
+        val offsetHours = store.settings().timezoneOffset
+        val data = parseDataArray(resp)
+        val programs = data.mapNotNull { p ->
+            val o = p.jsonObject
+            val startStr = o["start"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val stopStr = o["stop"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            if (startStr.isEmpty()) return@mapNotNull null
+            val startTs = epgToEpoch(startStr, zone)
+            val stopTs = epgToEpoch(stopStr, zone)
+            EpgProgram(
+                chId = o["ch_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: channelId,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "—",
+                start = startStr,
+                stop = stopStr,
+                desc = o["descr"]?.jsonPrimitive?.contentOrNull
+                    ?: o["desc"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                category = o["category"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                startTs = startTs + offsetHours * 3600,
+                stopTs = stopTs + offsetHours * 3600,
+                isCurrent = startTs <= System.currentTimeMillis() / 1000 &&
+                    System.currentTimeMillis() / 1000 < stopTs
+            )
+        }
+        epgCache[channelId] = programs
+        return programs
+    }
+
+    // ---------- VOD ----------
+
+    suspend fun loadVodCategories(profile: Profile): List<Genre> {
+        vodGenresCache[profile.portal?.id].let { if (it != null) return it }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=get_categories",
+            "POST",
+            tokenFor(profile),
+            mapOf("js" to "1")
+        )
+        val list = parseGenres(resp)
+        vodGenresCache[profile.portal?.id] = list
+        return list
+    }
+
+    suspend fun loadVodList(profile: Profile, categoryId: Long = 0, page: Int = 1): List<VodItem> {
+        vodCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }
+            .get(categoryId)?.let { if (page <= 1) return it }
+
+        val body = buildMap {
+            put("page", page.toString())
+            if (categoryId > 0) put("category", categoryId.toString())
+        }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=get_ordered_list",
+            "POST",
+            tokenFor(profile),
+            body
+        )
+        val list = parseVodList(resp)
+        if (page <= 1) {
+            vodCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[categoryId] = list
+        }
+        list.forEach { vodItemsById.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[it.id] = it }
+        return list
+    }
+
+    suspend fun vodById(profile: Profile, id: Long): VodItem? {
+        vodItemsById[profile.portal?.id]?.get(id)?.let { return it }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=get_ordered_list",
+            "POST",
+            tokenFor(profile),
+            mapOf("vod_id" to id.toString())
+        )
+        val item = parseVodList(resp).firstOrNull()
+        item?.let { vodItemsById.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[it.id] = it }
+        return item
+    }
+
+    suspend fun loadSeasons(profile: Profile, vodId: Long): List<Season> {
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=get_season_list",
+            "POST",
+            tokenFor(profile),
+            mapOf("movie_id" to vodId.toString())
+        )
+        return parseSeasons(resp)
+    }
+
+    suspend fun loadEpisodes(profile: Profile, vodId: Long, seasonId: Long): List<Episode> {
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=get_episodes",
+            "POST",
+            tokenFor(profile),
+            mapOf("movie_id" to vodId.toString(), "season_id" to seasonId.toString())
+        )
+        return parseEpisodes(resp)
+    }
+
+    suspend fun vodStreamUrl(
+        item: VodItem,
+        profile: Profile,
+        episode: Episode? = null
+    ): String {
+        if (!episode?.cmd.isNullOrBlank() && episode != null) {
+            StalkerClient.parseCmd(episode.cmd)?.let { return it }
+        }
+        StalkerClient.parseCmd(item.cmd)?.let { return it }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=create_link",
+            "POST",
+            tokenFor(profile),
+            mapOf(
+                "vod_id" to item.id.toString(),
+                "series" to if (item.isSeries) "1" else "0"
+            )
+        )
+        StalkerClient.urlFromJson(resp.jsonObject)?.let { return it }
+        if (resp is JsonObject) {
+            resp["js"]?.let { if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return u } }
+        }
+        val server = profile.serverAddress
+        if (server.isNotBlank()) {
+            val s = if (server.startsWith("http")) server else "http://$server"
+            return "$s/${item.id}"
+        }
+        throw StalkerException("VOD akış URL'si alınamadı")
+    }
+
+    // ---------- Parsers ----------
+
+    private fun parseProfile(resp: JsonElement, base: String, portal: Portal, mac: String): Profile {
+        val obj = resp.jsonObject
+        val serverInfo = obj["server_info"]?.jsonArray?.mapNotNull { e ->
+            val o = e.jsonObject
+            ServerInfo(
+                address = o["address"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                city = o["city"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            )
+        }.orEmpty()
+        val tz = obj["timezone"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        return Profile(
+            mac = mac,
+            timezone = tz,
+            serverInfo = serverInfo,
+            baseUrl = base,
+            portal = portal
+        )
+    }
+
+    private fun parseDataArray(el: JsonElement): List<JsonObject> {
+        return when (el) {
+            is JsonObject -> el["data"]?.jsonArray?.mapNotNull { it as? JsonObject }.orEmpty()
+            is JsonArray -> el.mapNotNull { it as? JsonObject }
+            else -> emptyList()
+        }
+    }
+
+    private fun parseGenres(el: JsonElement): List<Genre> {
+        return parseDataArray(el).mapNotNull { o ->
+            Genre(
+                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+                title = o["title"]?.jsonPrimitive?.contentOrNull ?: "—",
+                censored = o["censored"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true,
+                number = o["number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+            )
+        }
+    }
+
+    private fun parseChannels(el: JsonElement): List<Channel> {
+        return parseDataArray(el).mapNotNull { o ->
+            Channel(
+                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                number = o["number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
+                logo = o["logo"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                cmd = o["cmd"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                tvGenreId = o["tv_genre_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+                tvGenreTitle = o["tv_genre_title"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                isTvArchive = o["is_tv_archive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true,
+                archiveDuration = o["tv_archive_duration"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+            )
+        }.filter { it.id > 0 }
+    }
+
+    private fun parseVodList(el: JsonElement): List<VodItem> {
+        return parseDataArray(el).mapNotNull { o ->
+            VodItem(
+                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                originalName = o["o_name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                sname = o["sname"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                poster = o["poster"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                description = o["description"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                year = o["year"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                director = o["director"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                country = o["country"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                rating = o["rating"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                genres = o["genres"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                isSeries = o["series"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true,
+                cmd = o["cmd"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                selectedSeason = o["selected_season"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                seriesData = o["series_data"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            )
+        }.filter { it.id > 0 }
+    }
+
+    private fun parseSeasons(el: JsonElement): List<Season> {
+        return parseDataArray(el).mapNotNull { o ->
+            Season(
+                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: ""
+            )
+        }
+    }
+
+    private fun parseEpisodes(el: JsonElement): List<Episode> {
+        return parseDataArray(el).mapNotNull { o ->
+            Episode(
+                id = o["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0,
+                name = o["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                episodeNumber = o["episode_number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                    ?: o["series_number"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
+                cmd = o["cmd"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            )
+        }
+    }
+
+    // ---------- Time helpers ----------
+
+    private val epgFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+
+    fun portalZone(profile: Profile): ZoneId? {
+        val tz = profile.timezone
+        if (tz.isNotBlank()) {
+            runCatching { return ZoneId.of(tz) }.onFailure { }
+        }
+        return null
+    }
+
+    private fun epgToEpoch(t: String, zone: ZoneId?): Long {
+        if (zone == null) return 0
+        return runCatching {
+            LocalDateTime.parse(t, epgFormatter).atZone(zone).toEpochSecond()
+        }.getOrDefault(0)
+    }
+
+    fun formatEpoch(ts: Long): String {
+        if (ts == 0L) return ""
+        return runCatching {
+            java.time.Instant.ofEpochSecond(ts)
+                .atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("HH:mm"))
+        }.getOrDefault("")
+    }
+}
