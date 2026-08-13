@@ -127,6 +127,9 @@ fun VodDetailScreen(
         }
     }
 
+    val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
+    val isFavorite = remember(favVods, it) { it != null && favVods.any { f -> f.id == it.id } }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -134,6 +137,15 @@ fun VodDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { it.let { vm.toggleFavoriteVod(it) } }) {
+                        Icon(
+                            imageVector = if (isFavorite) androidx.compose.material.icons.Icons.Default.Favorite else androidx.compose.material.icons.Icons.Default.FavoriteBorder,
+                            contentDescription = "Favori",
+                            tint = if (isFavorite) androidx.compose.ui.graphics.Color(0xFFFF5252) else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             )

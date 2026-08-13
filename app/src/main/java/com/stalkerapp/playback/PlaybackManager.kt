@@ -122,6 +122,7 @@ object PlaybackManager {
 
     private fun buildPlayer(): ExoPlayer {
         val extractorsFactory = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
             .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
 
@@ -135,7 +136,15 @@ object PlaybackManager {
             )
             .build()
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(appContext, extractorsFactory)
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(30_000)
+            .setUserAgent("Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3")
+
+        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpDataSourceFactory)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
 
         return ExoPlayer.Builder(appContext)
@@ -176,13 +185,17 @@ object PlaybackManager {
                 setError("Kanal akış URL'si boş")
                 return@launch
             }
-            play(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle })
+            playInternal(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle }, isVod = false)
         }
     }
 
     fun play(url: String, title: String, artwork: String = "", subtitle: String = "") {
+        playInternal(url, title, artwork, subtitle, isVod = true)
+    }
+
+    private fun playInternal(url: String, title: String, artwork: String = "", subtitle: String = "", isVod: Boolean) {
         setError(null)
-        vodPlayback = true
+        vodPlayback = isVod
         currentStreamUrl = url
         currentTitle = title
         currentSubtitle = subtitle
@@ -194,6 +207,23 @@ object PlaybackManager {
         p.seekTo(0)
         startService()
         updateNotification()
+    }
+
+    fun seekTo(positionMs: Long) {
+        activePlayer?.seekTo(positionMs)
+    }
+
+    fun seekForward(ms: Long = 10_000L) {
+        val p = activePlayer ?: return
+        val dur = if (p.duration > 0) p.duration else Long.MAX_VALUE
+        val newPos = (p.currentPosition + ms).coerceAtMost(dur)
+        p.seekTo(newPos)
+    }
+
+    fun seekBack(ms: Long = 10_000L) {
+        val p = activePlayer ?: return
+        val newPos = (p.currentPosition - ms).coerceAtLeast(0L)
+        p.seekTo(newPos)
     }
 
     fun nextChannel(): Boolean {
@@ -442,7 +472,19 @@ object PlaybackManager {
 
     private fun mediaItem(url: String, title: String, artwork: String = ""): MediaItem {
         val builder = MediaItem.Builder().setUri(url)
-            .setMimeType(MimeTypes.VIDEO_MP2T)
+        val lower = url.lowercase()
+        val mimeType = when {
+            lower.contains(".m3u8") || lower.contains("/hls/") -> MimeTypes.APPLICATION_M3U8
+            lower.contains(".mpd") -> MimeTypes.APPLICATION_MPD
+            lower.contains(".ism") -> MimeTypes.APPLICATION_SS
+            lower.contains(".mp4") -> MimeTypes.VIDEO_MP4
+            lower.contains(".mkv") -> MimeTypes.VIDEO_MATROSKA
+            lower.contains(".ts") || lower.endsWith("/ts") -> MimeTypes.VIDEO_MP2T
+            else -> null
+        }
+        if (mimeType != null) {
+            builder.setMimeType(mimeType)
+        }
         val metaBuilder = MediaMetadata.Builder().setTitle(title)
         val resolvedArtwork = resolveUrl(artwork)
         if (!resolvedArtwork.isNullOrBlank()) {

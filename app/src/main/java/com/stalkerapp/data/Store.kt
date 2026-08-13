@@ -63,6 +63,62 @@ class Store(context: Context) {
 
     fun isFavorite(key: String): Boolean = key in favorites()
 
+    fun favoriteChannels(): List<Channel> = runCatching {
+        json.decodeFromString(ListSerializer(Channel.serializer()), prefs.getString(KEY_FAVORITE_CHANNELS, "[]").orEmpty())
+    }.getOrDefault(emptyList())
+
+    fun saveFavoriteChannels(list: List<Channel>) {
+        prefs.edit().putString(KEY_FAVORITE_CHANNELS, json.encodeToString(ListSerializer(Channel.serializer()), list)).apply()
+        val favKeys = favorites().filterNot { it.startsWith("ch:") }.toMutableSet()
+        list.forEach { favKeys.add("ch:${it.id}") }
+        saveFavorites(favKeys)
+    }
+
+    fun isFavoriteChannel(id: Long): Boolean =
+        isFavorite("ch:$id") || favoriteChannels().any { it.id == id }
+
+    fun toggleFavoriteChannel(channel: Channel): Boolean {
+        val list = favoriteChannels().toMutableList()
+        val idx = list.indexOfFirst { it.id == channel.id }
+        val added = if (idx >= 0) {
+            list.removeAt(idx)
+            false
+        } else {
+            list.add(0, channel)
+            true
+        }
+        saveFavoriteChannels(list)
+        return added
+    }
+
+    fun favoriteVods(): List<VodItem> = runCatching {
+        json.decodeFromString(ListSerializer(VodItem.serializer()), prefs.getString(KEY_FAVORITE_VODS, "[]").orEmpty())
+    }.getOrDefault(emptyList())
+
+    fun saveFavoriteVods(list: List<VodItem>) {
+        prefs.edit().putString(KEY_FAVORITE_VODS, json.encodeToString(ListSerializer(VodItem.serializer()), list)).apply()
+        val favKeys = favorites().filterNot { it.startsWith("vod:") }.toMutableSet()
+        list.forEach { favKeys.add("vod:${it.id}") }
+        saveFavorites(favKeys)
+    }
+
+    fun isFavoriteVod(id: Long): Boolean =
+        isFavorite("vod:$id") || favoriteVods().any { it.id == id }
+
+    fun toggleFavoriteVod(vod: VodItem): Boolean {
+        val list = favoriteVods().toMutableList()
+        val idx = list.indexOfFirst { it.id == vod.id }
+        val added = if (idx >= 0) {
+            list.removeAt(idx)
+            false
+        } else {
+            list.add(0, vod)
+            true
+        }
+        saveFavoriteVods(list)
+        return added
+    }
+
     fun toggleFavorite(key: String): Boolean {
         val favs = favorites().toMutableSet()
         val added = if (key in favs) {
@@ -71,6 +127,13 @@ class Store(context: Context) {
             favs.add(key); true
         }
         saveFavorites(favs)
+        if (key.startsWith("ch:") && !added) {
+            val id = key.removePrefix("ch:").toLongOrNull()
+            if (id != null) saveFavoriteChannels(favoriteChannels().filterNot { it.id == id })
+        } else if (key.startsWith("vod:") && !added) {
+            val id = key.removePrefix("vod:").toLongOrNull()
+            if (id != null) saveFavoriteVods(favoriteVods().filterNot { it.id == id })
+        }
         return added
     }
 
@@ -79,5 +142,7 @@ class Store(context: Context) {
         private const val KEY_ACTIVE_PORTAL = "active_portal"
         private const val KEY_SETTINGS = "settings"
         private const val KEY_FAVORITES = "favorites"
+        private const val KEY_FAVORITE_CHANNELS = "favorite_channels"
+        private const val KEY_FAVORITE_VODS = "favorite_vods"
     }
 }

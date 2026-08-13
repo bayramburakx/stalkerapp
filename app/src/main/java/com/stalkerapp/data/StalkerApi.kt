@@ -171,18 +171,47 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
         fun parseCmd(raw: String?): String? {
             if (raw.isNullOrBlank()) return null
             val trimmed = raw.trim()
-            if (trimmed.startsWith("ffmpeg", ignoreCase = true)) {
-                val idx = trimmed.indexOf("http")
-                if (idx >= 0) return trimmed.substring(idx).substringBefore(' ')
-                return null
+            if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+                return trimmed.substringBefore(" ").substringBefore("\"").substringBefore("'").trimEnd(',', ';')
             }
-            val match = Regex("https?://\\S+").find(trimmed)
-            return match?.value?.trimEnd(',', ';')
+            if (trimmed.startsWith("ffmpeg", ignoreCase = true) || trimmed.startsWith("auto", ignoreCase = true)) {
+                val idx = trimmed.indexOf("http")
+                if (idx >= 0) {
+                    val sub = trimmed.substring(idx)
+                    return sub.substringBefore(" ").substringBefore("\"").substringBefore("'").trimEnd(',', ';')
+                }
+            }
+            val match = Regex("https?://[^\\s\"',;]+").find(trimmed)
+            return match?.value
         }
 
         fun urlFromJson(obj: JsonObject): String? {
-            (obj["cmd"] as? JsonPrimitive)?.contentOrNull?.let { return parseCmd(it) }
-            (obj["url"] as? JsonPrimitive)?.contentOrNull?.let { return parseCmd(it) }
+            (obj["cmd"] as? JsonPrimitive)?.contentOrNull?.let { parseCmd(it)?.let { u -> return u } }
+            (obj["url"] as? JsonPrimitive)?.contentOrNull?.let { parseCmd(it)?.let { u -> return u } }
+            (obj["link"] as? JsonPrimitive)?.contentOrNull?.let { parseCmd(it)?.let { u -> return u } }
+            (obj["data"] as? JsonPrimitive)?.contentOrNull?.let { parseCmd(it)?.let { u -> return u } }
+            (obj["stream_url"] as? JsonPrimitive)?.contentOrNull?.let { parseCmd(it)?.let { u -> return u } }
+            return null
+        }
+
+        fun extractUrl(el: JsonElement?): String? {
+            if (el == null) return null
+            when (el) {
+                is JsonPrimitive -> {
+                    parseCmd(el.contentOrNull)?.let { return it }
+                }
+                is JsonObject -> {
+                    urlFromJson(el)?.let { return it }
+                    el["js"]?.let { extractUrl(it)?.let { u -> return u } }
+                    el["data"]?.let { extractUrl(it)?.let { u -> return u } }
+                    el["results"]?.let { extractUrl(it)?.let { u -> return u } }
+                }
+                is kotlinx.serialization.json.JsonArray -> {
+                    for (item in el) {
+                        extractUrl(item)?.let { return it }
+                    }
+                }
+            }
             return null
         }
     }

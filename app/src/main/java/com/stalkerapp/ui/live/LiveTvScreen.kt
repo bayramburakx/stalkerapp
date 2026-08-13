@@ -144,15 +144,19 @@ fun LiveTvScreen(
             error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
             channels.orEmpty().isEmpty() -> EmptyState("Kanal bulunamadı")
             else -> {
+                val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
                 val filtered = channels.orEmpty().let { list ->
                     if (query.isBlank()) list
                     else list.filter { it.name.contains(query.trim(), ignoreCase = true) }
                 }
                 LazyColumn {
                     items(filtered, key = { it.id }) { ch ->
+                        val isFav = favChannels.any { it.id == ch.id }
                         ChannelRow(
                             channel = ch,
                             baseUrl = profile.baseUrl,
+                            isFavorite = isFav,
+                            onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
                             onClick = {
                                 scope.launch {
                                     val list = channels.orEmpty()

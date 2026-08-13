@@ -28,6 +28,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     private val _favorites = MutableStateFlow(store.favorites())
     val favorites: StateFlow<Set<String>> = _favorites
 
+    private val _favoriteChannels = MutableStateFlow(store.favoriteChannels())
+    val favoriteChannels: StateFlow<List<Channel>> = _favoriteChannels
+
+    private val _favoriteVods = MutableStateFlow(store.favoriteVods())
+    val favoriteVods: StateFlow<List<VodItem>> = _favoriteVods
+
     private val _cooldown = MutableStateFlow(repository.cooldownRemainingSeconds())
     val cooldownSeconds: StateFlow<Long> = _cooldown
 
@@ -62,8 +68,27 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     fun toggleFavorite(key: String): Boolean {
         val added = store.toggleFavorite(key)
         _favorites.value = store.favorites()
+        _favoriteChannels.value = store.favoriteChannels()
+        _favoriteVods.value = store.favoriteVods()
         return added
     }
+
+    fun toggleFavoriteChannel(channel: Channel): Boolean {
+        val added = store.toggleFavoriteChannel(channel)
+        _favoriteChannels.value = store.favoriteChannels()
+        _favorites.value = store.favorites()
+        return added
+    }
+
+    fun toggleFavoriteVod(vod: VodItem): Boolean {
+        val added = store.toggleFavoriteVod(vod)
+        _favoriteVods.value = store.favoriteVods()
+        _favorites.value = store.favorites()
+        return added
+    }
+
+    fun isFavoriteChannel(id: Long): Boolean = store.isFavoriteChannel(id)
+    fun isFavoriteVod(id: Long): Boolean = store.isFavoriteVod(id)
 
     fun clearCooldown() {
         repository.clearCooldown()

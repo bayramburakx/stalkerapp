@@ -55,27 +55,32 @@ class PortalRepository(
 
     suspend fun channelStreamUrl(ch: Channel, profile: Profile): String {
         val base = profile.baseUrl
-        val resp = client.request(
-            base,
-            "portal.php?type=itv&action=create_link",
-            "POST",
-            tokenFor(profile),
-            mapOf(
-                "cmd" to ch.cmd.ifEmpty { "http://localhost/ch/${ch.id}_" },
-                "series" to "0"
+        val resp = try {
+            client.request(
+                base,
+                "portal.php?type=itv&action=create_link",
+                "POST",
+                tokenFor(profile),
+                mapOf(
+                    "cmd" to ch.cmd.ifEmpty { "http://localhost/ch/${ch.id}_" },
+                    "series" to "0",
+                    "forced_storage" to "0",
+                    "disable_ad" to "1"
+                )
             )
-        )
-        if (resp is JsonObject) {
-            StalkerClient.urlFromJson(resp)?.let { return it }
-            resp["js"]?.let {
-                if (it is JsonObject) StalkerClient.urlFromJson(it)?.let { u -> return u }
-            }
+        } catch (e: Exception) {
+            null
+        }
+        if (resp != null) {
+            StalkerClient.extractUrl(resp)?.let { return rewriteLocalhost(it, profile) }
         }
         StalkerClient.parseCmd(ch.cmd)?.let { return rewriteLocalhost(it, profile) }
         val server = profile.serverAddress
-        if (server.isBlank()) return ""
-        val s = if (server.startsWith("http")) server else "http://$server"
-        return "$s/${ch.id}"
+        if (server.isNotBlank()) {
+            val s = if (server.startsWith("http")) server else "http://$server"
+            return "$s/${ch.id}"
+        }
+        throw StalkerException("Kanal akış URL'si alınamadı")
     }
 
     private fun rewriteLocalhost(url: String, profile: Profile): String {
@@ -103,14 +108,14 @@ class PortalRepository(
                 list.firstOrNull { it.id == id }?.let { return it }
             }
         }
-        return null
+        return store.favoriteChannels().firstOrNull { it.id == id }
     }
 
     fun findVodById(id: Long): VodItem? {
         vodItemsById.values.forEach { map ->
             map[id]?.let { return it }
         }
-        return null
+        return store.favoriteVods().firstOrNull { it.id == id }
     }
 
     suspend fun connect(portal: Portal): Profile {
@@ -360,24 +365,42 @@ class PortalRepository(
         profile: Profile,
         episode: Episode? = null
     ): String {
+        val cmdParam = when {
+            !episode?.cmd.isNullOrBlank() -> episode!!.cmd
+            item.cmd.isNotBlank() -> item.cmd
+            else -> "/media/${item.id}.mp4"
+        }
+        val seriesParam = when {
+            episode != null -> (episode.episodeNumber.takeIf { it > 0 } ?: 1).toString()
+            item.isSeries -> "1"
+            else -> "0"
+        }
+        val resp = try {
+            client.request(
+                profile.baseUrl,
+                "portal.php?type=vod&action=create_link",
+                "POST",
+                tokenFor(profile),
+                mapOf(
+                    "cmd" to cmdParam,
+                    "vod_id" to item.id.toString(),
+                    "file_id" to item.id.toString(),
+                    "series" to seriesParam,
+                    "forced_storage" to "0",
+                    "disable_ad" to "1"
+                )
+            )
+        } catch (e: Exception) {
+            null
+        }
+        if (resp != null) {
+            StalkerClient.extractUrl(resp)?.let { return fixLocalhost(it, profile) }
+        }
         episode?.cmd?.takeIf { it.isNotBlank() }?.let {
             StalkerClient.parseCmd(it)?.let { u -> return fixLocalhost(u, profile) }
         }
-        val resp = client.request(
-            profile.baseUrl,
-            "portal.php?type=vod&action=create_link",
-            "POST",
-            tokenFor(profile),
-            mapOf(
-                "vod_id" to item.id.toString(),
-                "series" to if (item.isSeries) "1" else "0"
-            )
-        )
-        if (resp is JsonObject) {
-            StalkerClient.urlFromJson(resp)?.let { return fixLocalhost(it, profile) }
-            (resp["js"] as? JsonObject)?.let {
-                StalkerClient.urlFromJson(it)?.let { u -> return fixLocalhost(u, profile) }
-            }
+        item.cmd.takeIf { it.isNotBlank() }?.let {
+            StalkerClient.parseCmd(it)?.let { u -> return fixLocalhost(u, profile) }
         }
         val server = profile.serverAddress
         if (server.isNotBlank()) {

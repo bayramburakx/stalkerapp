@@ -29,9 +29,11 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -120,7 +122,10 @@ fun PlayerScreen(navController: NavHostController) {
     var isBuffering by remember { mutableStateOf(false) }
     var overlayVisible by remember { mutableStateOf(true) }
     var currentChannel by remember { mutableStateOf(ChannelQueue.current) }
-    var isFav by remember { mutableStateOf(vm.store.isFavorite("ch:${currentChannel?.id}")) }
+    val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
+    val isFav = remember(favChannels, currentChannel) {
+        currentChannel != null && favChannels.any { it.id == currentChannel?.id }
+    }
     var error by remember { mutableStateOf<String?>(null) }
     var showTracks by remember { mutableStateOf(false) }
     var showSubs by remember { mutableStateOf(false) }
@@ -196,7 +201,7 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     DisposableEffect(Unit) {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -244,25 +249,18 @@ fun PlayerScreen(navController: NavHostController) {
                 position = p.currentPosition
                 duration = if (p.duration > 0) p.duration else 0L
             }
-            delay(500)
+            delay(300)
         }
     }
 
     val queueChannels = ChannelQueue.channels
     val queueProfile = ChannelQueue.profile
 
-    val zappingList = remember(queueChannels, currentChannel) {
-        val idx = queueChannels.indexOfFirst { it.id == currentChannel?.id }
-        if (idx < 0) queueChannels.take(31)
-        else queueChannels.drop((idx - 15).coerceAtLeast(0)).take(31)
-    }
-
     fun switchTo(index: Int) {
         val ch = queueChannels.getOrNull(index) ?: return
         val p = queueProfile ?: return
         PlaybackManager.playChannel(queueChannels, index, p)
         currentChannel = ch
-        isFav = vm.store.isFavorite("ch:${ch.id}")
         error = PlaybackManager.errorMessage
     }
 
@@ -309,10 +307,12 @@ fun PlayerScreen(navController: NavHostController) {
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                    ChannelLogo(
-                        logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
-                        modifier = Modifier.size(30.dp)
-                    )
+                    if (isLive) {
+                        ChannelLogo(
+                            logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -325,9 +325,17 @@ fun PlayerScreen(navController: NavHostController) {
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (currentChannel != null) {
+                        if (currentChannel != null && isLive) {
                             Text(
                                 text = "${currentChannel?.tvGenreTitle ?: ""}  •  Kanal ${currentChannel?.number ?: ""}",
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else if (!isLive && PlaybackManager.currentSubtitle.isNotBlank()) {
+                            Text(
+                                text = PlaybackManager.currentSubtitle,
                                 color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
@@ -344,8 +352,7 @@ fun PlayerScreen(navController: NavHostController) {
                         if (isLive) {
                             IconButton(
                                 onClick = {
-                                    val key = "ch:${currentChannel?.id}"
-                                    if (key != "ch:null") isFav = vm.toggleFavorite(key)
+                                    currentChannel?.let { vm.toggleFavoriteChannel(it) }
                                 },
                                 modifier = Modifier.size(34.dp)
                             ) {
@@ -377,6 +384,7 @@ fun PlayerScreen(navController: NavHostController) {
                         ) {
                             Icon(Icons.Default.OpenInNew, contentDescription = "Harici oynatıcı", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
+                        // Lock icon and PiP icon side-by-side
                         IconButton(
                             onClick = { locked = true; overlayVisible = false },
                             modifier = Modifier.size(34.dp)
@@ -387,7 +395,7 @@ fun PlayerScreen(navController: NavHostController) {
                             onClick = { PlaybackManager.enterPip(activity) },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = "Resim içinde resim", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = "PiP (Resim içinde resim)", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         IconButton(
                             onClick = { showInfo = true },
@@ -412,76 +420,174 @@ fun PlayerScreen(navController: NavHostController) {
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f))
                         )
                     )
-                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                if (!isLive && duration > 0) {
+                if (!isLive) {
+                    // PROGRESS BAR (Middle Seek Bar for Movies & Series)
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(formatMs(position), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                        Text(formatMs(duration), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = formatMs(position),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Slider(
+                            value = position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f)),
+                            onValueChange = {
+                                seeking = true
+                                position = it.toLong()
+                            },
+                            onValueChangeFinished = {
+                                PlaybackManager.seekTo(position)
+                                seeking = false
+                            },
+                            valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = formatMs(duration),
+                            color = Color.White.copy(alpha = 0.8f),
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
-                    Slider(
-                        value = position.toFloat(),
-                        onValueChange = { seeking = true; position = it.toLong() },
-                        onValueChangeFinished = {
-                            PlaybackManager.player?.seekTo(position)
-                            seeking = false
-                        },
-                        valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-                    )
-                } else if (isLive) {
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Movie & Series Playback Controls (Centered, Guide & Channels buttons removed)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { PlaybackManager.seekBack(10_000L) },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Replay10,
+                                contentDescription = "10 sn Geri",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        IconButton(
+                            onClick = { PlaybackManager.togglePlayPause() },
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "Oynat/Duraklat",
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        IconButton(
+                            onClick = { PlaybackManager.seekForward(10_000L) },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Forward10,
+                                contentDescription = "10 sn İleri",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(24.dp))
+                        IconButton(
+                            onClick = { showTracks = true },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "Ses Dili",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { showSubs = true },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Subtitles,
+                                contentDescription = "Altyazı",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                } else {
+                    // LIVE TV CONTROLS
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         Text("● CANLI", color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isLive) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = {
                                 val p = queueProfile ?: return@IconButton
                                 val idx = ChannelQueue.index - 1
                                 if (idx >= 0) switchTo(idx)
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Önceki", tint = Color.White, modifier = Modifier.size(36.dp))
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Önceki",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
                             }
-                        }
-                        IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = "Oynat/Duraklat",
-                                tint = Color.White,
-                                modifier = Modifier.size(52.dp)
-                            )
-                        }
-                        if (isLive) {
+                            IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Oynat/Duraklat",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(52.dp)
+                                )
+                            }
                             IconButton(onClick = {
                                 val p = queueProfile ?: return@IconButton
                                 val idx = ChannelQueue.index + 1
                                 if (idx < ChannelQueue.channels.size) switchTo(idx)
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Sonraki", tint = Color.White, modifier = Modifier.size(36.dp))
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Sonraki",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                            IconButton(onClick = { showTracks = true }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = "Ses",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            IconButton(onClick = { showSubs = true }) {
+                                Icon(
+                                    Icons.Default.Subtitles,
+                                    contentDescription = "Altyazı",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
                         }
-                        IconButton(onClick = { showTracks = true }) {
-                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Ses", tint = Color.White, modifier = Modifier.size(22.dp))
-                        }
-                        IconButton(onClick = { showSubs = true }) {
-                            Icon(Icons.Default.Subtitles, contentDescription = "Altyazı", tint = Color.White, modifier = Modifier.size(22.dp))
-                        }
-                    }
-                    if (isLive) {
+
+                        // Right side: Rehber and Kanallar only for Live TV
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -495,7 +601,12 @@ fun PlayerScreen(navController: NavHostController) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.Tv, contentDescription = "Rehber", tint = Color.White, modifier = Modifier.size(22.dp))
+                                    Icon(
+                                        Icons.Default.Tv,
+                                        contentDescription = "Rehber",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
                                     Text("Rehber", color = Color.White, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
@@ -506,7 +617,12 @@ fun PlayerScreen(navController: NavHostController) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.List, contentDescription = "Kanallar", tint = Color.White, modifier = Modifier.size(22.dp))
+                                    Icon(
+                                        Icons.Default.List,
+                                        contentDescription = "Kanallar",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
                                     Text("Kanallar", color = Color.White, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
@@ -514,7 +630,7 @@ fun PlayerScreen(navController: NavHostController) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
             }
         }
 

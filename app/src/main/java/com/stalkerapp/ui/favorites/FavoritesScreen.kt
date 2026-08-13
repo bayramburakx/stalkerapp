@@ -53,17 +53,9 @@ fun FavoritesScreen(
 
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = viewModel { MainViewModel(app) }
-    val favorites by vm.favorites.collectAsStateWithLifecycle()
+    val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
+    val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-
-    val favChannels = remember(favorites) {
-        favorites.filter { it.startsWith("ch:") }
-            .mapNotNull { vm.repository.findChannelById(it.removePrefix("ch:").toLongOrNull() ?: 0L) }
-    }
-    val favVods = remember(favorites) {
-        favorites.filter { it.startsWith("vod:") }
-            .mapNotNull { vm.repository.findVodById(it.removePrefix("vod:").toLongOrNull() ?: 0L) }
-    }
 
     if (favChannels.isEmpty() && favVods.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -77,7 +69,7 @@ fun FavoritesScreen(
             if (favChannels.isNotEmpty()) {
                 item {
                     Text(
-                        "Kanalar",
+                        "Kanallar",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -86,6 +78,8 @@ fun FavoritesScreen(
                     ChannelRow(
                         channel = ch,
                         baseUrl = profile.baseUrl,
+                        isFavorite = true,
+                        onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
                         onClick = {
                             scope.launch {
                                 val idx = favChannels.indexOfFirst { it.id == ch.id }
