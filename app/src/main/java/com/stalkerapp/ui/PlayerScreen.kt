@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
@@ -38,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,6 +98,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import com.stalkerapp.playback.ChannelQueue
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.components.ChannelLogo
+import com.stalkerapp.ui.components.ChannelRow
+import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -202,7 +206,7 @@ fun PlayerScreen(navController: NavHostController) {
             override fun onReceive(c: android.content.Context?, intent: Intent?) {
                 val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
                 val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-                battery.value = if (scale > 0) (level * 100 / scale) else level
+                battery = if (scale > 0) (level * 100 / scale) else level
             }
         }
         context.registerReceiver(receiver, filter)
@@ -879,13 +883,14 @@ fun ChannelListPanel(
                     androidx.compose.foundation.lazy.LazyColumn(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(filtered, key = { it.id }) { ch ->
-                            ChannelRow(
-                                channel = ch,
-                                baseUrl = profile?.baseUrl.orEmpty()
-                            ) {
-                                onSelect(channels.indexOfFirst { c -> c.id == ch.id })
-                            }
+                    items(filtered, key = { it.id }) { ch ->
+                        ChannelRow(
+                            channel = ch,
+                            baseUrl = profile?.baseUrl.orEmpty()
+                        ) {
+                            onSelect(channels.indexOfFirst { c -> c.id == ch.id })
+                        }
+                    }
                         }
                     }
                 }
