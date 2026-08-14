@@ -197,7 +197,7 @@ class Store(private val context: Context) {
         }
     }
 
-    fun loadVodPartial(portalId: String): VodPartialFile? = runCatching {
+    internal fun loadVodPartial(portalId: String): VodPartialFile? = runCatching {
         val file = File(context.filesDir, "vod_partial_$portalId.json")
         if (!file.exists()) return@runCatching null
         json.decodeFromString(VodPartialFile.serializer(), file.readText())
