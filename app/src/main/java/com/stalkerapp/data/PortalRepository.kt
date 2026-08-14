@@ -360,20 +360,24 @@ class PortalRepository(
     }
 
     /**
-     * Loads the COMPLETE VOD catalog in the background, fast.
+     * Loads the COMPLETE VOD catalog in the background, fast and complete.
      *
      * Strategy (matches how clients like Tivimate enumerate the whole library):
-     *  1) A single full "all items" pass (`category=0`) captures every VOD (movies
-     *     + series) with one paging sequence, using the portal-reported `total` to
-     *     know when the whole library is exhausted. This is what makes the real
-     *     total (e.g. 81k) reachable and keeps the request count minimal.
+     *  1) A full "all items" pass is attempted first. For "all", the `category`
+     *     parameter is OMITTED (passing `category=0` makes the portal treat it as
+     *     a real — usually empty — category, which is what caused only ~14 items
+     *     to be returned). Paging uses the portal-reported `total` to know when
+     *     the whole library is exhausted. This is what makes the real total
+     *     (e.g. 81k) reachable and keeps the request count minimal.
      *  2) The known categories are fetched first so we can derive `isSeries` from
      *     any category whose title contains "dizi". Series items get their category
      *     id stamped (so filtering works) and `isSeries` set.
-     *  3) To guarantee the series library is fully captured even on portals where
-     *     `category=0` under-reports, we additionally page ONLY the "dizi"
-     *     categories (a handful) instead of every category. This is the key speed
-     *     fix versus the old code that paged ALL categories.
+     *  3) If the all-pass under-delivers (e.g. the portal ignores `page` and keeps
+     *     returning the same first page), we fall back to iterating EVERY category,
+     *     which is the reliable way to enumerate the full library on such portals.
+     *     Otherwise we only top up the "dizi" categories (cheap) to guarantee
+     *     series coverage — this is the key speed fix versus paging ALL categories
+     *     unconditionally.
      *
      * Per-unit page accounting (not the global accumulator) decides when a unit is
      * exhausted, so we never stop after the first page. Items stream in via
@@ -381,7 +385,7 @@ class PortalRepository(
      */
     suspend fun syncVodCatalog(
         profile: Profile,
-        perPage: Int = 50000,
+        perPage: Int = 500,
         onItem: (VodItem) -> Unit = {},
         onProgress: (donePages: Int, totalPages: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
     ): List<VodItem> {
@@ -392,7 +396,8 @@ class PortalRepository(
         var donePages = 0
         fun report() = onProgress(donePages, if (totalPagesEst > 0) totalPagesEst else 1, all.size)
 
-        suspend fun pageUnit(catId: Long, pp: Int) {
+        // Returns the total_items reported by the portal for this unit (0 if unknown).
+        suspend fun pageUnit(catId: Long, pp: Int): Int {
             var page = 1
             var catCount = 0
             var unitTotal = 0
@@ -434,15 +439,18 @@ class PortalRepository(
                 if (added == 0) break
                 page++
             }
+            return unitTotal
         }
 
-        // Pass 1: everything in one sequence.
-        runCatching { pageUnit(0, perPage) }
-        // Pass 2: ensure full series coverage (cheap — only "dizi" categories).
-        if (all.isEmpty()) {
-            // Portal did not return anything for category=0; fall back to all categories.
+        // Pass 1: everything (omit category → true "all").
+        val allPassTotal = runCatching { pageUnit(0, perPage) }.getOrDefault(0)
+        // Decide whether the all-pass actually enumerated the library.
+        val underDelivered = all.size < 200 || (allPassTotal > 0 && allPassTotal > all.size + 500)
+        if (underDelivered) {
+            // Reliable fallback: page every known category.
             cats.forEach { runCatching { pageUnit(it.id, perPage) } }
         } else {
+            // Top up series coverage cheaply.
             cats.filter { it.id in seriesCatIds }.forEach { runCatching { pageUnit(it.id, perPage) } }
         }
         return all.values.toList()
@@ -463,8 +471,8 @@ class PortalRepository(
                     tokenFor(profile),
                     buildMap {
                         put("page", page.toString())
-                        put("category", categoryId.toString())
-                        put("per_page", perPage.toString())
+                        // Omit the category param for the "all" query (catId <= 0).
+                        if (categoryId > 0) put("category", categoryId.toString())
                     }
                 )
                 return parseVodList(resp) to parseTotal(resp)
