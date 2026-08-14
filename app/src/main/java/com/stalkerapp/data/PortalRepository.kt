@@ -434,7 +434,7 @@ class PortalRepository(
                 } else throw e
             }
         }
-        return emptyList() to 0
+        return Pair(emptyList<VodItem>(), 0)
     }
 
     suspend fun vodById(profile: Profile, id: Long): VodItem? {

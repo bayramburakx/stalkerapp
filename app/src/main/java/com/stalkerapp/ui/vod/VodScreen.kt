@@ -186,8 +186,8 @@ fun VodScreen(
 }
 
 @Composable
-fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boolean = item.isSeries, width: Int? = null) {
-    Card(modifier = Modifier.then(if (width != null) Modifier.width(width.dp) else Modifier.fillMaxWidth()).clickable(onClick = onClick)) {
+fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boolean = item.isSeries, posterWidth: Int? = null) {
+    Card(modifier = Modifier.then(if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth()).clickable(onClick = onClick)) {
         Column {
             Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
                 AsyncImage(

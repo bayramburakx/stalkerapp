@@ -8,7 +8,7 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
-class Store(context: Context) {
+class Store(private val context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("stalker_app_prefs", Context.MODE_PRIVATE)

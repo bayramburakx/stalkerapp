@@ -79,9 +79,9 @@ fun HomeDashboardScreen(
 
     LaunchedEffect(Unit) {
         vm.syncVodIfNeeded(profile)
-        kotlinx.coroutines.runCatching {
+        try {
             channels = vm.repository.loadChannels(profile, 0).take(30)
-        }
+        } catch (_: Exception) { }
         loadingChannels = false
     }
 
@@ -149,7 +149,7 @@ fun HomeDashboardScreen(
                             channel = ch,
                             baseUrl = profile.baseUrl,
                             onClick = {
-                                kotlinx.coroutines.runCatching {
+                                runCatching {
                                     PlaybackManager.playChannel(listOf(ch), 0, profile)
                                     onOpenPlayer()
                                 }
@@ -173,7 +173,7 @@ fun HomeDashboardScreen(
                             channel = ch,
                             baseUrl = profile.baseUrl,
                             onClick = {
-                                kotlinx.coroutines.runCatching {
+                                runCatching {
                                     PlaybackManager.playChannel(listOf(ch), 0, profile)
                                     onOpenPlayer()
                                 }
@@ -197,7 +197,7 @@ fun HomeDashboardScreen(
                             item = item,
                             baseUrl = profile.baseUrl,
                             isSeries = false,
-                            width = 120,
+                            posterWidth = 120,
                             onClick = { onOpenVod(item.id, false) }
                         )
                     }
@@ -218,7 +218,7 @@ fun HomeDashboardScreen(
                             item = item,
                             baseUrl = profile.baseUrl,
                             isSeries = true,
-                            width = 120,
+                            posterWidth = 120,
                             onClick = { onOpenVod(item.id, true) }
                         )
                     }
@@ -237,7 +237,7 @@ fun HomeDashboardScreen(
                             item = item,
                             baseUrl = profile.baseUrl,
                             isSeries = catalog.isSeriesItem(item),
-                            width = 120,
+                            posterWidth = 120,
                             onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
                         )
                     }

@@ -108,8 +108,9 @@ fun HomeScreen(
             3 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = true)
             4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier)
             5 -> SettingsScreen(vm, contentModifier) {
-                profile = vm.repository.cachedProfile()
-                vm.syncVodIfNeeded(profile)
+                val p = vm.repository.cachedProfile()
+                profile = p
+                if (p != null) vm.syncVodIfNeeded(p)
             }
         }
     }
