@@ -58,23 +58,29 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         vodSyncJob?.cancel()
         vodSyncJob = viewModelScope.launch {
             _vodCatalog.value = _vodCatalog.value.copy(status = VodCatalogStatus.Syncing)
+            val acc = mutableListOf<VodItem>()
             try {
                 val portalId = profile.portal?.id ?: ""
-                val items = repository.syncVodCatalog(profile) { done, total, loaded ->
-                    _vodCatalog.value = _vodCatalog.value.copy(
-                        doneCategories = done,
-                        totalCategories = total,
-                        loadedCount = loaded
-                    )
-                }
+                repository.syncVodCatalog(
+                    profile,
+                    onItem = { acc.add(it) },
+                    onProgress = { done, total, loaded ->
+                        _vodCatalog.value = _vodCatalog.value.copy(
+                            doneCategories = done,
+                            totalCategories = total,
+                            loadedCount = loaded,
+                            allItems = acc.toList()
+                        )
+                    }
+                )
                 val cats = runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
-                store.saveVodCatalog(portalId, items, cats)
+                store.saveVodCatalog(portalId, acc, cats)
                 _vodCatalog.value = VodCatalogState(
                     status = VodCatalogStatus.Ready,
                     doneCategories = cats.size,
                     totalCategories = cats.size,
-                    loadedCount = items.size,
-                    allItems = items,
+                    loadedCount = acc.size,
+                    allItems = acc,
                     categories = cats,
                     lastSync = System.currentTimeMillis()
                 )
@@ -87,15 +93,17 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         }
     }
 
-    /** Starts a sync if needed (loads from disk cache first, then refreshes). */
+    /**
+     * Ensures the VOD catalog is available. On app launch this just loads the
+     * persisted disk cache (instant, NO network sync) so the user is not forced
+     * to re-sync every time. A background sync only runs once when there is no
+     * cache at all (e.g. first run or after switching to a new portal). Use
+     * [syncVodCatalog] for an explicit manual refresh.
+     */
     fun syncVodIfNeeded(profile: Profile) {
         val cur = _vodCatalog.value
         if (cur.status == VodCatalogStatus.Syncing) return
         val portalId = profile.portal?.id ?: ""
-        if (cur.status == VodCatalogStatus.Ready && cur.allItems.isNotEmpty()) {
-            val stale = System.currentTimeMillis() - cur.lastSync > 30 * 60 * 1000L
-            if (!stale) return
-        }
         val cached = store.loadVodCatalog(portalId)
         if (cached != null && cached.first.isNotEmpty()) {
             _vodCatalog.value = VodCatalogState(
@@ -107,7 +115,6 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
                 categories = cached.second,
                 lastSync = cached.third
             )
-            syncVodCatalog(profile, force = true)
             return
         }
         syncVodCatalog(profile, force = true)

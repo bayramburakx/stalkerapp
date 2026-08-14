@@ -360,51 +360,73 @@ class PortalRepository(
     }
 
     /**
-     * Loads the COMPLETE VOD catalog in the background by iterating every VOD
-     * category and paging through it until exhaustion. This guarantees all items
-     * are loaded (no partial/looping pages) and is safe against portals that
-     * ignore the `page` parameter. Progress is reported via [onProgress].
+     * Loads the COMPLETE VOD catalog in the background.
+     *
+     * Strategy (matches how clients like Tivimate enumerate the whole library):
+     *  1) A full "all items" pass (`category=0`) captures every VOD regardless of
+     *     whether it is attached to a category (so the count equals the true total).
+     *  2) Each known category is then paged as well, filling any gaps and stamping
+     *     the category id on items that lacked one.
+     *
+     * Per-unit page accounting (not the global accumulator) is used to decide when
+     * a unit is exhausted, which fixes the previous bug where `all.size >= total`
+     * stopped after the very first page of every category. Items are reported
+     * incrementally via [onItem] (for live display) and [onProgress].
      */
     suspend fun syncVodCatalog(
         profile: Profile,
-        perPage: Int = 500,
-        onProgress: (doneCategories: Int, totalCategories: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
+        perPage: Int = 5000,
+        onItem: (VodItem) -> Unit = {},
+        onProgress: (donePages: Int, totalPages: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
     ): List<VodItem> {
         val cats = runCatching { loadVodCategories(profile) }.getOrDefault(emptyList())
         val all = LinkedHashMap<Long, VodItem>()
-        cats.forEachIndexed { idx, cat ->
-            try {
-                var page = 1
-                var emptyStreak = 0
-                var guard = 0
-                while (guard < 2000) {
-                    guard++
-                    val (list, total) = fetchVodPage(profile, cat.id, page, perPage)
-                    if (list.isEmpty()) {
-                        emptyStreak++
-                        if (emptyStreak >= 2) break
-                        page++
-                        continue
-                    }
-                    emptyStreak = 0
-                    var added = 0
-                    list.forEach { item ->
-                        if (!all.containsKey(item.id)) {
-                            val stamped = if (item.categoryId != cat.id) item.copy(categoryId = cat.id) else item
-                            all[stamped.id] = stamped
-                            added++
-                        }
-                    }
-                    onProgress(idx + 1, cats.size, all.size)
-                    if (total > 0 && all.size >= total) break
-                    if (added == 0) break
-                    page++
+        var totalPagesEst = 0
+        var donePages = 0
+        fun report() = onProgress(donePages, if (totalPagesEst > 0) totalPagesEst else 1, all.size)
+
+        suspend fun pageUnit(catId: Long, pp: Int) {
+            var page = 1
+            var catCount = 0
+            var unitTotal = 0
+            var emptyStreak = 0
+            var guard = 0
+            while (guard < 5000) {
+                guard++
+                val (list, total) = fetchVodPage(profile, catId, page, pp)
+                if (unitTotal == 0 && total > 0) {
+                    unitTotal = total
+                    totalPagesEst += (total / pp) + 1
                 }
-            } catch (e: Exception) {
-                // skip a problematic category but keep what we have
+                if (list.isEmpty()) {
+                    emptyStreak++
+                    if (emptyStreak >= 2) break
+                    page++
+                    donePages++
+                    report()
+                    continue
+                }
+                emptyStreak = 0
+                var added = 0
+                list.forEach { item ->
+                    if (!all.containsKey(item.id)) {
+                        val stamped = if (catId != 0L && item.categoryId == 0L) item.copy(categoryId = catId) else item
+                        all[stamped.id] = stamped
+                        added++
+                        onItem(stamped)
+                    }
+                }
+                catCount += list.size
+                donePages++
+                report()
+                if (total > 0 && catCount >= total) break
+                if (added == 0) break
+                page++
             }
-            onProgress(idx + 1, cats.size, all.size)
         }
+
+        runCatching { pageUnit(0, 100000) }
+        cats.forEach { cat -> runCatching { pageUnit(cat.id, perPage) } }
         return all.values.toList()
     }
 
@@ -608,6 +630,8 @@ class PortalRepository(
         return parseDataArray(el).mapNotNull { o ->
             VodItem(
                 id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                categoryId = o["cat_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
+                    ?: o["category_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
                 name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
                 originalName = o["o_name"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 sname = o["sname"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
