@@ -690,10 +690,8 @@ class PortalRepository(
     }
 
     private fun parseVodInfo(el: JsonElement): VodItem? {
-        val obj = runCatching {
-            val data = el.asJsonObject["data"]
-            if (data is JsonObject) data else el.asJsonObject
-        }.getOrNull() ?: return null
+        val root = el as? JsonObject ?: return null
+        val obj = (root["data"] as? JsonObject) ?: root
         val str = { key: String -> obj[key]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty() }
         return VodItem(
             id = str("id").toLongOrNull() ?: 0,

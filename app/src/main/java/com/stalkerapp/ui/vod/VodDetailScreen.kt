@@ -133,6 +133,8 @@ fun VodDetailScreen(
         return
     }
 
+    val isSeries = it.isSeries || isSeriesHint
+
     fun play(episode: Episode? = null) {
         val p = profile ?: return
         scope.launch {
@@ -149,9 +151,6 @@ fun VodDetailScreen(
             }
         }
     }
-
-    val isSeries = it.isSeries || isSeriesHint
-
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val isFavorite = remember(favVods, it) { it != null && favVods.any { f -> f.id == it.id } }
 
