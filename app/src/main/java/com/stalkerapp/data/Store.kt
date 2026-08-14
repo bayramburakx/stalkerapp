@@ -139,50 +139,90 @@ class Store(private val context: Context) {
         return added
     }
 
-    fun saveVodCatalog(portalId: String, items: List<VodItem>, categories: List<Genre>) {
+    // ---------- VOD catalog (chunked persistence) ----------
+    // The catalog is stored as one small JSON file per category plus a meta
+    // file, instead of a single giant blob. A full 80k+ library would otherwise
+    // be a 100MB+ single-file write/read that easily fails (OOM) on devices,
+    // silently losing the catalog and forcing a full re-sync on every launch.
+
+    private fun catalogDir(portalId: String): File =
+        File(context.filesDir, "vod_catalog_$portalId")
+
+    /** Writes (or overwrites) one category's items as a small chunk file. */
+    fun saveVodCategoryChunk(portalId: String, catId: Long, items: List<VodItem>) {
         runCatching {
-            val file = File(context.filesDir, "vod_catalog_$portalId.json")
-            file.writeText(
+            val dir = catalogDir(portalId)
+            dir.mkdirs()
+            File(dir, "$catId.json").writeText(
+                json.encodeToString(ListSerializer(VodItem.serializer()), items)
+            )
+        }
+    }
+
+    /** Reads all saved category chunks (catId -> items). */
+    fun loadVodCatalogChunks(portalId: String): Map<Long, List<VodItem>> = runCatching {
+        val dir = catalogDir(portalId)
+        if (!dir.exists()) return@runCatching emptyMap()
+        dir.listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "json" && it.name != META_FILE }
+            .mapNotNull { f ->
+                f.nameWithoutExtension.toLongOrNull()?.let { catId ->
+                    val items = runCatching {
+                        json.decodeFromString(ListSerializer(VodItem.serializer()), f.readText())
+                    }.getOrDefault(emptyList())
+                    catId to items
+                }
+            }
+            .toMap()
+    }.getOrDefault(emptyMap())
+
+    /** Writes the completion meta (categories, item count, version, timestamp). */
+    fun saveVodCatalogMeta(portalId: String, categories: List<Genre>, itemCount: Int) {
+        runCatching {
+            val dir = catalogDir(portalId)
+            dir.mkdirs()
+            File(dir, META_FILE).writeText(
                 json.encodeToString(
-                    VodCatalogFile.serializer(),
-                    VodCatalogFile(items, categories, System.currentTimeMillis(), VOD_CATALOG_VERSION)
+                    CatalogMetaFile.serializer(),
+                    CatalogMetaFile(categories, itemCount, System.currentTimeMillis(), VOD_CATALOG_VERSION)
                 )
             )
         }
     }
 
-    /** Version of the saved catalog file, 0 if none exists. */
-    fun loadVodCatalogVersion(portalId: String): Int = runCatching {
-        val file = File(context.filesDir, "vod_catalog_$portalId.json")
-        if (!file.exists()) return@runCatching 0
-        json.decodeFromString(VodCatalogFile.serializer(), file.readText()).version
-    }.getOrDefault(0)
-
-    fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? = runCatching {
-        val file = File(context.filesDir, "vod_catalog_$portalId.json")
+    fun loadVodCatalogMeta(portalId: String): CatalogMetaFile? = runCatching {
+        val file = File(catalogDir(portalId), META_FILE)
         if (!file.exists()) return@runCatching null
-        val data = json.decodeFromString(VodCatalogFile.serializer(), file.readText())
-        Triple(data.items, data.categories, data.ts)
+        json.decodeFromString(CatalogMetaFile.serializer(), file.readText())
     }.getOrNull()
 
-    fun appendVodCatalog(portalId: String, newItems: List<VodItem>, categories: List<Genre>) {
-        runCatching {
-            val existing = loadVodCatalog(portalId)
-            val merged = if (existing == null) {
-                newItems.associateBy { it.id }
-            } else {
-                (existing.first.associateBy { it.id } + newItems.associateBy { it.id }).toMap()
-            }
-            val cats = if (existing == null || existing.second.isEmpty()) categories else existing.second
-            val file = File(context.filesDir, "vod_catalog_$portalId.json")
-            file.writeText(
-                json.encodeToString(
-                    VodCatalogFile.serializer(),
-                    VodCatalogFile(merged.values.toList(), cats, System.currentTimeMillis(), VOD_CATALOG_VERSION)
-                )
-            )
-            saveVodCatalogDoneCats(portalId, (loadVodCatalogDoneCats(portalId) + newItems.map { it.categoryId }.toSet()).toList())
+    /** Removes all catalog data (chunks, meta, legacy single-file, done-cats). */
+    fun clearVodCatalog(portalId: String) {
+        catalogDir(portalId).deleteRecursively()
+        runCatching { File(context.filesDir, "vod_catalog_$portalId.json").delete() }
+        runCatching { File(context.filesDir, "vod_partial_$portalId.json").delete() }
+        clearVodCatalogDoneCats(portalId)
+    }
+
+    /** Saves the complete catalog as per-category chunks + meta (old signature kept). */
+    fun saveVodCatalog(portalId: String, items: List<VodItem>, categories: List<Genre>) {
+        items.groupBy { it.categoryId }.forEach { (catId, list) ->
+            saveVodCategoryChunk(portalId, catId, list)
         }
+        saveVodCatalogMeta(portalId, categories, items.size)
+    }
+
+    /** Version of the saved catalog meta, 0 if none exists. */
+    fun loadVodCatalogVersion(portalId: String): Int =
+        loadVodCatalogMeta(portalId)?.version ?: 0
+
+    /** Merged catalog (items from all chunks, categories + timestamp from meta). */
+    fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? {
+        val meta = loadVodCatalogMeta(portalId) ?: return null
+        val items = loadVodCatalogChunks(portalId).values
+            .flatten()
+            .distinctBy { it.id }
+        return Triple(items, meta.categories, meta.ts)
     }
 
     fun saveVodCatalogDoneCats(portalId: String, doneCatIds: List<Long>) {
@@ -195,28 +235,6 @@ class Store(private val context: Context) {
 
     fun clearVodCatalogDoneCats(portalId: String) {
         prefs.edit().remove(KEY_VOD_DONE_CATS).apply()
-    }
-
-    fun saveVodPartial(portalId: String, items: List<VodItem>, categories: List<Genre>, doneCatIds: List<Long>) {
-        runCatching {
-            val file = File(context.filesDir, "vod_partial_$portalId.json")
-            file.writeText(
-                json.encodeToString(
-                    VodPartialFile.serializer(),
-                    VodPartialFile(items, categories, doneCatIds, System.currentTimeMillis())
-                )
-            )
-        }
-    }
-
-    internal fun loadVodPartial(portalId: String): VodPartialFile? = runCatching {
-        val file = File(context.filesDir, "vod_partial_$portalId.json")
-        if (!file.exists()) return@runCatching null
-        json.decodeFromString(VodPartialFile.serializer(), file.readText())
-    }.getOrNull()
-
-    fun clearVodPartial(portalId: String) {
-        runCatching { File(context.filesDir, "vod_partial_$portalId.json").delete() }
     }
 
     fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
@@ -247,7 +265,8 @@ class Store(private val context: Context) {
 
     companion object {
         /** Bump to force a full re-sync of catalogs saved by older app versions. */
-        const val VOD_CATALOG_VERSION = 4
+        const val VOD_CATALOG_VERSION = 5
+        private const val META_FILE = "meta.json"
 
         private const val KEY_PORTALS = "portals"
         private const val KEY_ACTIVE_PORTAL = "active_portal"
@@ -261,19 +280,11 @@ class Store(private val context: Context) {
 }
 
 @kotlinx.serialization.Serializable
-internal data class VodCatalogFile(
-    val items: List<VodItem>,
+internal data class CatalogMetaFile(
     val categories: List<Genre>,
+    val itemCount: Int,
     val ts: Long,
     val version: Int = 1
-)
-
-@kotlinx.serialization.Serializable
-internal data class VodPartialFile(
-    val items: List<VodItem>,
-    val categories: List<Genre>,
-    val doneCatIds: List<Long>,
-    val ts: Long
 )
 
 @kotlinx.serialization.Serializable

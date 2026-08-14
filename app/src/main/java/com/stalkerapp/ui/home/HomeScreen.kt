@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -78,31 +77,26 @@ fun HomeScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             // Tek glass (cam) pill: yanlardan tam yuvarlak, gölge + boşluk ile
-            // yüzer (floating) hissi, yarı saydam cam arka plan. `blur` içerik
-            // listesini cam efektiyle bulanıklaştırır (API 31+); eski cihazlarda
-            // yarı saydam arka plan yeterli gelir. Simgeler cam katmanının üstünde
-            // ayrı bir katmanda çizilir, böylece bulanıklaşmaz.
+            // yüzer (floating) hissi, yarı saydam cam arka plan. Sabit yükseklik
+            // (62dp) tek bir kutu — `blur` kullanılmaz (bazı cihazlarda öğenin
+            // tüm ekranı kaplamasına yol açan Compose render sorunları var);
+            // yarı saydam yüzey + ince çerçeve + gölge cam görünümünü verir.
+            val glassShape = RoundedCornerShape(50)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .height(62.dp)
+                    .shadow(18.dp, glassShape)
+                    .clip(glassShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                        shape = glassShape
+                    )
             ) {
-                val glassShape = RoundedCornerShape(50)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(62.dp)
-                        .shadow(18.dp, glassShape, clip = false)
-                        .clip(glassShape)
-                        .blur(18.dp)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-                            shape = glassShape
-                        )
-                )
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically

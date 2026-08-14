@@ -35,9 +35,7 @@ class VodSyncManager(
 
     private var job: kotlinx.coroutines.Job? = null
     private val mutex = Mutex()
-    private val checkpointLock = Mutex()
     private val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
-    private var lastCheckpointTs = 0L
     // Last-resort enumeration strategy: single letters/digits via the portal's
     // `search` param. Many portals cap plain list paging but paginate search
     // results fine, which exposes the whole library.
@@ -85,20 +83,16 @@ class VodSyncManager(
         return if (isSeries == item.isSeries) item else item.copy(isSeries = isSeries)
     }
 
-    private suspend fun checkpoint(portalId: String, all: Map<Long, VodItem>, cats: List<Genre>, doneCatIds: Set<Long>) {
-        val now = System.currentTimeMillis()
-        if (now - lastCheckpointTs < 5000 && doneCatIds.isNotEmpty()) return
-        lastCheckpointTs = now
-        checkpointLock.withLock { store.saveVodPartial(portalId, all.values.toList(), cats, doneCatIds.toList()) }
-    }
-
     private suspend fun runSync(profile: Profile, force: Boolean) {
         val portalId = profile.portal?.id ?: ""
-        val cached = store.loadVodCatalog(portalId)
-        val partial = store.loadVodPartial(portalId)
-        val baseItems = if (force) emptyList() else (cached?.first ?: partial?.items ?: emptyList())
+        // Resume from per-category chunk files (written as each category
+        // completes) instead of a giant single-file checkpoint.
+        val cached = if (force) null else store.loadVodCatalog(portalId)
+        val chunks = if (cached != null) emptyMap() else store.loadVodCatalogChunks(portalId)
+        val baseItems = if (force) emptyList()
+        else (cached?.first ?: chunks.values.flatten().distinctBy { it.id })
         val doneCats = if (force) mutableSetOf() else (
-            store.loadVodCatalogDoneCats(portalId) + (partial?.doneCatIds ?: emptyList())
+            store.loadVodCatalogDoneCats(portalId) + chunks.keys
         ).toMutableSet()
         var cats = if (cached != null && cached.second.isNotEmpty()) cached.second
         else {
@@ -111,8 +105,8 @@ class VodSyncManager(
             loaded
         }
         if (force) {
-            store.clearVodCatalogDoneCats(portalId)
-            store.clearVodPartial(portalId)
+            // Also clears done-cats internally.
+            store.clearVodCatalog(portalId)
         }
 
         _progress.value = _progress.value.copy(
@@ -168,7 +162,6 @@ class VodSyncManager(
                     if (singleOk) {
                         store.saveVodCatalog(portalId, all.values.toList(), cats)
                         store.clearVodCatalogDoneCats(portalId)
-                        store.clearVodPartial(portalId)
                     }
                 }
             }
@@ -192,10 +185,13 @@ class VodSyncManager(
                                 try {
                                     val items = repository.fetchVodCategory(profile, cat.id, 5000, categoryParam)
                                     items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                                    // Persist this category immediately (small chunk
+                                    // file) so a process kill mid-sync only loses the
+                                    // in-flight category, never the whole library.
+                                    store.saveVodCategoryChunk(portalId, cat.id, items)
                                     val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
                                         store.saveVodCatalogDoneCats(portalId, it.toList())
                                     }
-                                    checkpoint(portalId, all, cats, doneNow)
                                     mutex.withLock {
                                         _progress.value = _progress.value.copy(
                                             doneCategories = doneNow.size,
@@ -245,7 +241,6 @@ class VodSyncManager(
 
             store.saveVodCatalog(portalId, all.values.toList(), cats)
             store.clearVodCatalogDoneCats(portalId)
-            store.clearVodPartial(portalId)
             cats = store.loadVodCatalog(portalId)?.second ?: cats
             _progress.value = _progress.value.copy(
                 status = VodCatalogStatus.Ready,

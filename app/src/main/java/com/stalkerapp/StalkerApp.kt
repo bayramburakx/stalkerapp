@@ -34,12 +34,10 @@ class StalkerApp : Application() {
     }
 
     private fun needsSync(portalId: String): Boolean {
-        val cached = store.loadVodCatalog(portalId)
-        val doneCats = store.loadVodCatalogDoneCats(portalId)
-        val partial = store.loadVodPartial(portalId)
-        val staleCatalog = cached != null && cached.first.isNotEmpty() &&
-            store.loadVodCatalogVersion(portalId) < Store.VOD_CATALOG_VERSION
-        return cached == null || cached.first.isEmpty() || doneCats.isNotEmpty() || partial != null || staleCatalog
+        // A complete catalog has a meta file at the current version. Without it
+        // (never synced, interrupted mid-sync, or stale format) we resume/sync.
+        val meta = store.loadVodCatalogMeta(portalId) ?: return true
+        return meta.version < Store.VOD_CATALOG_VERSION
     }
 
     companion object {
