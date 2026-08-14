@@ -178,7 +178,9 @@ fun VodScreen(
             else -> {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(8.dp),
+                    // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son
+                    // posterin pill altında kaybolmaması için.
+                    contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 96.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()

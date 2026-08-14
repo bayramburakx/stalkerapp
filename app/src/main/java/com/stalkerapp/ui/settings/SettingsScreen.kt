@@ -358,7 +358,9 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son öğenin
+        // pill altında kaybolmaması için.
+        Spacer(Modifier.height(96.dp))
     }
 
     if (showDialog) {

@@ -150,7 +150,9 @@ fun LiveTvScreen(
                     if (query.isBlank()) list
                     else list.filter { it.name.contains(query.trim(), ignoreCase = true) }
                 }
-                LazyColumn {
+                // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son
+                // kanalın pill altında kaybolmaması için.
+                LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
                     items(filtered, key = { it.id }) { ch ->
                         val isFav = favChannels.any { it.id == ch.id }
                         ChannelRow(

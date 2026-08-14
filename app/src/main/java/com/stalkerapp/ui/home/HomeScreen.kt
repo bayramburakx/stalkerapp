@@ -130,7 +130,11 @@ fun HomeScreen(
             }
         }
     ) { padding ->
-        val contentModifier = Modifier.padding(padding)
+        // İçerik yüzen cam pill'in ARKASINDAN akar (sadece üst iç boşluk
+        // uygulanır); böylece pill'in arkasında dolu bir bant görünmez ve cam
+        // efekt gerçek olur. Her sekme kendi listesinin sonuna pill yüksekliği
+        // kadar boşluk ekler.
+        val contentModifier = Modifier.padding(top = padding.calculateTopPadding())
         when (tab) {
             0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
             1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding())

@@ -66,7 +66,9 @@ fun FavoritesScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        LazyColumn {
+        // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son öğenin
+        // pill altında kaybolmaması için.
+        LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
             if (favChannels.isNotEmpty()) {
                 item {
                     Text(

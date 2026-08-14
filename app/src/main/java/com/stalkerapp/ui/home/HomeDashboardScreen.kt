@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -113,7 +114,6 @@ fun HomeDashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 8.dp)
     ) {
         if (featured.isNotEmpty()) {
             val catTitle = remember(catalog) {
@@ -255,6 +255,9 @@ fun HomeDashboardScreen(
                 }
             }
         }
+        // İçerik yüzen cam pill'in arkasından akıyor; son öğenin pill'in
+        // altında kaybolmaması için altta boşluk bırak.
+        Spacer(modifier = Modifier.height(96.dp))
     }
 }
 
@@ -265,7 +268,8 @@ private fun HeroBanner(
     catTitle: (Long) -> String,
     onOpenVod: (Long, Boolean) -> Unit
 ) {
-    // Hero: 3/2 en-boy oranı, tüm içerik ortalanmış.
+    // Hero: ekran yüksekliğinin yarısı kadar.
+    val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp / 2f }
     val pagerState = rememberPagerState(pageCount = { items.size })
 
     LaunchedEffect(pagerState) {
@@ -282,7 +286,7 @@ private fun HeroBanner(
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(3f / 2f)
+            .height(heroHeight)
     ) { page ->
         val item = items[page]
         val isSeries = item.isSeries || item.seriesRef.isNotBlank()
@@ -314,10 +318,10 @@ private fun HeroBanner(
             )
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 1) Başlık (en üstte)
                 Text(
