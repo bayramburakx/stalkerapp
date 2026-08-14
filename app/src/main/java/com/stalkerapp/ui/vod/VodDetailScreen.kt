@@ -81,12 +81,28 @@ fun VodDetailScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf(false) }
 
+    val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
+
     LaunchedEffect(vodId) {
         loading = true
         try {
-            val it = profile?.let { p -> vm.repository.vodById(p, vodId) }
-            item = it
-            if ((it?.isSeries == true || isSeriesHint) && profile != null) {
+            val p = profile ?: return@LaunchedEffect
+            val base = vm.repository.vodById(p, vodId)
+            // Enrich with detailed info (actors, full director, etc.) when available.
+            val info = runCatching { vm.repository.vodInfo(p, vodId) }.getOrNull()
+            item = if (base != null && info != null) {
+                base.copy(
+                    actors = info.actors.ifBlank { base.actors },
+                    director = info.director.ifBlank { base.director },
+                    country = info.country.ifBlank { base.country },
+                    year = info.year.ifBlank { base.year },
+                    rating = info.rating.ifBlank { base.rating },
+                    genres = info.genres.ifBlank { base.genres },
+                    description = info.description.ifBlank { base.description }
+                )
+            } else base
+            val merged = item
+            if ((merged?.isSeries == true || isSeriesHint) && profile != null) {
                 seasons = vm.repository.loadSeasons(profile, vodId)
                 selectedSeason = seasons.firstOrNull()?.id
             }
@@ -122,7 +138,7 @@ fun VodDetailScreen(
         scope.launch {
             playing = true
             try {
-                val url = vm.repository.vodStreamUrl(it, p, episode)
+                val url = vm.repository.vodStreamUrl(it.copy(isSeries = isSeries), p, episode)
                 PlaybackManager.currentVodId = it.id
                 PlaybackManager.play(url, it.name, it.poster)
                 onOpenPlayer()
@@ -133,6 +149,8 @@ fun VodDetailScreen(
             }
         }
     }
+
+    val isSeries = it.isSeries || isSeriesHint
 
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val isFavorite = remember(favVods, it) { it != null && favVods.any { f -> f.id == it.id } }
@@ -179,16 +197,25 @@ fun VodDetailScreen(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(it.name, style = MaterialTheme.typography.titleLarge)
+                        it.originalName.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Spacer(Modifier.height(4.dp))
-                        listOf(it.year, it.country, it.director, it.genres)
-                            .filter { it.isNotBlank() }
-                            .forEach {
-                                Text(
-                                    it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                        val categoryTitle = catalog.categories.firstOrNull { c -> c.id == it.categoryId }?.title
+                        listOfNotNull(
+                            categoryTitle?.let { "Kategori: $it" },
+                            it.year.takeIf { it.isNotBlank() }?.let { "Yıl: $it" },
+                            it.country.takeIf { it.isNotBlank() }?.let { "Ülke: $it" },
+                            it.genres.takeIf { it.isNotBlank() }?.let { "Tür: $it" },
+                            it.director.takeIf { it.isNotBlank() }?.let { "Yönetmen: $it" },
+                            it.actors.takeIf { it.isNotBlank() }?.let { "Oyuncular: $it" }
+                        ).forEach {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                         if (it.rating.isNotBlank()) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -222,7 +249,7 @@ fun VodDetailScreen(
                     }
                 }
             }
-            if (it.isSeries) {
+            if (isSeries) {
                 item {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp),

@@ -360,26 +360,33 @@ class PortalRepository(
     }
 
     /**
-     * Loads the COMPLETE VOD catalog in the background.
+     * Loads the COMPLETE VOD catalog in the background, fast.
      *
      * Strategy (matches how clients like Tivimate enumerate the whole library):
-     *  1) A full "all items" pass (`category=0`) captures every VOD regardless of
-     *     whether it is attached to a category (so the count equals the true total).
-     *  2) Each known category is then paged as well, filling any gaps and stamping
-     *     the category id on items that lacked one.
+     *  1) A single full "all items" pass (`category=0`) captures every VOD (movies
+     *     + series) with one paging sequence, using the portal-reported `total` to
+     *     know when the whole library is exhausted. This is what makes the real
+     *     total (e.g. 81k) reachable and keeps the request count minimal.
+     *  2) The known categories are fetched first so we can derive `isSeries` from
+     *     any category whose title contains "dizi". Series items get their category
+     *     id stamped (so filtering works) and `isSeries` set.
+     *  3) To guarantee the series library is fully captured even on portals where
+     *     `category=0` under-reports, we additionally page ONLY the "dizi"
+     *     categories (a handful) instead of every category. This is the key speed
+     *     fix versus the old code that paged ALL categories.
      *
-     * Per-unit page accounting (not the global accumulator) is used to decide when
-     * a unit is exhausted, which fixes the previous bug where `all.size >= total`
-     * stopped after the very first page of every category. Items are reported
-     * incrementally via [onItem] (for live display) and [onProgress].
+     * Per-unit page accounting (not the global accumulator) decides when a unit is
+     * exhausted, so we never stop after the first page. Items stream in via
+     * [onItem] (live display) and [onProgress].
      */
     suspend fun syncVodCatalog(
         profile: Profile,
-        perPage: Int = 5000,
+        perPage: Int = 50000,
         onItem: (VodItem) -> Unit = {},
         onProgress: (donePages: Int, totalPages: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
     ): List<VodItem> {
         val cats = runCatching { loadVodCategories(profile) }.getOrDefault(emptyList())
+        val seriesCatIds = cats.filter { it.title.contains("dizi", ignoreCase = true) }.map { it.id }.toSet()
         val all = LinkedHashMap<Long, VodItem>()
         var totalPagesEst = 0
         var donePages = 0
@@ -410,7 +417,11 @@ class PortalRepository(
                 var added = 0
                 list.forEach { item ->
                     if (!all.containsKey(item.id)) {
-                        val stamped = if (catId != 0L && item.categoryId == 0L) item.copy(categoryId = catId) else item
+                        var stamped = item
+                        if (catId != 0L && stamped.categoryId == 0L) stamped = stamped.copy(categoryId = catId)
+                        if (seriesCatIds.contains(stamped.categoryId) && !stamped.isSeries) {
+                            stamped = stamped.copy(isSeries = true)
+                        }
                         all[stamped.id] = stamped
                         added++
                         onItem(stamped)
@@ -425,8 +436,15 @@ class PortalRepository(
             }
         }
 
-        runCatching { pageUnit(0, 100000) }
-        cats.forEach { cat -> runCatching { pageUnit(cat.id, perPage) } }
+        // Pass 1: everything in one sequence.
+        runCatching { pageUnit(0, perPage) }
+        // Pass 2: ensure full series coverage (cheap — only "dizi" categories).
+        if (all.isEmpty()) {
+            // Portal did not return anything for category=0; fall back to all categories.
+            cats.forEach { runCatching { pageUnit(it.id, perPage) } }
+        } else {
+            cats.filter { it.id in seriesCatIds }.forEach { runCatching { pageUnit(it.id, perPage) } }
+        }
         return all.values.toList()
     }
 
@@ -471,6 +489,24 @@ class PortalRepository(
         val item = parseVodList(resp).firstOrNull()
         item?.let { vodItemsById.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[it.id] = it }
         return item
+    }
+
+    /**
+     * Fetches the detailed VOD info (`get_info`), which usually carries richer
+     * metadata than the list endpoint — most importantly the cast (`actors`).
+     * Returns null on any failure so callers can fall back to the list item.
+     */
+    suspend fun vodInfo(profile: Profile, id: Long): VodItem? {
+        return runCatching {
+            val resp = client.request(
+                profile.baseUrl,
+                "portal.php?type=vod&action=get_info",
+                "POST",
+                tokenFor(profile),
+                mapOf("movie_id" to id.toString())
+            )
+            parseVodInfo(resp)
+        }.getOrNull()
     }
 
     suspend fun loadSeasons(profile: Profile, vodId: Long): List<Season> {
@@ -644,12 +680,35 @@ class PortalRepository(
                 country = o["country"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 rating = o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                actors = o["actors"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 isSeries = o["is_series"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
                 cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }.filter { it.id > 0 }
+    }
+
+    private fun parseVodInfo(el: JsonElement): VodItem? {
+        val obj = runCatching {
+            val data = el.asJsonObject["data"]
+            if (data is JsonObject) data else el.asJsonObject
+        }.getOrNull() ?: return null
+        val str = { key: String -> obj[key]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty() }
+        return VodItem(
+            id = str("id").toLongOrNull() ?: 0,
+            name = str("name"),
+            originalName = str("o_name"),
+            poster = str("screenshot_uri").ifBlank { str("pic") },
+            description = str("description"),
+            year = str("year"),
+            director = str("director"),
+            country = str("country"),
+            rating = str("rating_imdb").ifBlank { str("rating") },
+            genres = str("genre").ifBlank { str("genres") },
+            actors = str("actors"),
+            isSeries = str("is_series").toBooleanStrictOrNull() == true
+        )
     }
 
     private fun parseSeasons(el: JsonElement): List<Season> {
