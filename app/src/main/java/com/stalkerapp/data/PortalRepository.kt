@@ -302,7 +302,7 @@ class PortalRepository(
         var guard = 0
         while (guard < 64) {
             guard++
-            val (list, t) = fetchVodPage(profile, 0, page, perPage)
+            val (list, t) = fetchVodPage(profile, 0L, page, perPage)
             if (t > 0) total = t
             if (list.isEmpty()) break
             out += list
@@ -325,7 +325,7 @@ class PortalRepository(
                 page++
                 continue
             }
-            out += list.map { if (it.categoryId == 0L) it.copy(categoryId = catId.toInt()) else it }
+            out += list.map { if (it.categoryId == 0L) it.copy(categoryId = catId) else it }
             if (total > 0 && out.size >= total) break
             page++
         }

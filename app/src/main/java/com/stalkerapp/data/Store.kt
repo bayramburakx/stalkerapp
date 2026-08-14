@@ -173,12 +173,12 @@ class Store(private val context: Context) {
         }
     }
 
-    fun saveVodCatalogDoneCats(portalId: String, doneCatIds: List<Int>) {
-        prefs.edit().putString(KEY_VOD_DONE_CATS, json.encodeToString(ListSerializer(Int.serializer()), doneCatIds)).apply()
+    fun saveVodCatalogDoneCats(portalId: String, doneCatIds: List<Long>) {
+        prefs.edit().putString(KEY_VOD_DONE_CATS, json.encodeToString(ListSerializer(Long.serializer()), doneCatIds)).apply()
     }
 
-    fun loadVodCatalogDoneCats(portalId: String): Set<Int> = runCatching {
-        json.decodeFromString(ListSerializer(Int.serializer()), prefs.getString(KEY_VOD_DONE_CATS, "[]").orEmpty()).toSet()
+    fun loadVodCatalogDoneCats(portalId: String): Set<Long> = runCatching {
+        json.decodeFromString(ListSerializer(Long.serializer()), prefs.getString(KEY_VOD_DONE_CATS, "[]").orEmpty()).toSet()
     }.getOrDefault(emptySet())
 
     fun clearVodCatalogDoneCats(portalId: String) {

@@ -72,9 +72,9 @@ class VodSyncManager(
         _progress.value = VodCatalogState()
     }
 
-    private fun stamp(item: VodItem, seriesCatIds: Set<Int>): VodItem {
+    private fun stamp(item: VodItem, seriesCatIds: Set<Long>): VodItem {
         var it = item
-        if (it.categoryId != 0 && seriesCatIds.contains(it.categoryId)) it = it.copy(isSeries = true)
+        if (it.categoryId != 0L && seriesCatIds.contains(it.categoryId)) it = it.copy(isSeries = true)
         return it
     }
 
@@ -111,7 +111,7 @@ class VodSyncManager(
                     val stamped = items.map { stamp(it, seriesCatIds) }
                     stamped.forEach { all[it.id] = it }
                     store.appendVodCatalog(portalId, stamped, cats)
-                    singleOk = stamped.size >= 200 && (total <= stamped.size + 1000 || total == 0)
+                    singleOk = total > 0 && stamped.size >= 200 && total <= stamped.size + 1000
                     _progress.value = _progress.value.copy(
                         loadedCount = all.size,
                         doneCategories = cats.size,
