@@ -249,13 +249,19 @@ fun HomeDashboardScreen(
 
 @Composable
 private fun Section(title: String, onSeeAll: (() -> Unit)?, content: @Composable () -> Unit) {
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    Column(modifier = Modifier.padding(vertical = 10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Box(
+                modifier = Modifier
+                    .size(width = 4.dp, height = 18.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (onSeeAll != null) {
                 Text(
                     "Tümü",

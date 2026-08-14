@@ -102,9 +102,12 @@ fun VodScreen(
     }
 
     val catList = catalog.categories
+    val seriesCatIds = remember(catalog) {
+        catalog.allItems.filter { catalog.isSeriesItem(it) }.map { it.categoryId }.toSet()
+    }
     val shownCats = when (filterIsSeries) {
-        true -> catList.filter { it.title.contains("dizi", ignoreCase = true) }
-        false -> catList.filter { !it.title.contains("dizi", ignoreCase = true) }
+        true -> catList.filter { it.id in seriesCatIds }
+        false -> catList.filter { it.id !in seriesCatIds }
         else -> catList
     }
 

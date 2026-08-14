@@ -731,6 +731,7 @@ class PortalRepository(
 
     private fun parseVodList(el: JsonElement): List<VodItem> {
         return parseDataArray(el).mapNotNull { o ->
+            val seriesRef = o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             VodItem(
                 id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
                 categoryId = o["cat_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
@@ -748,7 +749,8 @@ class PortalRepository(
                 rating = o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 actors = o["actors"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                isSeries = o["is_series"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
+                seriesRef = seriesRef,
+                isSeries = seriesRef.isNotBlank(),
                 cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
@@ -760,6 +762,7 @@ class PortalRepository(
         val root = el as? JsonObject ?: return null
         val obj = (root["data"] as? JsonObject) ?: root
         val str = { key: String -> obj[key]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty() }
+        val seriesRef = str("series")
         return VodItem(
             id = str("id").toLongOrNull() ?: 0,
             name = str("name"),
@@ -772,7 +775,8 @@ class PortalRepository(
             rating = str("rating_imdb").ifBlank { str("rating") },
             genres = str("genre").ifBlank { str("genres") },
             actors = str("actors"),
-            isSeries = str("is_series").toBooleanStrictOrNull() == true
+            seriesRef = seriesRef,
+            isSeries = seriesRef.isNotBlank()
         )
     }
 

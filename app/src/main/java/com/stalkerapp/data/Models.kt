@@ -77,10 +77,11 @@ data class VodItem(
     val rating: String = "",
     val genres: String = "",
     val actors: String = "",
-    @SerialName("series") val isSeries: Boolean = false,
+    @SerialName("series") val seriesRef: String = "",
     val cmd: String = "",
     @SerialName("selected_season") val selectedSeason: String = "",
-    @SerialName("series_data") val seriesData: String = ""
+    @SerialName("series_data") val seriesData: String = "",
+    var isSeries: Boolean = false
 )
 
 @Serializable

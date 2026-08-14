@@ -36,9 +36,10 @@ class VodSyncManager(
     private var job: kotlinx.coroutines.Job? = null
     private val mutex = Mutex()
     private val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
+    private var lastCheckpointTs = 0L
 
     fun isSeriesItem(item: VodItem): Boolean {
-        if (item.isSeries) return true
+        if (item.isSeries || item.seriesRef.isNotBlank()) return true
         val title = _progress.value.categories.find { it.id == item.categoryId }?.title
         val t = title ?: item.categoryId.toString()
         return seriesKeywords.any { t.contains(it, ignoreCase = true) }
@@ -73,26 +74,38 @@ class VodSyncManager(
     }
 
     private fun stamp(item: VodItem, seriesCatIds: Set<Long>): VodItem {
-        var it = item
-        if (it.categoryId != 0L && seriesCatIds.contains(it.categoryId)) it = it.copy(isSeries = true)
-        return it
+        val isSeries = item.isSeries || item.seriesRef.isNotBlank() || seriesCatIds.contains(item.categoryId)
+        return if (isSeries == item.isSeries) item else item.copy(isSeries = isSeries)
+    }
+
+    private fun checkpoint(portalId: String, all: Map<Long, VodItem>, cats: List<Genre>, doneCatIds: Set<Long>) {
+        val now = System.currentTimeMillis()
+        if (now - lastCheckpointTs < 3000 && doneCatIds.isNotEmpty()) return
+        lastCheckpointTs = now
+        store.saveVodPartial(portalId, all.values.toList(), cats, doneCatIds.toList())
     }
 
     private suspend fun runSync(profile: Profile, force: Boolean) {
         val portalId = profile.portal?.id ?: ""
         val cached = store.loadVodCatalog(portalId)
-        val doneCats = store.loadVodCatalogDoneCats(portalId)
-        val baseItems = if (force) emptyList() else (cached?.first ?: emptyList())
+        val partial = store.loadVodPartial(portalId)
+        val baseItems = if (force) emptyList() else (cached?.first ?: partial?.items ?: emptyList())
+        val doneCats = if (force) mutableSetOf() else (
+            store.loadVodCatalogDoneCats(portalId) + (partial?.doneCatIds ?: emptyList())
+        ).toMutableSet()
         var cats = if (cached != null && cached.second.isNotEmpty()) cached.second
         else runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
-        if (force) store.clearVodCatalogDoneCats(portalId)
+        if (force) {
+            store.clearVodCatalogDoneCats(portalId)
+            store.clearVodPartial(portalId)
+        }
 
         _progress.value = _progress.value.copy(
             status = VodCatalogStatus.Syncing,
             categories = cats,
             allItems = baseItems,
             loadedCount = baseItems.size,
-            doneCategories = if (force) 0 else doneCats.size,
+            doneCategories = doneCats.size,
             totalCategories = cats.size
         )
 
@@ -101,41 +114,44 @@ class VodSyncManager(
                 .map { it.id }.toSet()
             val all = ConcurrentHashMap<Long, VodItem>()
             baseItems.forEach { all[it.id] = it }
-            val remaining = cats.filter { force || !doneCats.contains(it.id) }
+            val remaining = cats.filter { force || it.id !in doneCats }
 
             // 1) Fast single pass (Tivimate-style: one huge per_page request).
             var singleOk = false
             if (force || baseItems.isEmpty()) {
                 runCatching {
                     val (items, total) = repository.fetchAllVod(profile, 100000)
-                    val stamped = items.map { stamp(it, seriesCatIds) }
-                    stamped.forEach { all[it.id] = it }
-                    store.appendVodCatalog(portalId, stamped, cats)
-                    singleOk = total > 0 && stamped.size >= 200 && total <= stamped.size + 1000
+                    items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                    singleOk = total > 0 && items.size >= 200 && total <= items.size + 1000
                     _progress.value = _progress.value.copy(
                         loadedCount = all.size,
                         doneCategories = cats.size,
                         totalCategories = cats.size,
                         allItems = all.values.toList()
                     )
+                    store.saveVodCatalog(portalId, all.values.toList(), cats)
+                    store.clearVodCatalogDoneCats(portalId)
+                    store.clearVodPartial(portalId)
                 }
             }
 
             // 2) Parallel per-category fetch for any gaps (Tivimate fetches per category).
             if (!singleOk) {
-                val sem = Semaphore(4)
+                val sem = Semaphore(8)
                 coroutineScope {
                     remaining.forEach { cat ->
                         launch {
                             sem.acquire()
                             try {
-                                val items = repository.fetchVodCategory(profile, cat.id.toLong(), 5000)
-                                val stamped = items.map { stamp(it, seriesCatIds) }
-                                stamped.forEach { all[it.id] = it }
-                                store.appendVodCatalog(portalId, stamped, cats)
+                                val items = repository.fetchVodCategory(profile, cat.id, 5000)
+                                items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                                val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
+                                    store.saveVodCatalogDoneCats(portalId, it.toList())
+                                }
+                                checkpoint(portalId, all, cats, doneNow)
                                 mutex.withLock {
                                     _progress.value = _progress.value.copy(
-                                        doneCategories = _progress.value.doneCategories + 1,
+                                        doneCategories = doneNow.size,
                                         loadedCount = all.size,
                                         allItems = all.values.toList()
                                     )
@@ -149,7 +165,9 @@ class VodSyncManager(
                 }
             }
 
+            store.saveVodCatalog(portalId, all.values.toList(), cats)
             store.clearVodCatalogDoneCats(portalId)
+            store.clearVodPartial(portalId)
             cats = store.loadVodCatalog(portalId)?.second ?: cats
             _progress.value = _progress.value.copy(
                 status = VodCatalogStatus.Ready,

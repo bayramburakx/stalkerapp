@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -155,4 +157,65 @@ fun InfoChip(text: String) {
             .background(MaterialTheme.colorScheme.primaryContainer)
             .padding(horizontal = 8.dp, vertical = 4.dp)
     )
+}
+
+/** Consistent elevated surface card used across the app. */
+@Composable
+fun AppCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val card = @Composable {
+        Card(
+            modifier = modifier,
+            shape = shape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) { content() }
+    }
+    if (onClick != null) {
+        Box(modifier = Modifier.clickable(onClick = onClick)) { card() }
+    } else {
+        card()
+    }
+}
+
+/** Section header with an accent bar, used on dashboard / list screens. */
+@Composable
+fun SectionTitle(
+    title: String,
+    modifier: Modifier = Modifier,
+    onSeeAll: (() -> Unit)? = null
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (onSeeAll != null) {
+            Text(
+                "Tümü",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onSeeAll() }
+            )
+        }
+    }
 }

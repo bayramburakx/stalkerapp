@@ -185,6 +185,28 @@ class Store(private val context: Context) {
         prefs.edit().remove(KEY_VOD_DONE_CATS).apply()
     }
 
+    fun saveVodPartial(portalId: String, items: List<VodItem>, categories: List<Genre>, doneCatIds: List<Long>) {
+        runCatching {
+            val file = File(context.filesDir, "vod_partial_$portalId.json")
+            file.writeText(
+                json.encodeToString(
+                    VodPartialFile.serializer(),
+                    VodPartialFile(items, categories, doneCatIds, System.currentTimeMillis())
+                )
+            )
+        }
+    }
+
+    fun loadVodPartial(portalId: String): VodPartialFile? = runCatching {
+        val file = File(context.filesDir, "vod_partial_$portalId.json")
+        if (!file.exists()) return@runCatching null
+        json.decodeFromString(VodPartialFile.serializer(), file.readText())
+    }.getOrNull()
+
+    fun clearVodPartial(portalId: String) {
+        runCatching { File(context.filesDir, "vod_partial_$portalId.json").delete() }
+    }
+
     fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
         val map = loadVodProgress().toMutableMap()
         map[id] = VodProgress(positionMs, durationMs)
@@ -227,6 +249,14 @@ class Store(private val context: Context) {
 internal data class VodCatalogFile(
     val items: List<VodItem>,
     val categories: List<Genre>,
+    val ts: Long
+)
+
+@kotlinx.serialization.Serializable
+internal data class VodPartialFile(
+    val items: List<VodItem>,
+    val categories: List<Genre>,
+    val doneCatIds: List<Long>,
     val ts: Long
 )
 

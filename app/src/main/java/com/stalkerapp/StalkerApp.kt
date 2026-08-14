@@ -36,7 +36,8 @@ class StalkerApp : Application() {
     private fun needsSync(portalId: String): Boolean {
         val cached = store.loadVodCatalog(portalId)
         val doneCats = store.loadVodCatalogDoneCats(portalId)
-        return cached == null || cached.first.isEmpty() || doneCats.isNotEmpty()
+        val partial = store.loadVodPartial(portalId)
+        return cached == null || cached.first.isEmpty() || doneCats.isNotEmpty() || partial != null
     }
 
     companion object {

@@ -176,7 +176,7 @@ data class VodCatalogState(
 ) {
     val byId: Map<Long, VodItem> get() = allItems.associateBy { it.id }
     val isSeriesItem: (VodItem) -> Boolean = { item ->
-        item.isSeries || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() ||
+        item.isSeries || item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() ||
             categories.any { c -> c.id == item.categoryId && c.title.let { t -> t.contains("dizi", ignoreCase = true) || t.contains("series", ignoreCase = true) || t.contains("serial", ignoreCase = true) } }
     }
 }
