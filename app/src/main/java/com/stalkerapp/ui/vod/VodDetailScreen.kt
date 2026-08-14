@@ -58,6 +58,7 @@ import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,12 +86,26 @@ fun VodDetailScreen(
 
     LaunchedEffect(vodId) {
         loading = true
+        error = null
         try {
             val p = profile ?: return@LaunchedEffect
-            val base = vm.repository.vodById(p, vodId)
+            // This portal ignores the single-item fetch (vod_id), so rely on the
+            // already-loaded catalog item keyed by id — otherwise every title would
+            // resolve to the same (first) item.
+            var base: VodItem? = null
+            val deadline = System.currentTimeMillis() + 60_000L
+            while (base == null && System.currentTimeMillis() < deadline) {
+                base = vm.vodCatalog.value.byId[vodId]
+                    ?: runCatching { vm.repository.vodById(p, vodId) }.getOrNull()
+                if (base == null) delay(400)
+            }
+            if (base == null) {
+                error = "İçerik bulunamadı"
+                return@LaunchedEffect
+            }
             // Enrich with detailed info (actors, full director, etc.) when available.
             val info = runCatching { vm.repository.vodInfo(p, vodId) }.getOrNull()
-            item = if (base != null && info != null) {
+            item = if (info != null) {
                 base.copy(
                     actors = info.actors.ifBlank { base.actors },
                     director = info.director.ifBlank { base.director },

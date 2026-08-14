@@ -199,13 +199,18 @@ fun PlayerScreen(navController: NavHostController) {
         onDispose { PlaybackManager.removeErrorListener(el) }
     }
 
-    BackHandler(enabled = true) {
+    fun exitPlayer() {
+        PlaybackManager.stop()
         if (!navController.popBackStack()) {
             navController.navigate("home") {
                 popUpTo("login") { inclusive = false }
                 launchSingleTop = true
             }
         }
+    }
+
+    BackHandler(enabled = true) {
+        exitPlayer()
     }
 
     DisposableEffect(Unit) {
@@ -441,7 +446,7 @@ fun PlayerScreen(navController: NavHostController) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        onClick = { navController.popBackStack() },
+                        onClick = { exitPlayer() },
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(

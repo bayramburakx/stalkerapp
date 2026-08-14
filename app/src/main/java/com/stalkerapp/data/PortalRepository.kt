@@ -385,7 +385,7 @@ class PortalRepository(
      */
     suspend fun syncVodCatalog(
         profile: Profile,
-        perPage: Int = 500,
+        perPage: Int = 5000,
         onItem: (VodItem) -> Unit = {},
         onProgress: (donePages: Int, totalPages: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
     ): List<VodItem> {
@@ -473,6 +473,7 @@ class PortalRepository(
                         put("page", page.toString())
                         // Omit the category param for the "all" query (catId <= 0).
                         if (categoryId > 0) put("category", categoryId.toString())
+                        if (perPage > 0) put("per_page", perPage.toString())
                     }
                 )
                 return parseVodList(resp) to parseTotal(resp)
@@ -480,6 +481,22 @@ class PortalRepository(
                 if (e.isCooldown) {
                     delay(client.cooldownRemainingMs() + 1000)
                 } else throw e
+            }
+        }
+        // Some portals reject `per_page`; retry once without it.
+        if (perPage > 0) {
+            runCatching {
+                val resp = client.request(
+                    profile.baseUrl,
+                    "portal.php?type=vod&action=get_ordered_list",
+                    "POST",
+                    tokenFor(profile),
+                    buildMap {
+                        put("page", page.toString())
+                        if (categoryId > 0) put("category", categoryId.toString())
+                    }
+                )
+                return parseVodList(resp) to parseTotal(resp)
             }
         }
         return Pair(emptyList<VodItem>(), 0)
