@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,3 +36,22 @@ jobs:
         with:
           name: stalkerapp-release
           path: app/build/outputs/apk/release/*.apk
+
+      - name: Publish APK to Release (latest)
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
+        with:
+          tag_name: latest
+          name: Stalker Player – Güncel APK
+          body: |
+            Otomatik derlenen güncel APK (her push'ta yenilenir).
+
+            En son değişiklikler:
+            - Alt menü: siyah bar kaldırıldı, sadece pill-shaped arka planlar kaldı
+            - Hero banner ekranın ~1.5/3'ü kadar büyütüldü
+            - VOD senkron düzeltildi: tüm katalog (80k+ içerik) çekiliyor
+            - Eski/eksik katalog otomatik olarak yeniden senkronlanıyor
+          files: app/build/outputs/apk/release/*.apk
+          update_existing: true
+          overwrite: true
+          token: ${{ secrets.GITHUB_TOKEN }}
