@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
@@ -310,7 +311,9 @@ private fun HeroBanner(
         // Tür: listedeki `genres_str` (ör. "Komedi"); yoksa kategori başlığına düş.
         val genre = item.genres.trim().ifBlank { catTitle(item.categoryId) }
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        // clipToBounds: zoom sırasında büyüyen poster hero kutusunun dışına
+        // taşmasın — gradient sınırının ötesine taşmaz.
+        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
             // Aşağı kaydırdıkça görsel hafifçe yakınlaşır (dikey parallax/zoom).
             // Yatay kaydırmada (pager) bu efekt uygulanmaz — zoom yalnızca sayfa
             // aşağı kaydırılırken görünür. graphicsLayer bloğu state okur, bu
