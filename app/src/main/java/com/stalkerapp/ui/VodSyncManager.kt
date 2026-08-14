@@ -129,19 +129,31 @@ class VodSyncManager(
                 .map { it.id }.toSet()
             val all = ConcurrentHashMap<Long, VodItem>()
             baseItems.forEach { all[it.id] = it }
-            val remaining = cats.filter { force || it.id !in doneCats }
+            // Skip the "All" pseudo-category (id 0) some panels expose: it is
+            // just the unfiltered list, so paging it would re-fetch the whole
+            // library once more for nothing.
+            val remaining = cats.filter { it.id != 0L && (force || it.id !in doneCats) }
 
             // 1) Fast single pass (Tivimate-style: one huge per_page request, paged
             // until the portal stops returning items). We trust it only when it
             // actually retrieved a substantial number of items (and got close to
             // the portal-reported total when one is available) — the portal's
             // `total_items` is often wrong, so it must not gate completion.
+            // Portals that ignore `per_page` (hard ~14-item pages) would need
+            // thousands of sequential requests for this pass, so we skip it and
+            // go straight to the parallel per-category enumeration (step 2),
+            // which is complete on such portals.
             var portalTotal = 0
             var singleOk = false
-            if (force || baseItems.isEmpty()) {
+            val tinyPages = runCatching {
+                repository.probeVodPageParam(profile)
+                repository.vodPageSize() in 1..30
+            }.getOrDefault(false)
+            portalTotal = repository.vodPortalTotal()
+            if (!tinyPages && (force || baseItems.isEmpty())) {
                 runCatching {
                     val (items, allTotal) = repository.fetchAllVod(profile, 100000)
-                    portalTotal = allTotal
+                    if (allTotal > 0) portalTotal = allTotal
                     items.forEach { all[it.id] = stamp(it, seriesCatIds) }
                     singleOk = items.size >= 5000 &&
                         if (allTotal > 0) items.size >= allTotal * 0.95

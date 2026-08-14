@@ -46,6 +46,14 @@ class PortalRepository(
     // ("category" by default; some portals use "genre" or need the category
     // number). Discovered by [probeVodCategoryParam].
     @Volatile private var vodCategoryParam: String? = null
+    // Which parameter this portal uses to page VOD lists. Standard middleware
+    // honors "page", but modified panels often ignore it (and `per_page`),
+    // returning the same first 14 items forever — those page via "p" instead.
+    // Discovered by [probeVodPageParam]; also records the observed page size
+    // and portal total so callers can adapt to tiny-page portals.
+    @Volatile private var vodPageParam: String? = null
+    @Volatile private var vodPageSize: Int = 0
+    @Volatile private var vodTotal: Int = 0
 
     private fun vodKey(categoryId: Long, search: String): String =
         "$categoryId|${search.trim().lowercase()}"
@@ -309,11 +317,22 @@ class PortalRepository(
         var page = 1
         var guard = 0
         var dupStreak = 0
-        while (guard < 120) {
+        var pageSize = 0
+        var maxPages = 2000
+        while (guard < maxPages) {
             guard++
             val (list, t) = fetchVodPage(profile, page, perPage, emptyMap())
+            if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (t > 0) total = t
             if (list.isEmpty()) break
+            if (total > 0 && pageSize > 0) {
+                val needed = (total / pageSize) + 20
+                // Portals that ignore `per_page` return tiny pages (e.g. 14),
+                // so a full sequential enumeration needs thousands of requests.
+                // Cap the warm-up; callers fall back to parallel per-category
+                // paging, which is complete on such portals.
+                maxPages = if (pageSize <= 30 && needed > 150) 150 else minOf(needed, 2000)
+            }
             var added = 0
             list.forEach { item ->
                 if (seen.add(item.id)) {
@@ -348,14 +367,18 @@ class PortalRepository(
         var page = 1
         var guard = 0
         var dupStreak = 0
-        while (guard < 4000) {
+        var pageSize = 0
+        var maxPages = 2000
+        while (guard < maxPages) {
             guard++
-            val (list, _) = fetchVodPage(profile, page, perPage, mapOf(categoryParam to catId.toString()))
+            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(categoryParam to catId.toString()))
+            if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
                 page++
                 continue
             }
+            if (total > 0 && pageSize > 0) maxPages = minOf((total / pageSize) + 20, 2000)
             var added = 0
             list.forEach { item ->
                 if (seen.add(item.id)) {
@@ -389,13 +412,22 @@ class PortalRepository(
         var page = 1
         var guard = 0
         var dupStreak = 0
-        while (guard < 200) {
+        var pageSize = 0
+        var maxPages = 2000
+        while (guard < maxPages) {
             guard++
-            val (list, _) = fetchVodPage(profile, page, perPage, mapOf("search" to search))
+            val (list, total) = fetchVodPage(profile, page, perPage, mapOf("search" to search))
+            if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
                 page++
                 continue
+            }
+            if (total > 0 && pageSize > 0) {
+                val needed = (total / pageSize) + 20
+                // Last-resort strategy: cap each token so a pathological portal
+                // (tiny pages, broken filters) can't trigger unbounded paging.
+                maxPages = minOf(needed, 300)
             }
             var added = 0
             list.forEach { item ->
@@ -424,14 +456,17 @@ class PortalRepository(
     suspend fun probeVodCategoryParam(profile: Profile): String {
         vodCategoryParam?.let { return it }
         val cats = runCatching { loadVodCategories(profile) }.getOrDefault(emptyList())
-        val probeCat = cats.firstOrNull()
+        // Skip the "All" pseudo-category (id 0) some panels expose — it is just
+        // the unfiltered list and tells us nothing about the filter param.
+        val probeCat = cats.firstOrNull { it.id != 0L }
         if (probeCat == null) {
             vodCategoryParam = "category"
             return "category"
         }
-        // Items already visible via the "all" query, so we can tell whether the
-        // category filter actually returns DIFFERENT items (i.e. it works).
-        val allIds = runCatching { fetchAllVod(profile, 500).first }
+        // Items already visible via the "all" query (first page is enough: if
+        // the category filter works it returns different items than the plain
+        // first page; if it is ignored it returns the very same page).
+        val allIds = runCatching { fetchVodPage(profile, 1, 500, emptyMap()).first }
             .getOrDefault(emptyList()).map { it.id }.toHashSet()
         val candidates = listOf(
             "category" to probeCat.id.toString(),
@@ -450,6 +485,61 @@ class PortalRepository(
         vodCategoryParam = "category"
         return "category"
     }
+
+    /**
+     * Detects which parameter this portal uses to page VOD lists. Standard
+     * middleware honors `page`; some modified panels ignore it entirely (and
+     * ignore `per_page`, hard-capping at ~14 items) and page via `p` instead.
+     * The winner is cached per portal, along with the observed page size and
+     * portal total. Returns "page" without caching when the probe requests
+     * failed (e.g. during a cooldown) so a later call can re-probe.
+     */
+    suspend fun probeVodPageParam(profile: Profile): String {
+        vodPageParam?.let { return it }
+        suspend fun probe(param: String, pageVal: Int, perPage: Int): List<Long> = runCatching {
+            val resp = client.request(
+                profile.baseUrl,
+                "portal.php?type=vod&action=get_ordered_list",
+                "POST",
+                tokenFor(profile),
+                vodListBody(emptyMap(), pageVal, perPage, param)
+            )
+            val items = parseVodList(resp)
+            if (pageVal == 1 && param == "page") {
+                // Keep the largest observed page size: the per_page=5000 probe
+                // shows the real page size on portals that honor it, and the
+                // portal's cap (e.g. 14) on portals that ignore it.
+                if (items.size > vodPageSize) vodPageSize = items.size
+                if (vodTotal == 0) vodTotal = parseTotal(resp)
+            }
+            items.map { it.id }
+        }.getOrDefault(emptyList())
+        var sawItems = false
+        for (param in listOf("page", "p")) {
+            val p1 = probe(param, 1, 5000)
+            val p2 = probe(param, 2, 5000)
+            if (p1.isNotEmpty()) sawItems = true
+            if (p1.isNotEmpty() && p1 != p2) {
+                vodPageParam = param
+                return param
+            }
+        }
+        // The per_page=5000 probes may have failed even though the portal is
+        // fine (some reject large per_page values); re-measure the page size
+        // with the original format so [vodPageSize] is still meaningful.
+        if (vodPageSize == 0) probe("page", 1, 0)
+        // Neither param advanced the list. If the requests succeeded the portal
+        // simply ignores paging (dup-streak guards stop the loops); if they
+        // failed, leave it uncached so we re-probe after the cooldown clears.
+        if (sawItems) vodPageParam = "page"
+        return "page"
+    }
+
+    /** Observed VOD page size (0 until [probeVodPageParam] has run). */
+    fun vodPageSize(): Int = vodPageSize
+
+    /** Portal-reported VOD total (0 until [probeVodPageParam] has run). */
+    fun vodPortalTotal(): Int = vodTotal
 
     // ---------- VOD ----------
 
@@ -478,8 +568,9 @@ class PortalRepository(
         val key = vodKey(categoryId, search)
         if (page <= 1 && cache[key] != null) return cache[key]!!
 
+        val pageParam = probeVodPageParam(profile)
         val body = buildMap {
-            put("page", page.toString())
+            put(pageParam, page.toString())
             if (categoryId > 0) put("category", categoryId.toString())
             if (search.isNotBlank()) put("search", search.trim())
         }
@@ -519,6 +610,9 @@ class PortalRepository(
         vodItemsById.clear()
         epgCache.clear()
         vodCategoryParam = null
+        vodPageParam = null
+        vodPageSize = 0
+        vodTotal = 0
     }
 
     /** Clears the EPG cache so programs are re-fetched from the portal on next view. */
@@ -578,7 +672,9 @@ class PortalRepository(
             var unitTotal = 0
             var emptyStreak = 0
             var guard = 0
-            while (guard < 5000) {
+            var pageSize = 0
+            var maxPages = 2000
+            while (guard < maxPages) {
                 guard++
                 val (list, total) = fetchVodPage(
                     profile,
@@ -586,9 +682,18 @@ class PortalRepository(
                     pp,
                     if (catId != 0L) mapOf("category" to catId.toString()) else emptyMap()
                 )
+                if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
                 if (unitTotal == 0 && total > 0) {
                     unitTotal = total
-                    totalPagesEst += (total / pp) + 1
+                    val eff = if (pageSize > 0) pageSize else pp
+                    totalPagesEst += (total / eff) + 1
+                }
+                if (unitTotal > 0 && pageSize > 0) {
+                    val needed = (unitTotal / pageSize) + 20
+                    // Same tiny-page guard as [fetchAllVod]: portals that ignore
+                    // `per_page` need thousands of pages, so cap the warm-up and
+                    // let the caller fall back to parallel per-category paging.
+                    maxPages = if (pageSize <= 30 && needed > 150) 150 else minOf(needed, 2000)
                 }
                 if (list.isEmpty()) {
                     emptyStreak++
@@ -627,8 +732,9 @@ class PortalRepository(
         // Decide whether the all-pass actually enumerated the library.
         val underDelivered = all.size < 200 || (allPassTotal > 0 && allPassTotal > all.size + 500)
         if (underDelivered) {
-            // Reliable fallback: page every known category.
-            cats.forEach { runCatching { pageUnit(it.id, perPage) } }
+            // Reliable fallback: page every known category (skipping the "All"
+            // pseudo-category, which is just the unfiltered list again).
+            cats.filter { it.id != 0L }.forEach { runCatching { pageUnit(it.id, perPage) } }
         } else {
             // Top up series coverage cheaply.
             cats.filter { it.id in seriesCatIds }.forEach { runCatching { pageUnit(it.id, perPage) } }
@@ -636,8 +742,13 @@ class PortalRepository(
         return all.values.toList()
     }
 
-    private fun vodListBody(params: Map<String, String>, page: Int, perPage: Int): Map<String, String> = buildMap {
-        put("page", page.toString())
+    private fun vodListBody(
+        params: Map<String, String>,
+        page: Int,
+        perPage: Int,
+        pageParam: String = "page"
+    ): Map<String, String> = buildMap {
+        put(pageParam, page.toString())
         params.forEach { (k, v) -> put(k, v) }
         if (perPage > 0) put("per_page", perPage.toString())
     }
@@ -655,12 +766,15 @@ class PortalRepository(
         perPage: Int,
         params: Map<String, String>
     ): Pair<List<VodItem>, Int> {
+        // Which page param this portal honors ("page" or "p") — cached after
+        // the first call, so this is cheap inside paging loops.
+        val pageParam = probeVodPageParam(profile)
         suspend fun requestWith(pp: Int): JsonElement = client.request(
             profile.baseUrl,
             "portal.php?type=vod&action=get_ordered_list",
             "POST",
             tokenFor(profile),
-            vodListBody(params, page, pp)
+            vodListBody(params, page, pp, pageParam)
         )
 
         val perPageOptions = buildList {

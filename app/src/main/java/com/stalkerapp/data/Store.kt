@@ -247,7 +247,7 @@ class Store(private val context: Context) {
 
     companion object {
         /** Bump to force a full re-sync of catalogs saved by older app versions. */
-        const val VOD_CATALOG_VERSION = 3
+        const val VOD_CATALOG_VERSION = 4
 
         private const val KEY_PORTALS = "portals"
         private const val KEY_ACTIVE_PORTAL = "active_portal"
