@@ -300,13 +300,13 @@ class PortalRepository(
         var total = 0
         var page = 1
         var guard = 0
-        while (guard < 64) {
+        while (guard < 120) {
             guard++
             val (list, t) = fetchVodPage(profile, 0L, page, perPage)
             if (t > 0) total = t
             if (list.isEmpty()) break
             out += list
-            if (total > 0 && out.size >= total) break
+            if (out.size > 300_000) break
             page++
         }
         return out to total
@@ -326,7 +326,7 @@ class PortalRepository(
                 continue
             }
             out += list.map { if (it.categoryId == 0L) it.copy(categoryId = catId) else it }
-            if (total > 0 && out.size >= total) break
+            if (out.size > 300_000) break
             page++
         }
         return out
@@ -399,6 +399,19 @@ class PortalRepository(
         vodTotals.clear()
         vodItemsById.clear()
         epgCache.clear()
+    }
+
+    /** Clears the EPG cache so programs are re-fetched from the portal on next view. */
+    fun clearEpgCache() {
+        epgCache.clear()
+    }
+
+    /** Force refresh EPG for the given channel ids (clears and re-fetches in background). */
+    suspend fun refreshEpg(profile: Profile, channelIds: List<Long>) {
+        epgCache.clear()
+        channelIds.take(40).forEach { id ->
+            runCatching { loadEpg(profile, id) }
+        }
     }
 
     /**

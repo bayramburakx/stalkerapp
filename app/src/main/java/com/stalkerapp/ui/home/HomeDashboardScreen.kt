@@ -16,10 +16,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,9 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,6 +58,7 @@ import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeDashboardScreen(
@@ -96,6 +103,7 @@ fun HomeDashboardScreen(
 
     val movies = remember(catalog) { catalog.allItems.filter { !catalog.isSeriesItem(it) }.take(20) }
     val series = remember(catalog) { catalog.allItems.filter { catalog.isSeriesItem(it) }.take(20) }
+    val featured = remember(catalog) { (series.take(6) + movies.take(6)).shuffled() }
 
     Column(
         modifier = modifier
@@ -116,8 +124,16 @@ fun HomeDashboardScreen(
             )
         }
 
+        if (featured.isNotEmpty()) {
+            HeroBanner(
+                items = featured,
+                baseUrl = profile.baseUrl,
+                onOpenVod = onOpenVod
+            )
+        }
+
         if (continueWatching.isNotEmpty()) {
-            Section(title = "Devam Et", onSeeAll = null) {
+            Section(title = "İzlemeye Devam", onSeeAll = null) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -129,6 +145,48 @@ fun HomeDashboardScreen(
                             positionMs = prog.positionMs,
                             durationMs = prog.durationMs,
                             onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                        )
+                    }
+                }
+            }
+        }
+
+        Section(title = "Popüler Filmler", onSeeAll = { onGotoTab(2) }) {
+            if (movies.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
+                EmptyState("Film bulunamadı")
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(movies, key = { it.id }) { item ->
+                        VodPoster(
+                            item = item,
+                            baseUrl = profile.baseUrl,
+                            isSeries = false,
+                            posterWidth = 130,
+                            onClick = { onOpenVod(item.id, false) }
+                        )
+                    }
+                }
+            }
+        }
+
+        Section(title = "Popüler Diziler", onSeeAll = { onGotoTab(3) }) {
+            if (series.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
+                EmptyState("Dizi bulunamadı")
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(series, key = { it.id }) { item ->
+                        VodPoster(
+                            item = item,
+                            baseUrl = profile.baseUrl,
+                            isSeries = true,
+                            posterWidth = 130,
+                            onClick = { onOpenVod(item.id, true) }
                         )
                     }
                 }
@@ -184,48 +242,6 @@ fun HomeDashboardScreen(
             }
         }
 
-        Section(title = "Filmler", onSeeAll = { onGotoTab(2) }) {
-            if (movies.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
-                EmptyState("Film bulunamadı")
-            } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(movies, key = { it.id }) { item ->
-                        VodPoster(
-                            item = item,
-                            baseUrl = profile.baseUrl,
-                            isSeries = false,
-                            posterWidth = 120,
-                            onClick = { onOpenVod(item.id, false) }
-                        )
-                    }
-                }
-            }
-        }
-
-        Section(title = "Diziler", onSeeAll = { onGotoTab(3) }) {
-            if (series.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
-                EmptyState("Dizi bulunamadı")
-            } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(series, key = { it.id }) { item ->
-                        VodPoster(
-                            item = item,
-                            baseUrl = profile.baseUrl,
-                            isSeries = true,
-                            posterWidth = 120,
-                            onClick = { onOpenVod(item.id, true) }
-                        )
-                    }
-                }
-            }
-        }
-
         if (favVods.isNotEmpty()) {
             Section(title = "Favori Filmler & Diziler", onSeeAll = { onGotoTab(4) }) {
                 LazyRow(
@@ -237,9 +253,101 @@ fun HomeDashboardScreen(
                             item = item,
                             baseUrl = profile.baseUrl,
                             isSeries = catalog.isSeriesItem(item),
-                            posterWidth = 120,
+                            posterWidth = 130,
                             onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroBanner(
+    items: List<VodItem>,
+    baseUrl: String,
+    onOpenVod: (Long, Boolean) -> Unit
+) {
+    val pagerState = rememberPagerState(pageCount = { items.size })
+
+    LaunchedEffect(pagerState) {
+        if (items.size > 1) {
+            while (true) {
+                delay(5000)
+                val next = (pagerState.currentPage + 1) % items.size
+                pagerState.animateScrollToPage(next)
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .height(340.dp),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val item = items[page]
+            val isSeries = item.isSeries || item.seriesRef.isNotBlank()
+            Box(modifier = Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = resolveUrl(item.poster, baseUrl),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
+                                startY = 0.35f * 340,
+                                endY = 340f
+                            )
+                        )
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        item.name,
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSeries) Color(0xFFE50914) else MaterialTheme.colorScheme.primary)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                if (isSeries) "DİZİ" else "FİLM",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        if (item.year.isNotBlank()) {
+                            Text(item.year, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Button(
+                        onClick = { onOpenVod(item.id, isSeries) },
+                        modifier = Modifier.width(170.dp)
+                    ) {
+                        Text("Detayları Gör")
                     }
                 }
             }
@@ -279,7 +387,7 @@ private fun Section(title: String, onSeeAll: (() -> Unit)?, content: @Composable
 private fun ChannelCard(channel: Channel, baseUrl: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
-            .width(140.dp)
+            .width(160.dp)
             .clickable(onClick = onClick)
     ) {
         Row(
@@ -309,7 +417,7 @@ private fun ContinueWatchingCard(
 ) {
     Box(
         modifier = Modifier
-            .width(120.dp)
+            .width(130.dp)
             .clickable(onClick = onClick)
     ) {
         Card {

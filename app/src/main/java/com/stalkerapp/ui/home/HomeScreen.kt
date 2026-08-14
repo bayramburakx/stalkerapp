@@ -64,38 +64,44 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = tab == 0,
                     onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    label = { Text("Ana Sayfa") }
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Ana Sayfa") },
+                    label = null
                 )
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.LiveTv, contentDescription = null) },
-                    label = { Text("Canlı TV") }
+                    icon = { Icon(Icons.Default.LiveTv, contentDescription = "Canlı TV") },
+                    label = null
                 )
                 NavigationBarItem(
                     selected = tab == 2,
                     onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.Movie, contentDescription = null) },
-                    label = { Text("Filmler") }
+                    icon = { Icon(Icons.Default.Movie, contentDescription = "Filmler") },
+                    label = null
                 )
                 NavigationBarItem(
                     selected = tab == 3,
                     onClick = { tab = 3 },
-                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-                    label = { Text("Diziler") }
+                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = "Diziler") },
+                    label = null
                 )
                 NavigationBarItem(
                     selected = tab == 4,
                     onClick = { tab = 4 },
-                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
-                    label = { Text("Favoriler") }
+                    icon = { Icon(Icons.Default.Star, contentDescription = "Favoriler") },
+                    label = null
                 )
                 NavigationBarItem(
                     selected = tab == 5,
                     onClick = { tab = 5 },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("Ayarlar") }
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Ayarlar") },
+                    label = null
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onOpenSearch,
+                    icon = { Icon(Icons.Default.Search, contentDescription = "Ara") },
+                    label = null
                 )
             }
         }

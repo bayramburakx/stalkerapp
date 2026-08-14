@@ -16,7 +16,7 @@ data class Portal(
 @Serializable
 data class Settings(
     val timezoneOffset: Int = 0,
-    val requestIntervalMs: Long = 700,
+    val requestIntervalMs: Long = 350,
     val cooldownMs: Long = 300_000L,
     val maxBufferMs: Int = 60_000
 )

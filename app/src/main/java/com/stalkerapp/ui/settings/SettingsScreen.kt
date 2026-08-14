@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,8 @@ fun SettingsScreen(
 
     var showDialog by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Portal?>(null) }
+    var showSwitch by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
@@ -116,6 +119,46 @@ fun SettingsScreen(
                     }
                     OutlinedButton(onClick = { vm.resetVodCatalog() }) {
                         Text("Kataloğu Sıfırla")
+                    }
+                }
+            }
+        }
+
+        // ---------- EPG ----------
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("EPG", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "EPG kaynağı: ${profile?.baseUrl ?: "—"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = showEpgTimes, onCheckedChange = { showEpgTimes = it })
+                    Text("EPG saatlerini yerel saate göre göster", modifier = Modifier.padding(start = 8.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                vm.repository.clearEpgCache()
+                                vm.showMessage("EPG önbelleği güncellendi")
+                            }
+                        },
+                        enabled = profile != null
+                    ) {
+                        Text("EPG'yi Güncelle")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            vm.repository.clearEpgCache()
+                            vm.showMessage("EPG önbelleği temizlendi")
+                        }
+                    ) {
+                        Text("EPG'yi Temizle")
                     }
                 }
             }
@@ -284,11 +327,30 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = showEpgTimes, onCheckedChange = { showEpgTimes = it })
-            Text("EPG saatlerini yerel saate göre göster", modifier = Modifier.padding(start = 8.dp))
+        // ---------- Account ----------
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Hesap", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Aktif profil: ${profile?.portal?.name ?: profile?.baseUrl ?: "—"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { showSwitch = true }) {
+                        Text("Profil Değiştir")
+                    }
+                    OutlinedButton(onClick = { editing = null; showDialog = true }) {
+                        Text("Profil Ekle")
+                    }
+                }
+            }
         }
+
+        Spacer(Modifier.height(8.dp))
     }
 
     if (showDialog) {
@@ -305,6 +367,50 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showSwitch) {
+        ProfileSwitchDialog(
+            portals = portals,
+            activeId = activeId,
+            onDismiss = { showSwitch = false },
+            onSwitch = { p ->
+                showSwitch = false
+                vm.launchSwitch(p) { onPortalsChanged() }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ProfileSwitchDialog(
+    portals: List<Portal>,
+    activeId: String?,
+    onDismiss: () -> Unit,
+    onSwitch: (Portal) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
+        title = { Text("Profil Değiştir") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (portals.isEmpty()) {
+                    Text("Kayıtlı profil yok.")
+                } else {
+                    portals.forEach { p ->
+                        val isActive = p.id == activeId
+                        OutlinedButton(
+                            onClick = { onSwitch(p) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isActive
+                        ) {
+                            Text(if (isActive) "● ${p.name.ifBlank { p.url }}" else p.name.ifBlank { p.url })
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable

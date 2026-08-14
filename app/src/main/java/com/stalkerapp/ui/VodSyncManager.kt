@@ -116,22 +116,27 @@ class VodSyncManager(
             baseItems.forEach { all[it.id] = it }
             val remaining = cats.filter { force || it.id !in doneCats }
 
-            // 1) Fast single pass (Tivimate-style: one huge per_page request).
+            // 1) Fast single pass (Tivimate-style: one huge per_page request, paged
+            // until the portal stops returning items). We trust it only when it
+            // actually retrieved a substantial number of items — the portal's
+            // reported `total_items` is often wrong, so it must not gate completion.
             var singleOk = false
             if (force || baseItems.isEmpty()) {
                 runCatching {
-                    val (items, total) = repository.fetchAllVod(profile, 100000)
+                    val (items, _) = repository.fetchAllVod(profile, 100000)
                     items.forEach { all[it.id] = stamp(it, seriesCatIds) }
-                    singleOk = total > 0 && items.size >= 200 && total <= items.size + 1000
+                    singleOk = items.size >= 5000
                     _progress.value = _progress.value.copy(
                         loadedCount = all.size,
                         doneCategories = cats.size,
                         totalCategories = cats.size,
                         allItems = all.values.toList()
                     )
-                    store.saveVodCatalog(portalId, all.values.toList(), cats)
-                    store.clearVodCatalogDoneCats(portalId)
-                    store.clearVodPartial(portalId)
+                    if (singleOk) {
+                        store.saveVodCatalog(portalId, all.values.toList(), cats)
+                        store.clearVodCatalogDoneCats(portalId)
+                        store.clearVodPartial(portalId)
+                    }
                 }
             }
 
