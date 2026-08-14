@@ -95,7 +95,7 @@ fun HomeScreen(
                     .height(62.dp)
                     .shadow(18.dp, glassShape)
                     .clip(glassShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),

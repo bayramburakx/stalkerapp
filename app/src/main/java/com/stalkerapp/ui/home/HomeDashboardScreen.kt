@@ -1,5 +1,6 @@
 package com.stalkerapp.ui.home
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,7 +55,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlin.math.abs
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
@@ -119,10 +119,12 @@ fun HomeDashboardScreen(
     val series = remember(catalog) { catalog.allItems.filter { catalog.isSeriesItem(it) }.take(20) }
     val featured = remember(catalog) { (series.take(6) + movies.take(6)).shuffled() }
 
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         if (featured.isNotEmpty()) {
             val catTitle = remember(catalog) {
@@ -132,8 +134,11 @@ fun HomeDashboardScreen(
                 items = featured,
                 baseUrl = profile.baseUrl,
                 catTitle = { id -> catTitle[id].orEmpty() },
-                onOpenVod = onOpenVod
+                onOpenVod = onOpenVod,
+                scrollState = scrollState
             )
+            // Hero'nun altına nefes payı: içerik hero'ya çok yapışık durmasın.
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         if (continueWatching.isNotEmpty()) {
@@ -275,7 +280,8 @@ private fun HeroBanner(
     items: List<VodItem>,
     baseUrl: String,
     catTitle: (Long) -> String,
-    onOpenVod: (Long, Boolean) -> Unit
+    onOpenVod: (Long, Boolean) -> Unit,
+    scrollState: ScrollState
 ) {
     // Hero: ekran yüksekliğinin yarısı kadar.
     val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp / 2f }
@@ -305,10 +311,10 @@ private fun HeroBanner(
         val genre = item.genres.trim().ifBlank { catTitle(item.categoryId) }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // Kaydırma sırasında görsel hafifçe yakınlaşır (parallax/zoom efekti):
-            // sayfa merkezden uzaklaştıkça 1.0 → 1.3 arası ölçeklenir.
-            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-            val zoom = 1f + (abs(pageOffset) * 0.15f).coerceAtMost(0.30f)
+            // Aşağı kaydırdıkça görsel hafifçe yakınlaşır (dikey parallax/zoom).
+            // Yatay kaydırmada (pager) bu efekt uygulanmaz — zoom yalnızca sayfa
+            // aşağı kaydırılırken görünür. graphicsLayer bloğu state okur, bu
+            // yüzden her karede tüm ekran yeniden çizilmez.
             AsyncImage(
                 model = resolveUrl(item.poster, baseUrl),
                 contentDescription = item.name,
@@ -316,6 +322,7 @@ private fun HeroBanner(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        val zoom = 1f + (scrollState.value / 450f).coerceAtMost(0.40f)
                         scaleX = zoom
                         scaleY = zoom
                     }
@@ -417,32 +424,28 @@ private fun Section(title: String, onSeeAll: (() -> Unit)?, content: @Composable
                 modifier = Modifier.weight(1f)
             )
             if (onSeeAll != null) {
-                // "Tümü": alt menüdeki cam pill ile aynı görünüm + sağ ok simgesi.
+                // "Tümü": alt menüdeki cam pill ile aynı görünüm, sadece ok simgesi.
                 val pillShape = RoundedCornerShape(50)
-                Row(
+                Box(
                     modifier = Modifier
+                        .size(34.dp)
                         .clip(pillShape)
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.70f))
                         .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), pillShape)
-                        .clickable { onSeeAll() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .clickable { onSeeAll() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "Tümü",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
+                        contentDescription = "Tümü",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
+        // Başlık ile kartlar arasında nefes payı: kartlar başlığa çok yapışmasın.
+        Spacer(modifier = Modifier.height(8.dp))
         content()
     }
 }
