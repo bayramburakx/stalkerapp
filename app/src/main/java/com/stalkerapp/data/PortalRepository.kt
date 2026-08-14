@@ -42,6 +42,10 @@ class PortalRepository(
     private val vodTotals = mutableMapOf<String, Int>()
     private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
     private val epgCache = mutableMapOf<Long, List<EpgProgram>>()
+    // Which query parameter filters VOD lists by category on this portal
+    // ("category" by default; some portals use "genre" or need the category
+    // number). Discovered by [probeVodCategoryParam].
+    @Volatile private var vodCategoryParam: String? = null
 
     private fun vodKey(categoryId: Long, search: String): String =
         "$categoryId|${search.trim().lowercase()}"
@@ -52,6 +56,9 @@ class PortalRepository(
     fun cooldownRemainingSeconds(): Long = client.cooldownRemainingSeconds()
 
     fun clearCooldown() = client.clearCooldown()
+
+    /** Lets the sync clear the adaptive rate-limit backoff when it finishes. */
+    fun resetAdaptiveInterval() = client.resetAdaptiveInterval()
 
     fun cachedProfile(): Profile? {
         val portal = store.activePortal() ?: return null
@@ -304,7 +311,7 @@ class PortalRepository(
         var dupStreak = 0
         while (guard < 120) {
             guard++
-            val (list, t) = fetchVodPage(profile, 0L, page, perPage)
+            val (list, t) = fetchVodPage(profile, page, perPage, emptyMap())
             if (t > 0) total = t
             if (list.isEmpty()) break
             var added = 0
@@ -330,7 +337,12 @@ class PortalRepository(
     }
 
     /** Pages a single VOD category fully and returns its items (category stamped). */
-    suspend fun fetchVodCategory(profile: Profile, catId: Long, perPage: Int = 5000): List<VodItem> {
+    suspend fun fetchVodCategory(
+        profile: Profile,
+        catId: Long,
+        perPage: Int = 5000,
+        categoryParam: String = "category"
+    ): List<VodItem> {
         val out = mutableListOf<VodItem>()
         val seen = HashSet<Long>()
         var page = 1
@@ -338,7 +350,7 @@ class PortalRepository(
         var dupStreak = 0
         while (guard < 4000) {
             guard++
-            val (list, total) = fetchVodPage(profile, catId, page, perPage)
+            val (list, _) = fetchVodPage(profile, page, perPage, mapOf(categoryParam to catId.toString()))
             if (list.isEmpty()) {
                 if (page > 1) break
                 page++
@@ -363,6 +375,80 @@ class PortalRepository(
             page++
         }
         return out
+    }
+
+    /**
+     * Pages VOD search results for [search] (server-side `search` param). Used as
+     * a last-resort enumeration strategy on portals whose plain list paging is
+     * capped or broken: iterating letters/digits usually exposes the whole
+     * library. Items keep whatever cat_id the portal reports.
+     */
+    suspend fun fetchVodSearch(profile: Profile, search: String, perPage: Int = 5000): List<VodItem> {
+        val out = mutableListOf<VodItem>()
+        val seen = HashSet<Long>()
+        var page = 1
+        var guard = 0
+        var dupStreak = 0
+        while (guard < 200) {
+            guard++
+            val (list, _) = fetchVodPage(profile, page, perPage, mapOf("search" to search))
+            if (list.isEmpty()) {
+                if (page > 1) break
+                page++
+                continue
+            }
+            var added = 0
+            list.forEach { item ->
+                if (seen.add(item.id)) {
+                    out += item
+                    added++
+                }
+            }
+            if (added == 0) {
+                if (++dupStreak >= 2) break
+                page++
+                continue
+            }
+            dupStreak = 0
+            if (out.size > 300_000) break
+            page++
+        }
+        return out
+    }
+
+    /**
+     * Figures out which parameter this portal uses to filter VOD lists by
+     * category ("category" by default, but some use "genre", and a few need the
+     * category *number* instead of its id). The winner is cached per portal.
+     */
+    suspend fun probeVodCategoryParam(profile: Profile): String {
+        vodCategoryParam?.let { return it }
+        val cats = runCatching { loadVodCategories(profile) }.getOrDefault(emptyList())
+        val probeCat = cats.firstOrNull()
+        if (probeCat == null) {
+            vodCategoryParam = "category"
+            return "category"
+        }
+        // Items already visible via the "all" query, so we can tell whether the
+        // category filter actually returns DIFFERENT items (i.e. it works).
+        val allIds = runCatching { fetchAllVod(profile, 500).first }
+            .getOrDefault(emptyList()).map { it.id }.toHashSet()
+        val candidates = listOf(
+            "category" to probeCat.id.toString(),
+            "category" to probeCat.number.toString(),
+            "genre" to probeCat.id.toString()
+        )
+        for ((param, value) in candidates) {
+            val items = runCatching {
+                fetchVodPage(profile, 1, 500, mapOf(param to value)).first
+            }.getOrDefault(emptyList())
+            if (items.size > 2 && items.any { it.id !in allIds }) {
+                vodCategoryParam = param
+                return param
+            }
+        }
+        vodCategoryParam = "category"
+        return "category"
     }
 
     // ---------- VOD ----------
@@ -432,6 +518,7 @@ class PortalRepository(
         vodTotals.clear()
         vodItemsById.clear()
         epgCache.clear()
+        vodCategoryParam = null
     }
 
     /** Clears the EPG cache so programs are re-fetched from the portal on next view. */
@@ -493,7 +580,12 @@ class PortalRepository(
             var guard = 0
             while (guard < 5000) {
                 guard++
-                val (list, total) = fetchVodPage(profile, catId, page, pp)
+                val (list, total) = fetchVodPage(
+                    profile,
+                    page,
+                    pp,
+                    if (catId != 0L) mapOf("category" to catId.toString()) else emptyMap()
+                )
                 if (unitTotal == 0 && total > 0) {
                     unitTotal = total
                     totalPagesEst += (total / pp) + 1
@@ -544,59 +636,71 @@ class PortalRepository(
         return all.values.toList()
     }
 
+    private fun vodListBody(params: Map<String, String>, page: Int, perPage: Int): Map<String, String> = buildMap {
+        put("page", page.toString())
+        params.forEach { (k, v) -> put(k, v) }
+        if (perPage > 0) put("per_page", perPage.toString())
+    }
+
+    /**
+     * One get_ordered_list page. Tries the requested `per_page` first, then
+     * smaller sizes, and ALWAYS falls back to the original format (no per_page)
+     * — the most compatible option, even if the per_page variants failed. A
+     * global cooldown is waited out at most once per variant so a rate-limited
+     * portal doesn't silently kill the enumeration.
+     */
     private suspend fun fetchVodPage(
         profile: Profile,
-        categoryId: Long,
         page: Int,
-        perPage: Int
+        perPage: Int,
+        params: Map<String, String>
     ): Pair<List<VodItem>, Int> {
-        // Some portals reject (or ignore) large `per_page` values, so we try the
-        // requested size first and fall back to progressively smaller sizes,
-        // ending with the portal default (no per_page param at all). A cooldown
-        // is global: we wait it out ONCE and retry; if the portal is still
-        // blocking, we give up on this page quickly instead of burning many
-        // minutes on retries that are guaranteed to fail.
+        suspend fun requestWith(pp: Int): JsonElement = client.request(
+            profile.baseUrl,
+            "portal.php?type=vod&action=get_ordered_list",
+            "POST",
+            tokenFor(profile),
+            vodListBody(params, page, pp)
+        )
+
         val perPageOptions = buildList {
             add(perPage)
             if (perPage > 2000) add(2000)
             if (perPage > 500) add(500)
             if (perPage > 100) add(100)
-            add(0) // portal default
         }.distinct()
-        var waitedForCooldown = false
+
+        var waitedOnce = false
         for (pp in perPageOptions) {
-            var attempt = 0
-            while (attempt < 2) {
-                attempt++
-                try {
-                    val resp = client.request(
-                        profile.baseUrl,
-                        "portal.php?type=vod&action=get_ordered_list",
-                        "POST",
-                        tokenFor(profile),
-                        buildMap {
-                            put("page", page.toString())
-                            // Omit the category param for the "all" query (catId <= 0).
-                            if (categoryId > 0) put("category", categoryId.toString())
-                            if (pp > 0) put("per_page", pp.toString())
-                        }
-                    )
-                    return parseVodList(resp) to parseTotal(resp)
-                } catch (e: StalkerException) {
-                    if (e.isCooldown) {
-                        if (waitedForCooldown) {
-                            // Portal still blocking; don't keep hammering it.
-                            return Pair(emptyList<VodItem>(), 0)
-                        }
-                        waitedForCooldown = true
-                        delay(client.cooldownRemainingMs() + 1000)
-                        continue
-                    }
-                    break // non-cooldown failure: try the next (smaller) page size
+            try {
+                val resp = requestWith(pp)
+                return parseVodList(resp) to parseTotal(resp)
+            } catch (e: StalkerException) {
+                if (e.isCooldown && !waitedOnce) {
+                    waitedOnce = true
+                    delay(client.cooldownRemainingMs() + 1000)
+                    continue // retry (next smaller size) after the cooldown clears
                 }
+                // non-cooldown failure, or already waited: try the next size
             }
         }
-        return Pair(emptyList<VodItem>(), 0)
+
+        // Original format (no per_page) — try it even if per_page variants failed.
+        try {
+            val resp = requestWith(0)
+            return parseVodList(resp) to parseTotal(resp)
+        } catch (e: StalkerException) {
+            if (e.isCooldown) {
+                delay(client.cooldownRemainingMs() + 1000)
+                try {
+                    val resp = requestWith(0)
+                    return parseVodList(resp) to parseTotal(resp)
+                } catch (_: StalkerException) {
+                    return Pair(emptyList<VodItem>(), 0)
+                }
+            }
+            return Pair(emptyList<VodItem>(), 0)
+        }
     }
 
     suspend fun vodById(profile: Profile, id: Long): VodItem? {

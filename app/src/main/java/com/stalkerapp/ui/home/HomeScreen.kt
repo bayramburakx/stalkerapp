@@ -1,7 +1,6 @@
 package com.stalkerapp.ui.home
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -34,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -73,39 +73,49 @@ fun HomeScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            // No full-width bar behind the nav: each item is its own floating pill,
-            // only the (selected) pill keeps a background.
-            Row(
+            // Tek pill-shaped kapsayıcı: arka plan tamamen şeffaf, simgeler ayrı
+            // ayrı pill değil hep birlikte tek pill içinde. Sadece seçili öğenin
+            // kendi vurgu arka planı kalır.
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                navItems.forEachIndexed { index, item ->
-                    val selected = index == tab && item.onClick == null
-                    Surface(
-                        shape = RoundedCornerShape(28.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.45f),
-                        shadowElevation = if (selected) 8.dp else 0.dp,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(28.dp))
-                            .clickable { if (item.onClick != null) item.onClick() else tab = index }
+                Surface(
+                    shape = RoundedCornerShape(30.dp),
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.fillMaxWidth().height(62.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.label,
-                                tint = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(24.dp)
-                            )
+                        navItems.forEachIndexed { index, item ->
+                            val selected = index == tab && item.onClick == null
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(30.dp))
+                                    .clickable { if (item.onClick != null) item.onClick() else tab = index },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                    modifier = Modifier.padding(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = item.label,
+                                        tint = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(9.dp).size(22.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

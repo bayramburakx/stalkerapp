@@ -177,6 +177,7 @@ data class VodCatalogState(
     val loadedCount: Int = 0,
     val allItems: List<VodItem> = emptyList(),
     val categories: List<Genre> = emptyList(),
+    val portalTotal: Int = 0,
     val lastSync: Long = 0
 ) {
     val byId: Map<Long, VodItem> get() = allItems.associateBy { it.id }

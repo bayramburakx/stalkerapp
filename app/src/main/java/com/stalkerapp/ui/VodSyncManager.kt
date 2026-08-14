@@ -38,6 +38,12 @@ class VodSyncManager(
     private val checkpointLock = Mutex()
     private val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
     private var lastCheckpointTs = 0L
+    // Last-resort enumeration strategy: single letters/digits via the portal's
+    // `search` param. Many portals cap plain list paging but paginate search
+    // results fine, which exposes the whole library.
+    private val searchTokens: List<String> =
+        ('a'..'z').map { it.toString() } + ('0'..'9').map { it.toString() } +
+            listOf("ç", "ğ", "ı", "ö", "ş", "ü")
 
     fun isSeriesItem(item: VodItem): Boolean {
         if (item.isSeries || item.seriesRef.isNotBlank()) return true
@@ -130,10 +136,12 @@ class VodSyncManager(
             // actually retrieved a substantial number of items (and got close to
             // the portal-reported total when one is available) — the portal's
             // `total_items` is often wrong, so it must not gate completion.
+            var portalTotal = 0
             var singleOk = false
             if (force || baseItems.isEmpty()) {
                 runCatching {
                     val (items, allTotal) = repository.fetchAllVod(profile, 100000)
+                    portalTotal = allTotal
                     items.forEach { all[it.id] = stamp(it, seriesCatIds) }
                     singleOk = items.size >= 5000 &&
                         if (allTotal > 0) items.size >= allTotal * 0.95
@@ -142,7 +150,8 @@ class VodSyncManager(
                         loadedCount = all.size,
                         doneCategories = cats.size,
                         totalCategories = cats.size,
-                        allItems = all.values.toList()
+                        allItems = all.values.toList(),
+                        portalTotal = portalTotal
                     )
                     if (singleOk) {
                         store.saveVodCatalog(portalId, all.values.toList(), cats)
@@ -152,32 +161,70 @@ class VodSyncManager(
                 }
             }
 
-            // 2) Parallel per-category fetch for any gaps (Tivimate fetches per
-            // category). Modest concurrency: too many parallel requests can trip
-            // the portal's rate limiter and stall the whole sync on cooldowns.
             if (!singleOk) {
-                val sem = Semaphore(8)
-                coroutineScope {
-                    remaining.forEach { cat ->
-                        launch {
-                            sem.acquire()
-                            try {
-                                val items = repository.fetchVodCategory(profile, cat.id, 5000)
-                                items.forEach { all[it.id] = stamp(it, seriesCatIds) }
-                                val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
-                                    store.saveVodCatalogDoneCats(portalId, it.toList())
+                val saneTotal = if (portalTotal in 1..300_000) portalTotal else 0
+                val target = if (saneTotal > 0) (saneTotal * 0.98).toInt() else Int.MAX_VALUE
+                val complete = all.size >= target || (saneTotal <= 0 && all.size >= 10000)
+
+                // 2) Parallel per-category fetch for any gaps (Tivimate fetches per
+                // category), using the filter parameter this portal actually accepts.
+                // Modest concurrency: too many parallel requests can trip the portal's
+                // rate limiter and stall the whole sync on cooldowns.
+                if (!complete) {
+                    val categoryParam = repository.probeVodCategoryParam(profile)
+                    val sem = Semaphore(8)
+                    coroutineScope {
+                        remaining.forEach { cat ->
+                            launch {
+                                sem.acquire()
+                                try {
+                                    val items = repository.fetchVodCategory(profile, cat.id, 5000, categoryParam)
+                                    items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                                    val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
+                                        store.saveVodCatalogDoneCats(portalId, it.toList())
+                                    }
+                                    checkpoint(portalId, all, cats, doneNow)
+                                    mutex.withLock {
+                                        _progress.value = _progress.value.copy(
+                                            doneCategories = doneNow.size,
+                                            loadedCount = all.size,
+                                            allItems = all.values.toList(),
+                                            portalTotal = portalTotal
+                                        )
+                                    }
+                                } catch (_: Exception) {
+                                } finally {
+                                    sem.release()
                                 }
-                                checkpoint(portalId, all, cats, doneNow)
-                                mutex.withLock {
-                                    _progress.value = _progress.value.copy(
-                                        doneCategories = doneNow.size,
-                                        loadedCount = all.size,
-                                        allItems = all.values.toList()
-                                    )
+                            }
+                        }
+                    }
+                }
+
+                // 3) Letter/digit search enumeration as a last resort — catches
+                // portals whose plain list paging is capped or whose category
+                // filter is ignored (both return the same tiny subset forever).
+                val target3 = if (saneTotal > 0) target else Int.MAX_VALUE
+                if (all.size < target3 && (saneTotal > 0 || all.size < 5000)) {
+                    val sem = Semaphore(6)
+                    coroutineScope {
+                        searchTokens.forEach { token ->
+                            launch {
+                                sem.acquire()
+                                try {
+                                    val items = repository.fetchVodSearch(profile, token, 5000)
+                                    items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                                    mutex.withLock {
+                                        _progress.value = _progress.value.copy(
+                                            loadedCount = all.size,
+                                            allItems = all.values.toList(),
+                                            portalTotal = portalTotal
+                                        )
+                                    }
+                                } catch (_: Exception) {
+                                } finally {
+                                    sem.release()
                                 }
-                            } catch (_: Exception) {
-                            } finally {
-                                sem.release()
                             }
                         }
                     }
@@ -195,12 +242,15 @@ class VodSyncManager(
                 loadedCount = all.size,
                 allItems = all.values.toList(),
                 categories = cats,
+                portalTotal = portalTotal,
                 lastSync = System.currentTimeMillis()
             )
         } catch (e: Exception) {
             if (_progress.value.status != VodCatalogStatus.Ready) {
                 _progress.value = _progress.value.copy(status = VodCatalogStatus.Error)
             }
+        } finally {
+            repository.resetAdaptiveInterval()
         }
     }
 }

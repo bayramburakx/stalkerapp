@@ -81,8 +81,9 @@ fun SettingsScreen(
                     VodCatalogStatus.Syncing -> {
                         val ratio = if (catalog.totalCategories > 0) catalog.doneCategories.toFloat() / catalog.totalCategories else 0f
                         LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth())
+                        val portalPart = if (catalog.portalTotal > 0) " · portal toplamı: ${catalog.portalTotal}" else ""
                         Text(
-                            "${catalog.loadedCount} içerik yüklendi · ${catalog.doneCategories}/${catalog.totalCategories} kategori",
+                            "${catalog.loadedCount} içerik yüklendi$portalPart · ${catalog.doneCategories}/${catalog.totalCategories} kategori",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
@@ -97,6 +98,13 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        if (catalog.portalTotal > 0 && catalog.loadedCount < catalog.portalTotal * 0.95) {
+                            Text(
+                                "⚠ Portaldan eksik çekildi (${catalog.loadedCount} / ${catalog.portalTotal}). Şimdi Senkronize Et'e basın.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                         if (catalog.lastSync > 0) {
                             val ago = (System.currentTimeMillis() - catalog.lastSync) / 1000
                             Text(

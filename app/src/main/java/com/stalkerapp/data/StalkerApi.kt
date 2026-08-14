@@ -37,6 +37,10 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
     @Volatile private var lastRequestAt = 0L
     @Volatile private var cooldownUntil = 0L
     @Volatile private var deviceMac: String = ""
+    // Raised after each cooldown so the client stays under the portal's real
+    // rate limit instead of hammering it again (default interval is often too
+    // fast for strict portals). Reset by [clearCooldown] or [resetAdaptiveInterval].
+    @Volatile private var adaptiveIntervalMs = 0L
 
     fun setDevice(mac: String) {
         deviceMac = mac
@@ -49,15 +53,24 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
 
     fun triggerCooldown(durationMs: Long = settingsProvider().cooldownMs) {
         cooldownUntil = System.currentTimeMillis() + durationMs
-        Log.w("StalkerClient", "Cooldown triggered for ${durationMs / 1000}s")
+        val base = settingsProvider().requestIntervalMs.coerceAtLeast(0)
+        adaptiveIntervalMs = if (adaptiveIntervalMs == 0L) (base * 2).coerceAtLeast(250)
+        else (adaptiveIntervalMs * 2).coerceAtMost(1500)
+        Log.w("StalkerClient", "Cooldown triggered for ${durationMs / 1000}s (interval now ${adaptiveIntervalMs}ms)")
     }
 
     fun clearCooldown() {
         cooldownUntil = 0
+        adaptiveIntervalMs = 0
+    }
+
+    /** Resets the adaptive interval after a sync finishes so browsing isn't slowed. */
+    fun resetAdaptiveInterval() {
+        adaptiveIntervalMs = 0
     }
 
     private suspend fun throttle() {
-        val interval = settingsProvider().requestIntervalMs.coerceAtLeast(0)
+        val interval = maxOf(settingsProvider().requestIntervalMs.coerceAtLeast(0), adaptiveIntervalMs)
         throttleMutex.withLock {
             val now = System.currentTimeMillis()
             val wait = interval - (now - lastRequestAt)
