@@ -121,7 +121,7 @@ fun PlayerScreen(navController: NavHostController) {
     val context = LocalContext.current
     val activity = context as? Activity
     val app = context.applicationContext as StalkerApp
-    val vm: MainViewModel = viewModel { MainViewModel(app) }
+    val vm: MainViewModel = rememberMainViewModel(app)
     val profile = vm.repository.cachedProfile()
 
     var isPlaying by remember { mutableStateOf(false) }
@@ -160,7 +160,10 @@ fun PlayerScreen(navController: NavHostController) {
     var brightness by remember { mutableStateOf(if (initBrightness < 0f) 0.5f else initBrightness) }
     var gestureMode by remember { mutableStateOf<GestureMode?>(null) }
     var gestureStartPos by remember { mutableStateOf(0L) }
-    var gestureAccumDx by remember { mutableStateOf(0f) }
+    var gestureStartX by remember { mutableStateOf(0f) }
+    var gestureStartY by remember { mutableStateOf(0f) }
+    var gestureStartVolume by remember { mutableStateOf(0) }
+    var gestureStartBrightness by remember { mutableStateOf(0.5f) }
     var gestureText by remember { mutableStateOf<String?>(null) }
 
     val playerView = remember {
@@ -292,7 +295,7 @@ fun PlayerScreen(navController: NavHostController) {
                 detectTapGestures(
                     onTap = { if (!locked) overlayVisible = !overlayVisible },
                     onDoubleTap = { offset ->
-                        if (!locked) {
+                        if (!locked && !isLive) {
                             when {
                                 offset.x < size.width / 3 -> PlaybackManager.seekBack(10_000L)
                                 offset.x > size.width * 2 / 3 -> PlaybackManager.seekForward(10_000L)
@@ -307,7 +310,6 @@ fun PlayerScreen(navController: NavHostController) {
                     onDragStart = {
                         gestureMode = null
                         gestureStartPos = PlaybackManager.player?.currentPosition ?: 0L
-                        gestureAccumDx = 0f
                     },
                     onDrag = { change, dragAmount ->
                         if (locked) return@detectDragGestures
@@ -315,24 +317,27 @@ fun PlayerScreen(navController: NavHostController) {
                         val p = PlaybackManager.player ?: return@detectDragGestures
                         val dur = if (p.duration > 0) p.duration else 0L
                         if (gestureMode == null) {
-                            gestureMode = if (abs(dragAmount.x) > abs(dragAmount.y)) {
+                            gestureMode = if (!isLive && abs(dragAmount.x) > abs(dragAmount.y)) {
                                 GestureMode.SEEK
                             } else if (change.position.x < size.width / 2) {
                                 GestureMode.BRIGHTNESS
                             } else {
                                 GestureMode.VOLUME
                             }
+                            gestureStartX = change.position.x
+                            gestureStartY = change.position.y
+                            gestureStartVolume = volume
+                            gestureStartBrightness = brightness
                         }
                         when (gestureMode) {
                             GestureMode.SEEK -> {
                                 seeking = true
-                                gestureAccumDx += dragAmount.x
-                                val deltaMs = ((gestureAccumDx / size.width) * dur).toLong()
+                                val deltaMs = (((change.position.x - gestureStartX) / size.width) * dur).toLong()
                                 position = (gestureStartPos + deltaMs).coerceIn(0L, dur)
                                 gestureText = "${formatMs(position)} / ${formatMs(dur)}"
                             }
                             GestureMode.BRIGHTNESS -> {
-                                val newB = (brightness - dragAmount.y / size.height)
+                                val newB = (gestureStartBrightness - ((change.position.y - gestureStartY) / size.height))
                                     .coerceIn(0.05f, 1f)
                                 brightness = newB
                                 activity?.let { act ->
@@ -343,7 +348,7 @@ fun PlayerScreen(navController: NavHostController) {
                                 gestureText = "Parlaklık %${(newB * 100).toInt()}"
                             }
                             GestureMode.VOLUME -> {
-                                val newV = (volume - (dragAmount.y / size.height * audioMax).toInt())
+                                val newV = (gestureStartVolume - (((change.position.y - gestureStartY) / size.height) * audioMax).toInt())
                                     .coerceIn(0, audioMax)
                                 volume = newV
                                 audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)

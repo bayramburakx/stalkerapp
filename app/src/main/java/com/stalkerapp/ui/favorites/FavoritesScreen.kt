@@ -32,6 +32,7 @@ import com.stalkerapp.data.Profile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.vod.VodPoster
@@ -52,7 +53,7 @@ fun FavoritesScreen(
     }
 
     val app = LocalContext.current.applicationContext as StalkerApp
-    val vm: MainViewModel = viewModel { MainViewModel(app) }
+    val vm: MainViewModel = rememberMainViewModel(app)
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()

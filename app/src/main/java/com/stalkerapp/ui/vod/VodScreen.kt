@@ -52,6 +52,7 @@ import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
+import com.stalkerapp.ui.rememberMainViewModel
 
 @Composable
 fun VodScreen(
@@ -68,7 +69,7 @@ fun VodScreen(
     }
 
     val app = LocalContext.current.applicationContext as StalkerApp
-    val vm: MainViewModel = viewModel { MainViewModel(app) }
+    val vm: MainViewModel = rememberMainViewModel(app)
 
     var categories by remember { mutableStateOf<List<Genre>?>(null) }
     var items by remember { mutableStateOf<List<VodItem>?>(null) }
@@ -81,13 +82,35 @@ fun VodScreen(
     var query by remember { mutableStateOf("") }
     val gridState = rememberLazyGridState()
 
+    val seriesCatIds = remember(categories) {
+        categories.orEmpty().filter { it.title.contains("dizi", ignoreCase = true) }.map { it.id }.toSet()
+    }
+
+    suspend fun loadPage(page: Int, search: String): List<VodItem> {
+        return if (filterIsSeries == true) {
+            if (selectedCategory > 0L) {
+                vm.repository.loadVodList(profile, selectedCategory, page, search)
+            } else {
+                seriesCatIds.flatMap { catId ->
+                    runCatching { vm.repository.loadVodList(profile, catId, page, search) }
+                        .getOrDefault(emptyList())
+                }.distinctBy { it.id }
+            }
+        } else {
+            val cat = if (search.isNotBlank()) 0L else selectedCategory
+            vm.repository.loadVodList(profile, cat, page, search)
+        }
+    }
+
+    fun hasMoreFromTotal(newItems: List<VodItem>): Boolean {
+        if (filterIsSeries == true && selectedCategory == 0L) return newItems.isNotEmpty()
+        val cat = if (query.isNotBlank()) 0L else selectedCategory
+        return newItems.size < vm.repository.vodTotal(profile, cat, query.trim())
+    }
+
     LaunchedEffect(Unit) {
         try {
             categories = vm.repository.loadVodCategories(profile)
-            if (filterIsSeries == true && selectedCategory == 0L) {
-                categories?.firstOrNull { it.title.contains("dizi", ignoreCase = true) }
-                    ?.let { selectedCategory = it.id }
-            }
         } catch (e: Exception) {
             error = e.message
             categories = emptyList()
@@ -102,10 +125,8 @@ fun VodScreen(
         loadingMore = false
         if (query.isNotBlank()) kotlinx.coroutines.delay(400)
         try {
-            val searchCat = if (query.isNotBlank()) 0L else selectedCategory
-            items = vm.repository.loadVodList(profile, searchCat, 1, query.trim())
-            val total = vm.repository.vodTotal(profile, searchCat, query.trim())
-            hasMore = (items?.size ?: 0) < total
+            items = loadPage(1, query.trim())
+            hasMore = hasMoreFromTotal(items.orEmpty())
         } catch (e: Exception) {
             error = e.message
         } finally {
@@ -122,12 +143,15 @@ fun VodScreen(
                     loadingMore = true
                     try {
                         page += 1
-                        val searchCat = if (query.isNotBlank()) 0L else selectedCategory
-                        val more = vm.repository.loadVodList(profile, searchCat, page, query.trim())
-                        val merged = (items ?: emptyList()) + more
-                        items = merged
-                        val totalCount = vm.repository.vodTotal(profile, searchCat, query.trim())
-                        hasMore = merged.size < totalCount
+                        val more = loadPage(page, query.trim())
+                        val existingIds = items.orEmpty().map { it.id }.toSet()
+                        val newOnes = more.filter { it.id !in existingIds }
+                        items = items.orEmpty() + newOnes
+                        if (newOnes.isEmpty()) {
+                            hasMore = false
+                        } else {
+                            hasMore = hasMoreFromTotal(items.orEmpty())
+                        }
                     } catch (e: Exception) {
                         page -= 1
                         error = e.message
@@ -161,14 +185,12 @@ fun VodScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (filterIsSeries != true) {
-                    item {
-                        FilterChip(
-                            selected = selectedCategory == 0L && query.isBlank(),
-                            onClick = { selectedCategory = 0L },
-                            label = { Text("Tümü") }
-                        )
-                    }
+                item {
+                    FilterChip(
+                        selected = selectedCategory == 0L && query.isBlank(),
+                        onClick = { selectedCategory = 0L },
+                        label = { Text("Tümü") }
+                    )
                 }
                 items(shownCats) { c ->
                     FilterChip(
@@ -185,17 +207,13 @@ fun VodScreen(
             error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
             items.orEmpty().isEmpty() -> EmptyState("İçerik bulunamadı")
             else -> {
-                val seriesCatIds = categories.orEmpty()
-                    .filter { it.title.contains("dizi", ignoreCase = true) }
-                    .map { it.id }
-                    .toSet()
                 val isSeriesItem: (VodItem) -> Boolean = { it ->
                     it.isSeries || it.seriesData.isNotBlank() || it.selectedSeason.isNotBlank() || seriesCatIds.contains(selectedCategory)
                 }
-                val typeFiltered = when (filterIsSeries) {
-                    true -> items.orEmpty().filter(isSeriesItem)
-                    false -> items.orEmpty().filter { !isSeriesItem(it) }
-                    else -> items.orEmpty()
+                val typeFiltered = if (filterIsSeries == true) {
+                    items.orEmpty()
+                } else {
+                    items.orEmpty().filter { !isSeriesItem(it) }
                 }
                 val filtered = typeFiltered.let { list ->
                     if (query.isBlank()) list

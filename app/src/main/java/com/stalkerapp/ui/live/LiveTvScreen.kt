@@ -37,6 +37,7 @@ import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
@@ -57,7 +58,7 @@ fun LiveTvScreen(
     }
 
     val app = LocalContext.current.applicationContext as StalkerApp
-    val vm: MainViewModel = viewModel { MainViewModel(app) }
+    val vm: MainViewModel = rememberMainViewModel(app)
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 

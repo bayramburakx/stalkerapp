@@ -1,8 +1,12 @@
 package com.stalkerapp.ui
 
 import android.app.Application
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Portal
@@ -101,3 +105,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _statusMessage.value = msg
     }
 }
+
+@Composable
+fun rememberMainViewModel(app: StalkerApp): MainViewModel =
+    viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity) {
+        MainViewModel(app)
+    }

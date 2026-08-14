@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.favorites.FavoritesScreen
 import com.stalkerapp.ui.live.LiveTvScreen
 import com.stalkerapp.ui.settings.SettingsScreen
@@ -39,7 +40,7 @@ fun HomeScreen(
     onOpenSearch: () -> Unit = {}
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
-    val vm: MainViewModel = viewModel { MainViewModel(app) }
+    val vm: MainViewModel = rememberMainViewModel(app)
     val profile = vm.repository.cachedProfile()
 
     var tab by remember { mutableIntStateOf(0) }

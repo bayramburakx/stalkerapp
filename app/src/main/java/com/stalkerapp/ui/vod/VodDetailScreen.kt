@@ -54,6 +54,7 @@ import com.stalkerapp.data.Season
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
@@ -68,7 +69,7 @@ fun VodDetailScreen(
     onOpenPlayer: () -> Unit
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
-    val vm: MainViewModel = viewModel { MainViewModel(app) }
+    val vm: MainViewModel = rememberMainViewModel(app)
     val profile = vm.repository.cachedProfile()
     val scope = rememberCoroutineScope()
 
