@@ -185,7 +185,7 @@ fun SearchScreen(
                                 baseUrl = profile?.baseUrl.orEmpty(),
                                 isSeries = isSeries,
                                 onClick = { onOpenVod(item.id, isSeries) },
-                                width = 120
+                                posterWidth = 120
                             )
                         }
                     }

@@ -112,7 +112,7 @@ fun FavoritesScreen(
                                 item = item,
                                 baseUrl = profile.baseUrl,
                                 onClick = { onOpenVod(item.id, item.isSeries) },
-                                width = 120
+                                posterWidth = 120
                             )
                         }
                     }

@@ -142,14 +142,14 @@ class Store(private val context: Context) {
     fun saveVodCatalog(portalId: String, items: List<VodItem>, categories: List<Genre>) {
         runCatching {
             val file = File(context.filesDir, "vod_catalog_$portalId.json")
-            file.writeText(json.encodeToString(VodCatalogFile(items, categories, System.currentTimeMillis())))
+            file.writeText(json.encodeToString(VodCatalogFile.serializer(), VodCatalogFile(items, categories, System.currentTimeMillis())))
         }
     }
 
     fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? = runCatching {
         val file = File(context.filesDir, "vod_catalog_$portalId.json")
         if (!file.exists()) return@runCatching null
-        val data = json.decodeFromString<VodCatalogFile>(file.readText())
+        val data = json.decodeFromString(VodCatalogFile.serializer(), file.readText())
         Triple(data.items, data.categories, data.ts)
     }.getOrNull()
 
@@ -191,7 +191,7 @@ class Store(private val context: Context) {
 }
 
 @kotlinx.serialization.Serializable
-private data class VodCatalogFile(
+internal data class VodCatalogFile(
     val items: List<VodItem>,
     val categories: List<Genre>,
     val ts: Long
