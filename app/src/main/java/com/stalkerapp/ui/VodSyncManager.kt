@@ -95,7 +95,15 @@ class VodSyncManager(
             store.loadVodCatalogDoneCats(portalId) + (partial?.doneCatIds ?: emptyList())
         ).toMutableSet()
         var cats = if (cached != null && cached.second.isNotEmpty()) cached.second
-        else runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
+        else {
+            var loaded: List<Genre> = emptyList()
+            repeat(3) {
+                if (loaded.isEmpty()) {
+                    loaded = runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
+                }
+            }
+            loaded
+        }
         if (force) {
             store.clearVodCatalogDoneCats(portalId)
             store.clearVodPartial(portalId)
@@ -119,14 +127,17 @@ class VodSyncManager(
 
             // 1) Fast single pass (Tivimate-style: one huge per_page request, paged
             // until the portal stops returning items). We trust it only when it
-            // actually retrieved a substantial number of items — the portal's
-            // reported `total_items` is often wrong, so it must not gate completion.
+            // actually retrieved a substantial number of items (and got close to
+            // the portal-reported total when one is available) — the portal's
+            // `total_items` is often wrong, so it must not gate completion.
             var singleOk = false
             if (force || baseItems.isEmpty()) {
                 runCatching {
-                    val (items, _) = repository.fetchAllVod(profile, 100000)
+                    val (items, allTotal) = repository.fetchAllVod(profile, 100000)
                     items.forEach { all[it.id] = stamp(it, seriesCatIds) }
-                    singleOk = items.size >= 5000
+                    singleOk = items.size >= 5000 &&
+                        if (allTotal > 0) items.size >= allTotal * 0.95
+                        else items.size >= 10000
                     _progress.value = _progress.value.copy(
                         loadedCount = all.size,
                         doneCategories = cats.size,
@@ -141,9 +152,11 @@ class VodSyncManager(
                 }
             }
 
-            // 2) Parallel per-category fetch for any gaps (Tivimate fetches per category).
+            // 2) Parallel per-category fetch for any gaps (Tivimate fetches per
+            // category). Modest concurrency: too many parallel requests can trip
+            // the portal's rate limiter and stall the whole sync on cooldowns.
             if (!singleOk) {
-                val sem = Semaphore(16)
+                val sem = Semaphore(8)
                 coroutineScope {
                     remaining.forEach { cat ->
                         launch {

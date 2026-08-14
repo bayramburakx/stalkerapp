@@ -37,7 +37,9 @@ class StalkerApp : Application() {
         val cached = store.loadVodCatalog(portalId)
         val doneCats = store.loadVodCatalogDoneCats(portalId)
         val partial = store.loadVodPartial(portalId)
-        return cached == null || cached.first.isEmpty() || doneCats.isNotEmpty() || partial != null
+        val staleCatalog = cached != null && cached.first.isNotEmpty() &&
+            store.loadVodCatalogVersion(portalId) < Store.VOD_CATALOG_VERSION
+        return cached == null || cached.first.isEmpty() || doneCats.isNotEmpty() || partial != null || staleCatalog
     }
 
     companion object {

@@ -142,9 +142,21 @@ class Store(private val context: Context) {
     fun saveVodCatalog(portalId: String, items: List<VodItem>, categories: List<Genre>) {
         runCatching {
             val file = File(context.filesDir, "vod_catalog_$portalId.json")
-            file.writeText(json.encodeToString(VodCatalogFile.serializer(), VodCatalogFile(items, categories, System.currentTimeMillis())))
+            file.writeText(
+                json.encodeToString(
+                    VodCatalogFile.serializer(),
+                    VodCatalogFile(items, categories, System.currentTimeMillis(), VOD_CATALOG_VERSION)
+                )
+            )
         }
     }
+
+    /** Version of the saved catalog file, 0 if none exists. */
+    fun loadVodCatalogVersion(portalId: String): Int = runCatching {
+        val file = File(context.filesDir, "vod_catalog_$portalId.json")
+        if (!file.exists()) return@runCatching 0
+        json.decodeFromString(VodCatalogFile.serializer(), file.readText()).version
+    }.getOrDefault(0)
 
     fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? = runCatching {
         val file = File(context.filesDir, "vod_catalog_$portalId.json")
@@ -166,7 +178,7 @@ class Store(private val context: Context) {
             file.writeText(
                 json.encodeToString(
                     VodCatalogFile.serializer(),
-                    VodCatalogFile(merged.values.toList(), cats, System.currentTimeMillis())
+                    VodCatalogFile(merged.values.toList(), cats, System.currentTimeMillis(), VOD_CATALOG_VERSION)
                 )
             )
             saveVodCatalogDoneCats(portalId, (loadVodCatalogDoneCats(portalId) + newItems.map { it.categoryId }.toSet()).toList())
@@ -234,6 +246,9 @@ class Store(private val context: Context) {
     }
 
     companion object {
+        /** Bump to force a full re-sync of catalogs saved by older app versions. */
+        const val VOD_CATALOG_VERSION = 2
+
         private const val KEY_PORTALS = "portals"
         private const val KEY_ACTIVE_PORTAL = "active_portal"
         private const val KEY_SETTINGS = "settings"
@@ -249,7 +264,8 @@ class Store(private val context: Context) {
 internal data class VodCatalogFile(
     val items: List<VodItem>,
     val categories: List<Genre>,
-    val ts: Long
+    val ts: Long,
+    val version: Int = 1
 )
 
 @kotlinx.serialization.Serializable

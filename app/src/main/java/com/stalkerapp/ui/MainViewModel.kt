@@ -69,12 +69,17 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         val portalId = profile.portal?.id ?: return
         val cached = store.loadVodCatalog(portalId)
         val doneCats = store.loadVodCatalogDoneCats(portalId)
-        val complete = cached != null && cached.first.isNotEmpty() && doneCats.isEmpty()
+        // Catalogs written by older syncs can be incomplete (e.g. only a few
+        // thousand items when the portal really has 80k+); force a full rebuild
+        // once so the fix actually reaches existing installs.
+        val staleCatalog = cached != null && cached.first.isNotEmpty() &&
+            store.loadVodCatalogVersion(portalId) < Store.VOD_CATALOG_VERSION
+        val complete = cached != null && cached.first.isNotEmpty() && doneCats.isEmpty() && !staleCatalog
         if (complete) {
             StalkerApp.instance.vodSyncManager.publishCached(profile)
             return
         }
-        StalkerApp.instance.vodSyncManager.ensureSynced(profile)
+        StalkerApp.instance.vodSyncManager.ensureSynced(profile, force = staleCatalog)
         VodSyncService.start(app)
     }
 

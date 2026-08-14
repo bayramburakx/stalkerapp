@@ -301,6 +301,7 @@ class PortalRepository(
         var total = 0
         var page = 1
         var guard = 0
+        var dupStreak = 0
         while (guard < 120) {
             guard++
             val (list, t) = fetchVodPage(profile, 0L, page, perPage)
@@ -313,7 +314,15 @@ class PortalRepository(
                     added++
                 }
             }
-            if (added == 0) break
+            if (added == 0) {
+                // Some portals shuffle/repeat pages; only stop after two
+                // consecutive duplicate pages, otherwise we'd bail early with
+                // a tiny subset (e.g. 2.5k of 80k items).
+                if (++dupStreak >= 2) break
+                page++
+                continue
+            }
+            dupStreak = 0
             if (out.size > 300_000) break
             page++
         }
@@ -326,6 +335,7 @@ class PortalRepository(
         val seen = HashSet<Long>()
         var page = 1
         var guard = 0
+        var dupStreak = 0
         while (guard < 4000) {
             guard++
             val (list, total) = fetchVodPage(profile, catId, page, perPage)
@@ -341,7 +351,14 @@ class PortalRepository(
                     added++
                 }
             }
-            if (added == 0) break
+            if (added == 0) {
+                // Only stop after two consecutive fully-duplicate pages so a
+                // transient page re-order doesn't truncate the category.
+                if (++dupStreak >= 2) break
+                page++
+                continue
+            }
+            dupStreak = 0
             if (out.size > 300_000) break
             page++
         }
@@ -533,41 +550,50 @@ class PortalRepository(
         page: Int,
         perPage: Int
     ): Pair<List<VodItem>, Int> {
-        repeat(3) { attempt ->
-            try {
-                val resp = client.request(
-                    profile.baseUrl,
-                    "portal.php?type=vod&action=get_ordered_list",
-                    "POST",
-                    tokenFor(profile),
-                    buildMap {
-                        put("page", page.toString())
-                        // Omit the category param for the "all" query (catId <= 0).
-                        if (categoryId > 0) put("category", categoryId.toString())
-                        if (perPage > 0) put("per_page", perPage.toString())
+        // Some portals reject (or ignore) large `per_page` values, so we try the
+        // requested size first and fall back to progressively smaller sizes,
+        // ending with the portal default (no per_page param at all). A cooldown
+        // is global: we wait it out ONCE and retry; if the portal is still
+        // blocking, we give up on this page quickly instead of burning many
+        // minutes on retries that are guaranteed to fail.
+        val perPageOptions = buildList {
+            add(perPage)
+            if (perPage > 2000) add(2000)
+            if (perPage > 500) add(500)
+            if (perPage > 100) add(100)
+            add(0) // portal default
+        }.distinct()
+        var waitedForCooldown = false
+        for (pp in perPageOptions) {
+            var attempt = 0
+            while (attempt < 2) {
+                attempt++
+                try {
+                    val resp = client.request(
+                        profile.baseUrl,
+                        "portal.php?type=vod&action=get_ordered_list",
+                        "POST",
+                        tokenFor(profile),
+                        buildMap {
+                            put("page", page.toString())
+                            // Omit the category param for the "all" query (catId <= 0).
+                            if (categoryId > 0) put("category", categoryId.toString())
+                            if (pp > 0) put("per_page", pp.toString())
+                        }
+                    )
+                    return parseVodList(resp) to parseTotal(resp)
+                } catch (e: StalkerException) {
+                    if (e.isCooldown) {
+                        if (waitedForCooldown) {
+                            // Portal still blocking; don't keep hammering it.
+                            return Pair(emptyList<VodItem>(), 0)
+                        }
+                        waitedForCooldown = true
+                        delay(client.cooldownRemainingMs() + 1000)
+                        continue
                     }
-                )
-                return parseVodList(resp) to parseTotal(resp)
-            } catch (e: StalkerException) {
-                if (e.isCooldown) {
-                    delay(client.cooldownRemainingMs() + 1000)
-                } else throw e
-            }
-        }
-        // Some portals reject `per_page`; retry once without it.
-        if (perPage > 0) {
-            runCatching {
-                val resp = client.request(
-                    profile.baseUrl,
-                    "portal.php?type=vod&action=get_ordered_list",
-                    "POST",
-                    tokenFor(profile),
-                    buildMap {
-                        put("page", page.toString())
-                        if (categoryId > 0) put("category", categoryId.toString())
-                    }
-                )
-                return parseVodList(resp) to parseTotal(resp)
+                    break // non-cooldown failure: try the next (smaller) page size
+                }
             }
         }
         return Pair(emptyList<VodItem>(), 0)

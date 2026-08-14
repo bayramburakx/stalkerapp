@@ -34,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -74,46 +73,39 @@ fun HomeScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            Box(
+            // No full-width bar behind the nav: each item is its own floating pill,
+            // only the (selected) pill keeps a background.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(30.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.fillMaxWidth().height(62.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically
+                navItems.forEachIndexed { index, item ->
+                    val selected = index == tab && item.onClick == null
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.45f),
+                        shadowElevation = if (selected) 8.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(28.dp))
+                            .clickable { if (item.onClick != null) item.onClick() else tab = index }
                     ) {
-                        navItems.forEachIndexed { index, item ->
-                            val selected = index == tab && item.onClick == null
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(30.dp))
-                                    .clickable { if (item.onClick != null) item.onClick() else tab = index },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                    modifier = Modifier.padding(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = item.icon,
-                                        contentDescription = item.label,
-                                        tint = if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(9.dp).size(22.dp)
-                                    )
-                                }
-                            }
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = item.label,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                 }

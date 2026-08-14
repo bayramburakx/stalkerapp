@@ -256,7 +256,8 @@ private fun HeroBanner(
     baseUrl: String,
     onOpenVod: (Long, Boolean) -> Unit
 ) {
-    val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp / 3f }
+    // Hero covers ~1.5/3 (half) of the screen height so it doesn't look short.
+    val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp * 1.5f / 3f }
     val pagerState = rememberPagerState(pageCount = { items.size })
 
     LaunchedEffect(pagerState) {
