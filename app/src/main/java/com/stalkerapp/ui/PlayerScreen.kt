@@ -99,6 +99,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Tv
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
@@ -108,6 +109,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.stalkerapp.playback.ChannelQueue
 import com.stalkerapp.playback.PlaybackManager
+import com.stalkerapp.playback.VodQueue
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.resolveUrl
@@ -129,6 +131,7 @@ fun PlayerScreen(navController: NavHostController) {
     var overlayVisible by remember { mutableStateOf(true) }
     var currentChannel by remember { mutableStateOf(ChannelQueue.current) }
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val isFav = remember(favChannels, currentChannel) {
         currentChannel != null && favChannels.any { it.id == currentChannel?.id }
     }
@@ -288,8 +291,17 @@ fun PlayerScreen(navController: NavHostController) {
             if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
                 val pos = p.currentPosition
                 val dur = p.duration
-                if (dur > 0 && pos > 0 && pos < dur * 0.95) {
-                    app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                if (dur > 0 && pos > 0) {
+                    val cur = VodQueue.current
+                    if (cur != null) {
+                        // Bölüm bazlı ilerleme (devam et / binge için).
+                        app.store.saveEpisodeProgress(
+                            "${PlaybackManager.currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
+                            pos, dur
+                        )
+                    } else if (pos < dur * 0.95) {
+                        app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                    }
                 }
             }
         }
@@ -302,7 +314,15 @@ fun PlayerScreen(navController: NavHostController) {
                 val pos = p.currentPosition
                 val dur = p.duration
                 if (dur > 0 && pos > 0) {
-                    app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                    val cur = VodQueue.current
+                    if (cur != null) {
+                        app.store.saveEpisodeProgress(
+                            "${PlaybackManager.currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
+                            pos, dur
+                        )
+                    } else {
+                        app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                    }
                 }
             }
         }
@@ -672,6 +692,21 @@ fun PlayerScreen(navController: NavHostController) {
                                 modifier = Modifier.size(24.dp)
                             )
                         }
+                        // Sonraki Bölüm: dizi oynatılırken sıradaki bölüme geçer.
+                        if (VodQueue.hasNext) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            IconButton(
+                                onClick = { PlaybackManager.playNextEpisode() },
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.SkipNext,
+                                    contentDescription = "Sonraki Bölüm",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
                     }
                 } else {
                     // LIVE TV CONTROLS
@@ -854,8 +889,10 @@ fun PlayerScreen(navController: NavHostController) {
         PlayerSettingsSheet(
             currentSpeed = playbackSpeed,
             currentAspect = aspectMode,
+            binge = settings.bingeMode,
             onSpeed = { playbackSpeed = it; showPlayerSettings = false },
             onAspect = { aspectMode = it; showPlayerSettings = false },
+            onBinge = { vm.saveSettings(settings.copy(bingeMode = it)) },
             onDismiss = { showPlayerSettings = false }
         )
     }
@@ -1149,8 +1186,10 @@ private fun mimeLabel(mime: String?): String {
 fun PlayerSettingsSheet(
     currentSpeed: Float,
     currentAspect: Int,
+    binge: Boolean,
     onSpeed: (Float) -> Unit,
     onAspect: (Int) -> Unit,
+    onBinge: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val speeds = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
@@ -1182,6 +1221,12 @@ fun PlayerSettingsSheet(
                     modifier = Modifier.clickable { onAspect(mode) }
                 )
             }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            ListItem(
+                headlineContent = { Text("Binge Modu") },
+                supportingContent = { Text("Bölüm bitince sıradaki bölüm otomatik oynatılır") },
+                trailingContent = { Switch(checked = binge, onCheckedChange = onBinge) }
+            )
         }
     }
 }

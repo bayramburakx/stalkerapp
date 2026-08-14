@@ -31,9 +31,11 @@ import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
 import com.stalkerapp.R
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.Episode
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Store
+import com.stalkerapp.data.VodItem
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +50,22 @@ object ChannelQueue {
     val current: Channel? get() = channels.getOrNull(index)
     val next: Channel? get() = channels.getOrNull(index + 1)
     val previous: Channel? get() = channels.getOrNull(index - 1)
+}
+
+/**
+ * VOD/dizi oynatma kuyruğu: binge modu ve "sonraki bölüm" için bölüm listesini
+ * tutar. Bölüm oynatılmadan önce [PlaybackManager.playEpisode] ile doldurulur.
+ */
+object VodQueue {
+    var item: VodItem? = null
+    var profile: Profile? = null
+    var season: Long = 0
+    var episodes: List<Episode> = emptyList()
+    var index: Int = 0
+
+    val current: Episode? get() = episodes.getOrNull(index)
+    val next: Episode? get() = episodes.getOrNull(index + 1)
+    val hasNext: Boolean get() = index + 1 < episodes.size
 }
 
 object PlaybackManager {
@@ -191,11 +209,24 @@ object PlaybackManager {
         }
     }
 
-    fun play(url: String, title: String, artwork: String = "", subtitle: String = "") {
-        playInternal(url, title, artwork, subtitle, isVod = true)
+    fun play(
+        url: String,
+        title: String,
+        artwork: String = "",
+        subtitle: String = "",
+        startPositionMs: Long = 0
+    ) {
+        playInternal(url, title, artwork, subtitle, isVod = true, startPositionMs = startPositionMs)
     }
 
-    private fun playInternal(url: String, title: String, artwork: String = "", subtitle: String = "", isVod: Boolean) {
+    private fun playInternal(
+        url: String,
+        title: String,
+        artwork: String = "",
+        subtitle: String = "",
+        isVod: Boolean,
+        startPositionMs: Long = 0
+    ) {
         setError(null)
         vodPlayback = isVod
         currentStreamUrl = url
@@ -206,9 +237,81 @@ object PlaybackManager {
         p.setMediaItem(item)
         p.prepare()
         p.playWhenReady = true
-        p.seekTo(0)
+        p.seekTo(startPositionMs.coerceAtLeast(0))
         startService()
         updateNotification()
+    }
+
+    /**
+     * Bir dizi bölümünü kuyruk bilgisiyle oynatır (binge modu / sonraki bölüm için).
+     * Kuyruk, [VodQueue] içinde tutulur; altyazıda "S1B3" gibi etiket gösterilir.
+     */
+    fun playEpisode(
+        item: VodItem,
+        profile: Profile,
+        episodes: List<Episode>,
+        season: Long,
+        index: Int,
+        startPositionMs: Long = 0
+    ) {
+        val ep = episodes.getOrNull(index) ?: return
+        VodQueue.item = item
+        VodQueue.profile = profile
+        VodQueue.episodes = episodes
+        VodQueue.season = season
+        VodQueue.index = index
+        scope.launch {
+            val url = try {
+                repository.vodStreamUrl(item, profile, ep)
+            } catch (e: Exception) {
+                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                return@launch
+            }
+            if (url.isBlank()) {
+                setError("Akış URL'si boş")
+                return@launch
+            }
+            currentVodId = item.id
+            val subtitle = buildString {
+                append("S${VodQueue.season}B${ep.episodeNumber}")
+                if (ep.name.isNotBlank()) append(" · ").append(ep.name)
+            }
+            playInternal(url, item.name, item.poster, subtitle, isVod = true, startPositionMs = startPositionMs)
+        }
+    }
+
+    /** Sıradaki bölümü oynatır; [auto] ise önceki bölüm izlendi işaretlenir. */
+    fun playNextEpisode(auto: Boolean = false): Boolean {
+        if (!vodPlayback || !VodQueue.hasNext) return false
+        if (auto) markCurrentEpisodeWatched()
+        VodQueue.index++
+        val item = VodQueue.item ?: return false
+        val profile = VodQueue.profile ?: return false
+        val ep = VodQueue.current ?: return false
+        scope.launch {
+            val url = try {
+                repository.vodStreamUrl(item, profile, ep)
+            } catch (e: Exception) {
+                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                return@launch
+            }
+            currentVodId = item.id
+            val subtitle = buildString {
+                append("S${VodQueue.season}B${ep.episodeNumber}")
+                if (ep.name.isNotBlank()) append(" · ").append(ep.name)
+            }
+            playInternal(url, item.name, item.poster, subtitle, isVod = true)
+        }
+        return true
+    }
+
+    /** İzlenmekte olan bölümü "izlendi" olarak işaretler. */
+    private fun markCurrentEpisodeWatched() {
+        val cur = VodQueue.current ?: return
+        val item = VodQueue.item ?: return
+        if (item.seriesId > 0 || item.isSeries) {
+            store.markEpisodeWatched("${item.id}:${VodQueue.season}:${cur.episodeNumber}")
+        }
     }
 
     fun seekTo(positionMs: Long) {
@@ -422,7 +525,21 @@ object PlaybackManager {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 notifyStateChanged()
                 when (playbackState) {
-                    Player.STATE_IDLE, Player.STATE_ENDED -> {
+                    Player.STATE_ENDED -> {
+                        if (vodPlayback) {
+                            // Bölüm bitince izlendi işaretle; binge mod açıksa
+                            // sıradaki bölüm otomatik oynatılır.
+                            markCurrentEpisodeWatched()
+                            if (store.settings().bingeMode && VodQueue.hasNext) {
+                                playNextEpisode(auto = false)
+                            } else {
+                                service?.stopSelf()
+                            }
+                        } else {
+                            service?.stopSelf()
+                        }
+                    }
+                    Player.STATE_IDLE -> {
                         service?.stopSelf()
                     }
                 }

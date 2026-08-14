@@ -275,6 +275,82 @@ class Store(private val context: Context) {
         prefs.edit().remove(KEY_VOD_DONE_CATS).apply()
     }
 
+    // ---------- İzlenme işaretleri ----------
+
+    /** VOD'lar için elle "izlendi/izlenmedi" işaretleri (katalog id). */
+    fun watchedOverrides(): Set<Long> = runCatching {
+        json.decodeFromString(ListSerializer(Long.serializer()), prefs.getString(KEY_WATCHED_OVERRIDES, "[]").orEmpty()).toSet()
+    }.getOrDefault(emptySet())
+
+    fun isWatchedOverride(id: Long): Boolean = id in watchedOverrides()
+
+    fun toggleWatchedOverride(id: Long): Boolean {
+        val set = watchedOverrides().toMutableSet()
+        val added = if (id in set) {
+            set.remove(id); false
+        } else {
+            set.add(id); true
+        }
+        prefs.edit().putString(
+            KEY_WATCHED_OVERRIDES,
+            json.encodeToString(ListSerializer(Long.serializer()), set.toList())
+        ).apply()
+        return added
+    }
+
+    /** İzlenen bölümler: "<vodId>:<sezon>:<bölümNo>" anahtarları. */
+    fun watchedEpisodes(): Set<String> = runCatching {
+        json.decodeFromString(ListSerializer(String.serializer()), prefs.getString(KEY_WATCHED_EPISODES, "[]").orEmpty()).toSet()
+    }.getOrDefault(emptySet())
+
+    fun isEpisodeWatched(key: String): Boolean = key in watchedEpisodes()
+
+    fun markEpisodeWatched(key: String) {
+        val set = watchedEpisodes().toMutableSet()
+        set.add(key)
+        prefs.edit().putString(
+            KEY_WATCHED_EPISODES,
+            json.encodeToString(ListSerializer(String.serializer()), set.toList())
+        ).apply()
+    }
+
+    fun clearEpisodeWatched(key: String) {
+        val set = watchedEpisodes().toMutableSet()
+        if (set.remove(key)) {
+            prefs.edit().putString(
+                KEY_WATCHED_EPISODES,
+                json.encodeToString(ListSerializer(String.serializer()), set.toList())
+            ).apply()
+        }
+    }
+
+    /** Bölüm bazlı izleme ilerlemesi ("<vodId>:<sezon>:<bölümNo>" -> ilerleme). */
+    fun episodeProgress(): Map<String, VodProgress> = runCatching {
+        json.decodeFromString(
+            MapSerializer(String.serializer(), VodProgress.serializer()),
+            prefs.getString(KEY_EPISODE_PROGRESS, "{}").orEmpty()
+        )
+    }.getOrDefault(emptyMap())
+
+    fun saveEpisodeProgress(key: String, positionMs: Long, durationMs: Long) {
+        val map = episodeProgress().toMutableMap()
+        map[key] = VodProgress(positionMs, durationMs)
+        prefs.edit().putString(
+            KEY_EPISODE_PROGRESS,
+            json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
+        ).apply()
+    }
+
+    fun clearEpisodeProgress(key: String) {
+        val map = episodeProgress().toMutableMap()
+        if (map.remove(key) != null) {
+            prefs.edit().putString(
+                KEY_EPISODE_PROGRESS,
+                json.encodeToString(MapSerializer(String.serializer()), map)
+            ).apply()
+        }
+    }
+
     fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
         val map = loadVodProgress().toMutableMap()
         map[id] = VodProgress(positionMs, durationMs)
@@ -316,6 +392,9 @@ class Store(private val context: Context) {
         private const val KEY_FAVORITE_VODS = "favorite_vods"
         private const val KEY_VOD_PROGRESS = "vod_progress"
         private const val KEY_VOD_DONE_CATS = "vod_done_cats"
+        private const val KEY_WATCHED_OVERRIDES = "watched_overrides"
+        private const val KEY_WATCHED_EPISODES = "watched_episodes"
+        private const val KEY_EPISODE_PROGRESS = "episode_progress"
     }
 }
 

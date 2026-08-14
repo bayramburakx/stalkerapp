@@ -59,6 +59,7 @@ fun SettingsScreen(
     var showDialog by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Portal?>(null) }
     var showSwitch by remember { mutableStateOf(false) }
+    var tmdbKey by remember(settings.tmdbApiKey) { mutableStateOf(settings.tmdbApiKey) }
     val scope = rememberCoroutineScope()
 
     Column(
@@ -168,6 +169,39 @@ fun SettingsScreen(
                     ) {
                         Text("EPG'yi Temizle")
                     }
+                }
+            }
+        }
+
+        // ---------- TMDB ----------
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("TMDB Zenginleştirme", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Oyuncu fotoğrafları ve fragmanlar için TMDB API anahtarı girin " +
+                        "(themoviedb.org → Ayarlar → API — ücretsiz, birkaç dakika sürer). " +
+                        "Boşsa özellik kapalıdır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = tmdbKey,
+                    onValueChange = { tmdbKey = it },
+                    label = { Text("TMDB API Anahtarı") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        vm.saveSettings(settings.copy(tmdbApiKey = tmdbKey.trim()))
+                        vm.showMessage("TMDB anahtarı kaydedildi")
+                    },
+                    enabled = tmdbKey.trim().isNotEmpty()
+                ) {
+                    Text("Kaydet")
                 }
             }
         }

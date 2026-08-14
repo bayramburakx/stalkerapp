@@ -2,6 +2,7 @@ package com.stalkerapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,6 +29,7 @@ import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.home.HomeScreen
 import com.stalkerapp.ui.login.LoginScreen
 import com.stalkerapp.ui.onboarding.OnboardingScreen
+import com.stalkerapp.ui.person.PersonScreen
 import com.stalkerapp.ui.search.SearchScreen
 import com.stalkerapp.ui.theme.StalkerTheme
 import com.stalkerapp.ui.vod.VodDetailScreen
@@ -95,6 +97,20 @@ private fun AppNav() {
         composable("search") { SearchScreen(onBack = { navController.popBackStack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }
         composable("player") { PlayerScreen(navController) }
         composable(
+            route = "person/{name}?isDirector={isDirector}",
+            arguments = listOf(
+                navArgument("name") { type = NavType.StringType },
+                navArgument("isDirector") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { entry ->
+            PersonScreen(
+                name = Uri.decode(entry.arguments?.getString("name").orEmpty()),
+                isDirector = entry.arguments?.getBoolean("isDirector") ?: false,
+                onBack = { navController.popBackStack() },
+                onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }
+            )
+        }
+        composable(
             route = "vod/{vodId}?series={series}",
             arguments = listOf(
                 navArgument("vodId") { type = NavType.LongType },
@@ -105,7 +121,13 @@ private fun AppNav() {
                 vodId = entry.arguments?.getLong("vodId") ?: 0L,
                 isSeriesHint = entry.arguments?.getBoolean("series") ?: false,
                 onBack = { navController.popBackStack() },
-                onOpenPlayer = { navController.navigate("player") }
+                onOpenPlayer = { navController.navigate("player") },
+                onOpenVod = { id, series ->
+                    navController.navigate("vod/$id?series=$series") { launchSingleTop = true }
+                },
+                onOpenPerson = { name, isDirector ->
+                    navController.navigate("person/${Uri.encode(name)}?isDirector=$isDirector")
+                }
             )
         }
     }

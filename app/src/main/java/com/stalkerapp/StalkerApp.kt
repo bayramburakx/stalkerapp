@@ -4,6 +4,7 @@ import android.app.Application
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.StalkerClient
 import com.stalkerapp.data.Store
+import com.stalkerapp.data.TmdbClient
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.VodSyncManager
 import com.stalkerapp.ui.VodSyncService
@@ -20,6 +21,8 @@ class StalkerApp : Application() {
         private set
     lateinit var vodSyncManager: VodSyncManager
         private set
+    lateinit var tmdb: TmdbClient
+        private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -28,6 +31,7 @@ class StalkerApp : Application() {
         store = Store(this)
         repository = PortalRepository(store, StalkerClient { store.settings() })
         vodSyncManager = VodSyncManager(Dispatchers.IO, repository, store)
+        tmdb = TmdbClient { store.settings().tmdbApiKey }
         PlaybackManager.init(this, store, repository)
         instance = this
 

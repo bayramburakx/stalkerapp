@@ -1243,6 +1243,7 @@ class PortalRepository(
                 genres = o["genres_str"]?.asJsonPrimitiveOrNull()?.contentOrNull
                     ?: o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 actors = o["actors"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                tmdbId = o["tmdb_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
                 isSeries = true,
                 seriesId = seriesId
             )
@@ -1277,7 +1278,8 @@ class PortalRepository(
                 isSeries = seriesRef.isNotBlank(),
                 cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+                seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                tmdbId = o["tmdb_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0
             )
         }.filter { it.id > 0 }
     }
@@ -1302,7 +1304,8 @@ class PortalRepository(
             duration = str("time"),
             writers = str("writers").ifBlank { str("writer") },
             seriesRef = seriesRef,
-            isSeries = seriesRef.isNotBlank()
+            isSeries = seriesRef.isNotBlank(),
+            tmdbId = str("tmdb_id").toLongOrNull() ?: 0
         )
     }
 

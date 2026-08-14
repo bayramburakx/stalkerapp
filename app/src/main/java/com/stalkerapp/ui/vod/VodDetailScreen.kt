@@ -1,5 +1,7 @@
 package com.stalkerapp.ui.vod
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,15 +26,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,11 +62,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Episode
 import com.stalkerapp.data.Season
+import com.stalkerapp.data.TmdbClient
+import com.stalkerapp.data.TmdbPerson
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
@@ -74,7 +85,9 @@ fun VodDetailScreen(
     vodId: Long,
     isSeriesHint: Boolean = false,
     onBack: () -> Unit,
-    onOpenPlayer: () -> Unit
+    onOpenPlayer: () -> Unit,
+    onOpenVod: (Long, Boolean) -> Unit = { _, _ -> },
+    onOpenPerson: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
@@ -89,8 +102,32 @@ fun VodDetailScreen(
     var loadingEpisodes by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf(false) }
+    // İzlenme işaretleri + devam sheet'i
+    var showResumeSheet by remember { mutableStateOf(false) }
+    var pendingEpisode by remember { mutableStateOf<Episode?>(null) }
+    var watchedEps by remember { mutableStateOf(app.store.watchedEpisodes()) }
+    // TMDB zenginleştirme (oyuncu fotoğrafları + fragman). Anahtar yoksa boş kalır.
+    var tmdbCast by remember { mutableStateOf<List<TmdbPerson>>(emptyList()) }
+    var trailerKey by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
+    // Oynatıcıdan dönünce (bölüm izlendi işaretlendi, ilerleme kaydedildi)
+    // rozetler ve devam konumları tazelenir.
+    LifecycleResumeEffect(Unit) {
+        watchedEps = app.store.watchedEpisodes()
+        onPauseOrDispose { }
 
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
+
+    LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint) {
+        val i = item ?: return@LaunchedEffect
+        val key = app.store.settings().tmdbApiKey
+        if (key.isNotBlank() && i.tmdbId > 0) {
+            val enr = app.tmdb.enrich(i.tmdbId, i.isSeries || isSeriesHint, key)
+            tmdbCast = enr.cast
+            trailerKey = enr.trailerKey
+        }
+    }
 
     LaunchedEffect(vodId) {
         loading = true
@@ -174,20 +211,96 @@ fun VodDetailScreen(
     val actors = it.actors.split(",").map { it.trim() }.filter { it.isNotBlank() }
     val durationText = formatDuration(it.duration)
 
+    fun episodeKey(ep: Episode?, seasonNum: Long): String =
+        "${it.id}:$seasonNum:${ep?.episodeNumber}"
+
     fun play(episode: Episode? = null) {
         val p = profile ?: return
         scope.launch {
             playing = true
             try {
-                val url = vm.repository.vodStreamUrl(it.copy(isSeries = isSeries), p, episode)
-                PlaybackManager.currentVodId = it.id
-                PlaybackManager.play(url, it.name, it.poster)
+                val allEps = episodes.orEmpty()
+                if (!isSeries || allEps.isEmpty()) {
+                    // Film: doğrudan oynat.
+                    val url = vm.repository.vodStreamUrl(it, p, null)
+                    PlaybackManager.currentVodId = it.id
+                    PlaybackManager.play(url, it.name, it.poster)
+                } else {
+                    // Dizi: seçili bölüm ya da izlenmemiş ilk bölüm; kuyruk binge
+                    // modu / "sonraki bölüm" için doldurulur.
+                    val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
+                    val target = episode ?: firstEpisodeToPlay(allEps, seasonNum)
+                    val idx = allEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
+                    PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx)
+                }
                 onOpenPlayer()
             } catch (e: Exception) {
                 error = e.message
             } finally {
                 playing = false
             }
+        }
+    }
+
+    /** İzlenmemiş ilk bölüm; hepsi izlendiyse ilk bölüm. */
+    fun firstEpisodeToPlay(allEps: List<Episode>, seasonNum: Long): Episode {
+        val seen = watchedEps
+        return allEps.firstOrNull { episodeKey(it, seasonNum) !in seen } ?: allEps.first()
+    }
+
+    fun progressFor(episode: Episode?): com.stalkerapp.data.VodProgress? {
+        return if (episode != null) {
+            app.store.episodeProgress()[episodeKey(episode, selectedSeason ?: 0)]
+        } else {
+            app.store.loadVodProgress()[it.id]
+        }
+    }
+
+    fun resumePlay(episode: Episode?, positionMs: Long) {
+        val p = profile ?: return
+        scope.launch {
+            playing = true
+            try {
+                if (!isSeries || episodes.orEmpty().isEmpty() || episode != null) {
+                    val url = vm.repository.vodStreamUrl(it, p, episode)
+                    PlaybackManager.currentVodId = it.id
+                    PlaybackManager.play(url, it.name, it.poster, startPositionMs = positionMs)
+                } else {
+                    // Dizide "Oynat"a basınca izlenmemiş ilk bölümden devam edilir;
+                    // bölüm seviyesinde ilerleme varsa o bölüm kaldığı yerden başlar.
+                    val allEps = episodes.orEmpty()
+                    val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
+                    val withProgress = allEps.firstOrNull { ep ->
+                        val pr = app.store.episodeProgress()[episodeKey(ep, seasonNum)]
+                        pr != null && pr.positionMs in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
+                    }
+                    if (withProgress != null) {
+                        val pr = app.store.episodeProgress()[episodeKey(withProgress, seasonNum)]
+                        val idx = allEps.indexOfFirst { it.id == withProgress.id }.coerceAtLeast(0)
+                        PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = pr?.positionMs ?: 0)
+                    } else {
+                        play(null)
+                        return@launch
+                    }
+                }
+                onOpenPlayer()
+            } catch (e: Exception) {
+                error = e.message
+            } finally {
+                playing = false
+            }
+        }
+    }
+
+    fun onPlayPressed(episode: Episode? = null) {
+        val prog = progressFor(episode)
+        val resume = prog != null && prog.durationMs > 0 &&
+            prog.positionMs in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
+        if (resume) {
+            pendingEpisode = episode
+            showResumeSheet = true
+        } else {
+            play(episode)
         }
     }
 
@@ -266,7 +379,7 @@ fun VodDetailScreen(
                         ) {
                             // Oynat: beyaz zemin, siyah kalın yazı.
                             Button(
-                                onClick = { play() },
+                                onClick = { onPlayPressed() },
                                 enabled = !playing,
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -303,6 +416,32 @@ fun VodDetailScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
+                            // Fragman: TMDB anahtarı + fragman varsa YouTube'da açar.
+                            if (trailerKey.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.20f))
+                                        .clickable {
+                                            runCatching {
+                                                val intent = Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    Uri.parse("https://www.youtube.com/watch?v=$trailerKey")
+                                                )
+                                                context.startActivity(intent)
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.SmartDisplay,
+                                        contentDescription = "Fragman",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -313,7 +452,8 @@ fun VodDetailScreen(
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     val metaParts = listOfNotNull(
                         yearText.takeIf { it.isNotBlank() },
-                        durationText.takeIf { it.isNotBlank() }
+                        durationText.takeIf { it.isNotBlank() },
+                        it.rating.takeIf { r -> r.isNotBlank() && r != "0" }?.let { "★ $it" }
                     )
                     if (metaParts.isNotEmpty()) {
                         Row(
@@ -328,7 +468,12 @@ fun VodDetailScreen(
                         Spacer(Modifier.height(10.dp))
                     }
                     it.director.takeIf { d -> d.isNotBlank() }?.let { d ->
-                        Text("Yönetmen: $d", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Yönetmen: $d",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onOpenPerson(d, true) }
+                        )
                         Spacer(Modifier.height(4.dp))
                     }
                     it.writers.takeIf { w -> w.isNotBlank() }?.let { w ->
@@ -359,9 +504,17 @@ fun VodDetailScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(actors) { name ->
+                            items(actors) { actorName ->
+                                // TMDB'den fotoğraf varsa baş harf yerine fotoğraf.
+                                val person = tmdbCast.firstOrNull { p ->
+                                    actorName.contains(p.name, ignoreCase = true) ||
+                                        p.name.contains(actorName, ignoreCase = true)
+                                }
+                                val photo = person?.photoPath?.let { TmdbClient.photoUrl(it) }.orEmpty()
                                 Column(
-                                    modifier = Modifier.width(72.dp),
+                                    modifier = Modifier
+                                        .width(72.dp)
+                                        .clickable { onOpenPerson(actorName, false) },
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Box(
@@ -371,16 +524,25 @@ fun VodDetailScreen(
                                             .background(MaterialTheme.colorScheme.surfaceVariant),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            initials(name),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                        if (photo.isNotBlank()) {
+                                            AsyncImage(
+                                                model = photo,
+                                                contentDescription = actorName,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.size(56.dp)
+                                            )
+                                        } else {
+                                            Text(
+                                                initials(actorName),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        name,
+                                        actorName,
                                         style = MaterialTheme.typography.labelSmall,
                                         textAlign = TextAlign.Center,
                                         maxLines = 2,
@@ -450,16 +612,22 @@ fun VodDetailScreen(
                             ) {
                                 items(episodes.orEmpty(), key = { it.id }) { ep ->
                                     val seasonNum = selectedSeason ?: 0
+                                    val watched = episodeKey(ep, seasonNum) in watchedEps
                                     Box(
                                         modifier = Modifier
                                             .width(112.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .clickable { play(ep) }
-                                            .padding(vertical = 16.dp),
-                                        contentAlignment = Alignment.Center
+                                            .background(
+                                                if (watched) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                            .clickable { onPlayPressed(ep) }
+                                            .padding(vertical = 16.dp)
                                     ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
                                             Text(
                                                 "S${seasonNum}B${ep.episodeNumber}",
                                                 style = MaterialTheme.typography.titleMedium,
@@ -478,8 +646,70 @@ fun VodDetailScreen(
                                                 )
                                             }
                                         }
+                                        if (watched) {
+                                            // İzlenme işareti: yeşil onay rozeti.
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(6.dp)
+                                                    .size(18.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF2E7D32)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = "İzlendi",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---------- Benzer İçerikler (tür/kategori benzerliği) ----------
+            val similar = remember(catalog.allItems, it) {
+                val tokens = (it.genres + " " + it.country).split(Regex("[,\\s]+"))
+                    .map { t -> t.trim().lowercase() }.filter { t -> t.length > 1 }.toSet()
+                catalog.allItems
+                    .filter { c -> c.id != it.id && catalog.isSeriesItem(c) == isSeries }
+                    .map { c ->
+                        val score = tokens.count { t -> c.genres.contains(t, ignoreCase = true) } * 2 +
+                            (if (c.categoryId == it.categoryId) 1 else 0)
+                        c to score
+                    }
+                    .filter { s -> s.second > 0 }
+                    .sortedByDescending { s -> s.second }
+                    .take(12)
+                    .map { s -> s.first }
+            }
+            if (similar.isNotEmpty()) {
+                item {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            "Benzer İçerikler",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(similar, key = { it.id }) { s ->
+                                VodPoster(
+                                    item = s,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = catalog.isSeriesItem(s),
+                                    posterWidth = 110,
+                                    onClick = { onOpenVod(s.id, catalog.isSeriesItem(s)) }
+                                )
                             }
                         }
                     }
@@ -509,6 +739,88 @@ fun VodDetailScreen(
                     .background(Color.Black.copy(alpha = 0.35f))
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+            }
+        }
+    }
+
+    // ---------- Devam sheet'i: "kaldığın yerden devam et / baştan izle" ----------
+    if (showResumeSheet) {
+        val prog = progressFor(pendingEpisode)
+        val seasonNum = selectedSeason ?: 0
+        val label = pendingEpisode?.let { "S${seasonNum}B${it.episodeNumber}" }
+        ResumeSheet(
+            title = it.name,
+            label = label,
+            positionMs = prog?.positionMs ?: 0,
+            durationMs = prog?.durationMs ?: 0,
+            onResume = {
+                showResumeSheet = false
+                resumePlay(pendingEpisode, prog?.positionMs ?: 0)
+            },
+            onRestart = {
+                showResumeSheet = false
+                play(pendingEpisode)
+            },
+            onDismiss = { showResumeSheet = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ResumeSheet(
+    title: String,
+    label: String?,
+    positionMs: Long,
+    durationMs: Long,
+    onResume: () -> Unit,
+    onRestart: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            val pct = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+            LinearProgressIndicator(
+                progress = { pct },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            )
+            Text(
+                "Kaldığın yer: ${(pct * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            Spacer(Modifier.height(18.dp))
+            Button(
+                onClick = onResume,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (label != null) "Devam Et ($label)" else "Kaldığın Yerden Devam Et",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onRestart,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Baştan İzle")
             }
         }
     }

@@ -67,6 +67,7 @@ import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
+import com.stalkerapp.ui.components.VodQuickActionsSheet
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
@@ -114,6 +115,16 @@ fun HomeDashboardScreen(
                 catalog.byId[id]?.let { it to p }
             } else null
         }
+    }
+
+    // Uzun bas → hızlı işlemler sheet'i + izlenme işaretleri.
+    var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
+    val watchedOverrides by remember { mutableStateOf(app.store.watchedOverrides()) }
+    val vodProgressMap = remember { app.store.loadVodProgress() }
+    fun isWatched(item: VodItem): Boolean {
+        val p = vodProgressMap[item.id]
+        return item.id in watchedOverrides ||
+            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
     }
 
     val movies = remember(catalog) { catalog.allItems.filter { !catalog.isSeriesItem(it) }.take(20) }
@@ -175,6 +186,8 @@ fun HomeDashboardScreen(
                             baseUrl = profile.baseUrl,
                             isSeries = false,
                             posterWidth = 130,
+                            watched = isWatched(item),
+                            onLongPress = { quickActionItem = item },
                             onClick = { onOpenVod(item.id, false) }
                         )
                     }
@@ -196,6 +209,8 @@ fun HomeDashboardScreen(
                             baseUrl = profile.baseUrl,
                             isSeries = true,
                             posterWidth = 130,
+                            watched = isWatched(item),
+                            onLongPress = { quickActionItem = item },
                             onClick = { onOpenVod(item.id, true) }
                         )
                     }
@@ -264,6 +279,8 @@ fun HomeDashboardScreen(
                             baseUrl = profile.baseUrl,
                             isSeries = catalog.isSeriesItem(item),
                             posterWidth = 130,
+                            watched = isWatched(item),
+                            onLongPress = { quickActionItem = item },
                             onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
                         )
                     }
@@ -273,6 +290,17 @@ fun HomeDashboardScreen(
         // İçerik yüzen cam pill'in arkasından akıyor; son öğenin pill'in
         // altında kaybolmaması için altta boşluk bırak.
         Spacer(modifier = Modifier.height(96.dp))
+    }
+
+    if (quickActionItem != null) {
+        val qi = quickActionItem!!
+        VodQuickActionsSheet(
+            item = qi,
+            isSeries = catalog.isSeriesItem(qi),
+            vm = vm,
+            onOpenDetail = { onOpenVod(qi.id, catalog.isSeriesItem(qi)) },
+            onDismiss = { quickActionItem = null }
+        )
     }
 }
 

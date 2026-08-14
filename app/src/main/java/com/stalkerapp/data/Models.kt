@@ -18,7 +18,11 @@ data class Settings(
     val timezoneOffset: Int = 0,
     val requestIntervalMs: Long = 100,
     val cooldownMs: Long = 300_000L,
-    val maxBufferMs: Int = 60_000
+    val maxBufferMs: Int = 60_000,
+    /** Bölüm bitince sıradaki bölüm otomatik oynatılsın mı (binge mod). */
+    val bingeMode: Boolean = false,
+    /** TMDB API anahtarı (oyuncu fotoğrafları + fragman için). Boşsa özellik kapalıdır. */
+    val tmdbApiKey: String = ""
 )
 
 @Serializable
@@ -83,6 +87,7 @@ data class VodItem(
     val cmd: String = "",
     @SerialName("selected_season") val selectedSeason: String = "",
     @SerialName("series_data") val seriesData: String = "",
+    @SerialName("tmdb_id") val tmdbId: Long = 0,
     var isSeries: Boolean = false,
     /** Real series id on portals with a separate series library (`type=series`); 0 for plain VOD. */
     val seriesId: Long = 0

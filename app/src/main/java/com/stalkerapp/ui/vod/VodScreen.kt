@@ -1,7 +1,9 @@
 package com.stalkerapp.ui.vod
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
@@ -50,6 +53,7 @@ import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
+import com.stalkerapp.ui.components.VodQuickActionsSheet
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 
@@ -73,6 +77,16 @@ fun VodScreen(
 
     var selectedCategory by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
+    // Uzun bas → hızlı işlemler sheet'i.
+    var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
+    val watchedOverrides by remember { mutableStateOf(app.store.watchedOverrides()) }
+    val vodProgress = remember { app.store.loadVodProgress() }
+
+    fun isWatched(item: VodItem): Boolean {
+        val p = vodProgress[item.id]
+        return item.id in watchedOverrides ||
+            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
+    }
 
     LaunchedEffect(profile) {
         vm.syncVodIfNeeded(profile)
@@ -188,6 +202,8 @@ fun VodScreen(
                             item = item,
                             baseUrl = profile.baseUrl,
                             isSeries = isSeries,
+                            watched = isWatched(item),
+                            onLongPress = { quickActionItem = item },
                             onClick = { onOpenVod(item.id, isSeries) }
                         )
                     }
@@ -195,15 +211,41 @@ fun VodScreen(
             }
         }
     }
+
+    if (quickActionItem != null) {
+        val qi = quickActionItem!!
+        VodQuickActionsSheet(
+            item = qi,
+            isSeries = filterIsSeries == true || catalog.isSeriesItem(qi),
+            vm = vm,
+            onOpenDetail = { onOpenVod(qi.id, catalog.isSeriesItem(qi)) },
+            onDismiss = { quickActionItem = null }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boolean = item.isSeries, posterWidth: Int? = null) {
+fun VodPoster(
+    item: VodItem,
+    baseUrl: String,
+    onClick: () -> Unit,
+    isSeries: Boolean = item.isSeries,
+    posterWidth: Int? = null,
+    watched: Boolean = false,
+    onLongPress: (() -> Unit)? = null
+) {
     // Gri kart arka planı yok: sadece poster + altında başlık ve yıl.
     Column(
         modifier = Modifier
             .then(if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth())
-            .clickable(onClick = onClick)
+            .let { mod ->
+                if (onLongPress != null) {
+                    mod.combinedClickable(onClick = onClick, onLongClick = onLongPress)
+                } else {
+                    mod.clickable(onClick = onClick)
+                }
+            }
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
             AsyncImage(
@@ -224,6 +266,25 @@ fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boo
                         "DİZİ",
                         color = Color.White,
                         style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            if (watched) {
+                // İzlenme işareti: yeşil onay rozeti (sol üst).
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
+                        .size(20.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF2E7D32)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "İzlendi",
+                        tint = Color.White,
+                        modifier = Modifier.size(13.dp)
                     )
                 }
             }
