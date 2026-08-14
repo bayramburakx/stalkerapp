@@ -69,7 +69,7 @@ fun LiveTvScreen(
     var selectedGenre by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(profile) {
         try {
             genres = vm.repository.loadGenres(profile)
         } catch (e: Exception) {
@@ -78,7 +78,7 @@ fun LiveTvScreen(
         }
     }
 
-    LaunchedEffect(selectedGenre) {
+    LaunchedEffect(selectedGenre, profile) {
         loading = true
         error = null
         try {

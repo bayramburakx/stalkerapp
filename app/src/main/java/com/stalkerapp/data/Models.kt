@@ -65,6 +65,7 @@ data class Channel(
 @Serializable
 data class VodItem(
     val id: Long = 0,
+    @SerialName("cat_id") val categoryId: Long = 0,
     val name: String = "",
     @SerialName("o_name") val originalName: String = "",
     @SerialName("sname") val sname: String = "",

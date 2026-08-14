@@ -98,6 +98,8 @@ object PlaybackManager {
     var currentStreamUrl: String = ""
         private set
 
+    var currentVodId: Long = 0
+
     @Volatile var errorMessage: String? = null
         private set
 

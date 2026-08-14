@@ -2,6 +2,7 @@ package com.stalkerapp.ui.home
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Settings
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -41,9 +43,10 @@ fun HomeScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
-    val profile = vm.repository.cachedProfile()
+    var profile by remember { mutableStateOf(vm.repository.cachedProfile()) }
 
     var tab by remember { mutableIntStateOf(0) }
+    val gotoTab: (Int) -> Unit = { tab = it }
 
     Scaffold(
         topBar = {
@@ -61,30 +64,36 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = tab == 0,
                     onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.LiveTv, contentDescription = null) },
-                    label = { Text("Canlı TV") }
+                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                    label = { Text("Ana Sayfa") }
                 )
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.Movie, contentDescription = null) },
-                    label = { Text("Filmler") }
+                    icon = { Icon(Icons.Default.LiveTv, contentDescription = null) },
+                    label = { Text("Canlı TV") }
                 )
                 NavigationBarItem(
                     selected = tab == 2,
                     onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-                    label = { Text("Diziler") }
+                    icon = { Icon(Icons.Default.Movie, contentDescription = null) },
+                    label = { Text("Filmler") }
                 )
                 NavigationBarItem(
                     selected = tab == 3,
                     onClick = { tab = 3 },
-                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
-                    label = { Text("Favoriler") }
+                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
+                    label = { Text("Diziler") }
                 )
                 NavigationBarItem(
                     selected = tab == 4,
                     onClick = { tab = 4 },
+                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
+                    label = { Text("Favoriler") }
+                )
+                NavigationBarItem(
+                    selected = tab == 5,
+                    onClick = { tab = 5 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                     label = { Text("Ayarlar") }
                 )
@@ -93,11 +102,15 @@ fun HomeScreen(
     ) { padding ->
         val contentModifier = Modifier.padding(padding)
         when (tab) {
-            0 -> LiveTvScreen(profile, onOpenPlayer, contentModifier)
-            1 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = false)
-            2 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = true)
-            3 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier)
-            4 -> SettingsScreen(vm, contentModifier)
+            0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
+            1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier)
+            2 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = false)
+            3 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = true)
+            4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier)
+            5 -> SettingsScreen(vm, contentModifier) {
+                profile = vm.repository.cachedProfile()
+                vm.syncVodIfNeeded(profile)
+            }
         }
     }
 }

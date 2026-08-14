@@ -15,16 +15,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,21 +32,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
-import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
@@ -70,99 +67,63 @@ fun VodScreen(
 
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
 
-    var categories by remember { mutableStateOf<List<Genre>?>(null) }
-    var items by remember { mutableStateOf<List<VodItem>?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var loadingMore by remember { mutableStateOf(false) }
-    var hasMore by remember { mutableStateOf(true) }
-    var page by remember { mutableStateOf(1) }
-    var error by remember { mutableStateOf<String?>(null) }
     var selectedCategory by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
-    val gridState = rememberLazyGridState()
 
-    val seriesCatIds = remember(categories) {
-        categories.orEmpty().filter { it.title.contains("dizi", ignoreCase = true) }.map { it.id }.toSet()
+    LaunchedEffect(profile) {
+        vm.syncVodIfNeeded(profile)
     }
 
-    suspend fun loadPage(page: Int, search: String): List<VodItem> {
-        return if (filterIsSeries == true) {
-            if (selectedCategory > 0L) {
-                vm.repository.loadVodList(profile, selectedCategory, page, search)
-            } else {
-                seriesCatIds.flatMap { catId ->
-                    runCatching { vm.repository.loadVodList(profile, catId, page, search) }
-                        .getOrDefault(emptyList())
-                }.distinctBy { it.id }
+    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries) {
+        val q = query.trim()
+        catalog.allItems
+            .let { list ->
+                when (filterIsSeries) {
+                    true -> list.filter { catalog.isSeriesItem(it) }
+                    false -> list.filter { !catalog.isSeriesItem(it) }
+                    else -> list
+                }
             }
-        } else {
-            val cat = if (search.isNotBlank()) 0L else selectedCategory
-            vm.repository.loadVodList(profile, cat, page, search)
-        }
-    }
-
-    fun hasMoreFromTotal(newItems: List<VodItem>): Boolean {
-        if (filterIsSeries == true && selectedCategory == 0L) return newItems.isNotEmpty()
-        val cat = if (query.isNotBlank()) 0L else selectedCategory
-        return newItems.size < vm.repository.vodTotal(profile, cat, query.trim())
-    }
-
-    LaunchedEffect(Unit) {
-        try {
-            categories = vm.repository.loadVodCategories(profile)
-        } catch (e: Exception) {
-            error = e.message
-            categories = emptyList()
-        }
-    }
-
-    LaunchedEffect(selectedCategory, query) {
-        loading = true
-        error = null
-        page = 1
-        hasMore = true
-        loadingMore = false
-        if (query.isNotBlank()) kotlinx.coroutines.delay(400)
-        try {
-            items = loadPage(1, query.trim())
-            hasMore = hasMoreFromTotal(items.orEmpty())
-        } catch (e: Exception) {
-            error = e.message
-        } finally {
-            loading = false
-        }
-    }
-
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.layoutInfo }
-            .collect { info ->
-                val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-                val total = info.totalItemsCount
-                if (total > 0 && last >= total - 4 && hasMore && !loadingMore && !loading && items?.isNotEmpty() == true) {
-                    loadingMore = true
-                    try {
-                        page += 1
-                        val more = loadPage(page, query.trim())
-                        val existingIds = items.orEmpty().map { it.id }.toSet()
-                        val newOnes = more.filter { it.id !in existingIds }
-                        items = items.orEmpty() + newOnes
-                        if (newOnes.isEmpty()) {
-                            hasMore = false
-                        } else {
-                            hasMore = hasMoreFromTotal(items.orEmpty())
-                        }
-                    } catch (e: Exception) {
-                        page -= 1
-                        error = e.message
-                    } finally {
-                        loadingMore = false
-                    }
+            .let { list -> if (selectedCategory > 0L) list.filter { it.categoryId == selectedCategory } else list }
+            .let { list ->
+                if (q.isBlank()) list
+                else list.filter {
+                    it.name.contains(q, ignoreCase = true) ||
+                        it.originalName.contains(q, ignoreCase = true)
                 }
             }
     }
 
+    val catList = catalog.categories
+    val shownCats = when (filterIsSeries) {
+        true -> catList.filter { it.title.contains("dizi", ignoreCase = true) }
+        false -> catList.filter { !it.title.contains("dizi", ignoreCase = true) }
+        else -> catList
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
+        if (catalog.status == VodCatalogStatus.Syncing) {
+            LinearProgressIndicator(
+                progress = { if (catalog.totalCategories > 0) catalog.doneCategories.toFloat() / catalog.totalCategories else 0f },
+                modifier = Modifier.fillMaxWidth().height(4.dp)
+            )
+            Text(
+                "VOD kataloğu senkronize ediliyor: ${catalog.doneCategories}/${catalog.totalCategories} kategori · ${catalog.loadedCount} içerik",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+        } else if (catalog.status == VodCatalogStatus.Error) {
+            Text(
+                "VOD senkron hatası. Yenileme için kategorileri açın.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+        }
+
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -174,12 +135,6 @@ fun VodScreen(
                 .padding(horizontal = 12.dp, vertical = 4.dp)
         )
 
-        val catList = categories.orEmpty()
-        val shownCats = when (filterIsSeries) {
-            true -> catList.filter { it.title.contains("dizi", ignoreCase = true) }
-            false -> catList.filter { !it.title.contains("dizi", ignoreCase = true) }
-            else -> catList
-        }
         if (shownCats.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -203,42 +158,26 @@ fun VodScreen(
         }
 
         when {
-            loading && items == null -> LoadingBox()
-            error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
-            items.orEmpty().isEmpty() -> EmptyState("İçerik bulunamadı")
+            catalog.status == VodCatalogStatus.Syncing && catalog.allItems.isEmpty() -> LoadingBox()
+            catalog.allItems.isEmpty() && catalog.status != VodCatalogStatus.Syncing ->
+                EmptyState("VOD içeriği bulunamadı")
+            filtered.isEmpty() -> EmptyState("İçerik bulunamadı")
             else -> {
-                val isSeriesItem: (VodItem) -> Boolean = { it ->
-                    it.isSeries || it.seriesData.isNotBlank() || it.selectedSeason.isNotBlank() || seriesCatIds.contains(selectedCategory)
-                }
-                val typeFiltered = if (filterIsSeries == true) {
-                    items.orEmpty()
-                } else {
-                    items.orEmpty().filter { !isSeriesItem(it) }
-                }
-                val filtered = typeFiltered.let { list ->
-                    if (query.isBlank()) list
-                    else list.filter {
-                        it.name.contains(query.trim(), ignoreCase = true) ||
-                            it.originalName.contains(query.trim(), ignoreCase = true)
-                    }
-                }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
-                    state = gridState,
                     contentPadding = PaddingValues(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     items(filtered, key = { it.id }) { item ->
+                        val isSeries = filterIsSeries == true || catalog.isSeriesItem(item)
                         VodPoster(
                             item = item,
                             baseUrl = profile.baseUrl,
-                            isSeries = filterIsSeries == true || item.isSeries,
-                            onClick = { onOpenVod(item.id, filterIsSeries == true || isSeriesItem(item)) }
+                            isSeries = isSeries,
+                            onClick = { onOpenVod(item.id, isSeries) }
                         )
-                    }
-                    if (loadingMore) {
-                        item { LoadingBox() }
                     }
                 }
             }

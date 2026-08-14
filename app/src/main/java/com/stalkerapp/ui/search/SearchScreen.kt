@@ -75,17 +75,24 @@ fun SearchScreen(
             vodResults = null
             return@LaunchedEffect
         }
-        delay(400)
-        if (profile != null) {
-            loadingVod = true
-            error = null
-            try {
-                vodResults = vm.repository.loadVodList(profile, 0, 1, query.trim())
-            } catch (e: Exception) {
-                error = e.message
-            } finally {
-                loadingVod = false
-            }
+        delay(300)
+        loadingVod = true
+        error = null
+        try {
+            val q = query.trim()
+            val catalog = vm.vodCatalog.value
+            vodResults = if (catalog.allItems.isNotEmpty()) {
+                catalog.allItems.filter {
+                    it.name.contains(q, ignoreCase = true) ||
+                        it.originalName.contains(q, ignoreCase = true)
+                }.take(80)
+            } else if (profile != null) {
+                runCatching { vm.repository.loadVodList(profile, 0, 1, q) }.getOrDefault(emptyList())
+            } else emptyList()
+        } catch (e: Exception) {
+            error = e.message
+        } finally {
+            loadingVod = false
         }
     }
 

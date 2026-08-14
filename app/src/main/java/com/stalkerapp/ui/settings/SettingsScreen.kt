@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -25,17 +29,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.stalkerapp.data.Portal
 import com.stalkerapp.ui.MainViewModel
+import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    vm: MainViewModel,
+    modifier: Modifier = Modifier,
+    onPortalsChanged: () -> Unit = {}
+) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
+    val portals = vm.store.portals()
+    val activeId = vm.store.activePortalId()
 
     var timezoneOffset by remember(settings.timezoneOffset) { mutableFloatStateOf(settings.timezoneOffset.toFloat()) }
     var requestInterval by remember(settings.requestIntervalMs) { mutableFloatStateOf(settings.requestIntervalMs.toFloat()) }
     var buffer by remember(settings.maxBufferMs) { mutableFloatStateOf((settings.maxBufferMs / 1000).toFloat()) }
     var showEpgTimes by remember { mutableStateOf(true) }
+
+    var showDialog by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Portal?>(null) }
 
     Column(
         modifier = modifier
@@ -46,7 +61,72 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     ) {
         Text("Ayarlar", style = MaterialTheme.typography.headlineMedium)
 
-        // Timezone
+        // ---------- Portals ----------
+        Text("Portallar", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Kullanılan portalı buradan değiştirebilir, yeni portal ekleyebilir veya silebilirsiniz.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (portals.isEmpty()) {
+            Text("Kayıtlı portal yok", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            portals.forEach { p ->
+                val isActive = p.id == activeId
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    Text(p.name.ifBlank { p.url }, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${p.url}  •  MAC: ${p.mac.ifBlank { "—" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (!isActive) {
+                            OutlinedButton(onClick = {
+                                vm.launchSwitch(p) { onPortalsChanged() }
+                            }) {
+                                Text("Aktif Yap")
+                            }
+                        } else {
+                            Text(
+                                "● Aktif",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.align(Alignment.CenterVertically)
+                            )
+                        }
+                        OutlinedButton(onClick = { editing = p; showDialog = true }) {
+                            Text("Düzenle")
+                        }
+                        OutlinedButton(onClick = {
+                            vm.deletePortal(p.id)
+                            val remaining = vm.store.portals()
+                            if (remaining.isEmpty()) {
+                                vm.store.setActivePortalId(null)
+                                vm.resetVodCatalog()
+                            } else if (vm.store.activePortalId() == null) {
+                                vm.launchSwitch(remaining.first()) { onPortalsChanged() }
+                            }
+                            onPortalsChanged()
+                        }) {
+                            Text("Sil")
+                        }
+                    }
+                }
+            }
+        }
+        Button(onClick = { editing = null; showDialog = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Yeni Portal Ekle")
+        }
+
+        // ---------- Timezone ----------
         Text("Zaman Dilimi Ofseti", style = MaterialTheme.typography.titleMedium)
         Text(
             "EPG kaymalarını düzeltmek için sağlayıcı sunucusu ile kendi saatiniz arasındaki farkı girin. (+3, -2 vb.)",
@@ -64,7 +144,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         )
         Text("Ofset: ${timezoneOffset.toInt()} saat", style = MaterialTheme.typography.bodyLarge)
 
-        // Rate limit
+        // ---------- Rate limit ----------
         Text("İstek Aralığı (Rate Limit)", style = MaterialTheme.typography.titleMedium)
         Text(
             "Stalker portalları ardışık isteklere duyarlıdır. İstekler arası minimum bekleme süresi. (ms)",
@@ -82,7 +162,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         )
         Text("${requestInterval.toLong()} ms", style = MaterialTheme.typography.bodyLarge)
 
-        // Buffer
+        // ---------- Buffer ----------
         Text("Oynatma Tamponu (Buffer)", style = MaterialTheme.typography.titleMedium)
         Text(
             "Canlı yayın takılmalarını azaltmak için tampon süresi. (saniye)",
@@ -100,10 +180,10 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         )
         Text("${buffer.toInt()} sn", style = MaterialTheme.typography.bodyLarge)
 
-        // Cooldown
+        // ---------- Cooldown ----------
         Text("Cooldown Yönetimi", style = MaterialTheme.typography.titleMedium)
         Text(
-            if (cooldown > 0) "Sunucu istekleri engellendi. Kalan süre: ${cooldown}s"
+            if (cooldown > 0) "Sunucu istekleri engelledi. Kalan süre: ${cooldown}s"
             else "Sunucu engeli yok.",
             style = MaterialTheme.typography.bodyMedium,
             color = if (cooldown > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
@@ -116,18 +196,72 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             Text("Cooldown'u Temizle")
         }
 
-        // Cache info
-        Text("Önbellek (Cache)", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Kategori ve kanal listeleri istek sayısını azaltmak için bellekte önbelleklenir. Portal değiştirildiğinde önbellek temizlenir.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = showEpgTimes, onCheckedChange = { showEpgTimes = it })
             Text("EPG saatlerini yerel saate göre göster", modifier = Modifier.padding(start = 8.dp))
         }
     }
+
+    if (showDialog) {
+        PortalEditDialog(
+            initial = editing,
+            onDismiss = { showDialog = false },
+            onSave = { portal ->
+                vm.savePortal(portal)
+                showDialog = false
+                if (vm.store.activePortalId() == null) {
+                    vm.launchSwitch(portal) { onPortalsChanged() }
+                }
+                onPortalsChanged()
+            }
+        )
+    }
+}
+
+@Composable
+private fun PortalEditDialog(
+    initial: Portal?,
+    onDismiss: () -> Unit,
+    onSave: (Portal) -> Unit
+) {
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var url by remember { mutableStateOf(initial?.url ?: "") }
+    var mac by remember { mutableStateOf(initial?.mac ?: "") }
+    var username by remember { mutableStateOf(initial?.username ?: "") }
+    var password by remember { mutableStateOf(initial?.password ?: "") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                val trimmed = url.trim()
+                if (trimmed.isBlank()) { error = "Portal adresi gerekli"; return@TextButton }
+                val id = initial?.id ?: ("p_" + trimmed.hashCode().toString() + System.currentTimeMillis().toString().takeLast(4))
+                onSave(
+                    Portal(
+                        id = id,
+                        name = name.ifBlank { trimmed },
+                        url = trimmed,
+                        mac = mac.trim(),
+                        username = username.trim(),
+                        password = password.trim()
+                    )
+                )
+            }) { Text("Kaydet") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } },
+        title = { Text(if (initial == null) "Yeni Portal" else "Portal Düzenle") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("İsim") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("Portal URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = mac, onValueChange = { mac = it }, label = { Text("MAC (boş olabilir)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Kullanıcı adı (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Şifre (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    )
 }

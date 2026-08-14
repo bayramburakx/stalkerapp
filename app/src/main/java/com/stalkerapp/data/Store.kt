@@ -2,7 +2,9 @@ package com.stalkerapp.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.io.File
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
@@ -137,6 +139,46 @@ class Store(context: Context) {
         return added
     }
 
+    fun saveVodCatalog(portalId: String, items: List<VodItem>, categories: List<Genre>) {
+        runCatching {
+            val file = File(context.filesDir, "vod_catalog_$portalId.json")
+            file.writeText(json.encodeToString(VodCatalogFile(items, categories, System.currentTimeMillis())))
+        }
+    }
+
+    fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? = runCatching {
+        val file = File(context.filesDir, "vod_catalog_$portalId.json")
+        if (!file.exists()) return@runCatching null
+        val data = json.decodeFromString<VodCatalogFile>(file.readText())
+        Triple(data.items, data.categories, data.ts)
+    }.getOrNull()
+
+    fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
+        val map = loadVodProgress().toMutableMap()
+        map[id] = VodProgress(positionMs, durationMs)
+        prefs.edit().putString(
+            KEY_VOD_PROGRESS,
+            json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), map)
+        ).apply()
+    }
+
+    fun loadVodProgress(): Map<Long, VodProgress> = runCatching {
+        json.decodeFromString(
+            MapSerializer(Long.serializer(), VodProgress.serializer()),
+            prefs.getString(KEY_VOD_PROGRESS, "{}").orEmpty()
+        )
+    }.getOrDefault(emptyMap())
+
+    fun clearVodProgress(id: Long) {
+        val map = loadVodProgress().toMutableMap()
+        if (map.remove(id) != null) {
+            prefs.edit().putString(
+                KEY_VOD_PROGRESS,
+                json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), map)
+            ).apply()
+        }
+    }
+
     companion object {
         private const val KEY_PORTALS = "portals"
         private const val KEY_ACTIVE_PORTAL = "active_portal"
@@ -144,5 +186,16 @@ class Store(context: Context) {
         private const val KEY_FAVORITES = "favorites"
         private const val KEY_FAVORITE_CHANNELS = "favorite_channels"
         private const val KEY_FAVORITE_VODS = "favorite_vods"
+        private const val KEY_VOD_PROGRESS = "vod_progress"
     }
 }
+
+@kotlinx.serialization.Serializable
+private data class VodCatalogFile(
+    val items: List<VodItem>,
+    val categories: List<Genre>,
+    val ts: Long
+)
+
+@kotlinx.serialization.Serializable
+data class VodProgress(val positionMs: Long, val durationMs: Long)

@@ -276,6 +276,33 @@ fun PlayerScreen(navController: NavHostController) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5000)
+            val p = PlaybackManager.player
+            if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
+                val pos = p.currentPosition
+                val dur = p.duration
+                if (dur > 0 && pos > 0 && pos < dur * 0.95) {
+                    app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val p = PlaybackManager.player
+            if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
+                val pos = p.currentPosition
+                val dur = p.duration
+                if (dur > 0 && pos > 0) {
+                    app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                }
+            }
+        }
+    }
+
     val queueChannels = ChannelQueue.channels
     val queueProfile = ChannelQueue.profile
 

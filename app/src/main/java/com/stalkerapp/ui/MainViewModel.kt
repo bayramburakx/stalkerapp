@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.PortalStatus
@@ -16,6 +17,7 @@ import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Settings
 import com.stalkerapp.data.Store
 import com.stalkerapp.data.VodItem
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +48,76 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage
 
+    // ---------- VOD catalog (background sync) ----------
+    private val _vodCatalog = MutableStateFlow(VodCatalogState())
+    val vodCatalog: StateFlow<VodCatalogState> = _vodCatalog
+    private var vodSyncJob: Job? = null
+
+    fun syncVodCatalog(profile: Profile, force: Boolean = false) {
+        if (_vodCatalog.value.status == VodCatalogStatus.Syncing && !force) return
+        vodSyncJob?.cancel()
+        vodSyncJob = viewModelScope.launch {
+            _vodCatalog.value = _vodCatalog.value.copy(status = VodCatalogStatus.Syncing)
+            try {
+                val portalId = profile.portal?.id ?: ""
+                val items = repository.syncVodCatalog(profile) { done, total, loaded ->
+                    _vodCatalog.value = _vodCatalog.value.copy(
+                        doneCategories = done,
+                        totalCategories = total,
+                        loadedCount = loaded
+                    )
+                }
+                val cats = runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
+                store.saveVodCatalog(portalId, items, cats)
+                _vodCatalog.value = VodCatalogState(
+                    status = VodCatalogStatus.Ready,
+                    doneCategories = cats.size,
+                    totalCategories = cats.size,
+                    loadedCount = items.size,
+                    allItems = items,
+                    categories = cats,
+                    lastSync = System.currentTimeMillis()
+                )
+            } catch (e: Exception) {
+                if (_vodCatalog.value.status != VodCatalogStatus.Ready) {
+                    _vodCatalog.value = _vodCatalog.value.copy(status = VodCatalogStatus.Error)
+                }
+                showMessage("VOD senkron hatası: ${e.message}")
+            }
+        }
+    }
+
+    /** Starts a sync if needed (loads from disk cache first, then refreshes). */
+    fun syncVodIfNeeded(profile: Profile) {
+        val cur = _vodCatalog.value
+        if (cur.status == VodCatalogStatus.Syncing) return
+        val portalId = profile.portal?.id ?: ""
+        if (cur.status == VodCatalogStatus.Ready && cur.allItems.isNotEmpty()) {
+            val stale = System.currentTimeMillis() - cur.lastSync > 30 * 60 * 1000L
+            if (!stale) return
+        }
+        val cached = store.loadVodCatalog(portalId)
+        if (cached != null && cached.first.isNotEmpty()) {
+            _vodCatalog.value = VodCatalogState(
+                status = VodCatalogStatus.Ready,
+                doneCategories = cached.second.size,
+                totalCategories = cached.second.size,
+                loadedCount = cached.first.size,
+                allItems = cached.first,
+                categories = cached.second,
+                lastSync = cached.third
+            )
+            syncVodCatalog(profile, force = true)
+            return
+        }
+        syncVodCatalog(profile, force = true)
+    }
+
+    fun resetVodCatalog() {
+        vodSyncJob?.cancel()
+        _vodCatalog.value = VodCatalogState()
+    }
+
     init {
         viewModelScope.launch {
             while (true) {
@@ -69,6 +141,22 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     fun deletePortal(id: String) {
         store.deletePortal(id)
+    }
+
+    /** Switches the active portal, reconnects, and re-syncs the VOD catalog. */
+    suspend fun switchPortal(portal: Portal): Result<Unit> = runCatching {
+        store.setActivePortalId(portal.id)
+        repository.clearCaches()
+        repository.connect(portal)
+        resetVodCatalog()
+        repository.cachedProfile()?.let { syncVodIfNeeded(it) }
+    }
+
+    fun launchSwitch(portal: Portal, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            switchPortal(portal).onFailure { showMessage("Portal değiştirilemedi: ${it.message}") }
+            onDone()
+        }
     }
 
     fun toggleFavorite(key: String): Boolean {
@@ -103,6 +191,24 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     fun showMessage(msg: String?) {
         _statusMessage.value = msg
+    }
+}
+
+enum class VodCatalogStatus { Idle, Syncing, Ready, Error }
+
+data class VodCatalogState(
+    val status: VodCatalogStatus = VodCatalogStatus.Idle,
+    val doneCategories: Int = 0,
+    val totalCategories: Int = 0,
+    val loadedCount: Int = 0,
+    val allItems: List<VodItem> = emptyList(),
+    val categories: List<Genre> = emptyList(),
+    val lastSync: Long = 0
+) {
+    val byId: Map<Long, VodItem> get() = allItems.associateBy { it.id }
+    val isSeriesItem: (VodItem) -> Boolean = { item ->
+        item.isSeries || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() ||
+            categories.any { c -> c.id == item.categoryId && c.title.contains("dizi", ignoreCase = true) }
     }
 }
 

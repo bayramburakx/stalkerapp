@@ -123,6 +123,7 @@ fun VodDetailScreen(
             playing = true
             try {
                 val url = vm.repository.vodStreamUrl(it, p, episode)
+                PlaybackManager.currentVodId = it.id
                 PlaybackManager.play(url, it.name, it.poster)
                 onOpenPlayer()
             } catch (e: Exception) {

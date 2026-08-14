@@ -3,6 +3,7 @@ package com.stalkerapp.data
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonArray
@@ -342,6 +343,98 @@ class PortalRepository(
     fun vodTotal(profile: Profile, categoryId: Long = 0, search: String = ""): Int {
         val pid = profile.portal?.id ?: ""
         return vodTotals["$pid:${vodKey(categoryId, search)}"] ?: 0
+    }
+
+    /** Clears all in-memory caches (used when switching active portal). */
+    fun clearCaches() {
+        handshakeTokens.clear()
+        streamTokens.clear()
+        profiles.clear()
+        genresCache.clear()
+        channelsCache.clear()
+        vodGenresCache.clear()
+        vodCache.clear()
+        vodTotals.clear()
+        vodItemsById.clear()
+        epgCache.clear()
+    }
+
+    /**
+     * Loads the COMPLETE VOD catalog in the background by iterating every VOD
+     * category and paging through it until exhaustion. This guarantees all items
+     * are loaded (no partial/looping pages) and is safe against portals that
+     * ignore the `page` parameter. Progress is reported via [onProgress].
+     */
+    suspend fun syncVodCatalog(
+        profile: Profile,
+        perPage: Int = 500,
+        onProgress: (doneCategories: Int, totalCategories: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
+    ): List<VodItem> {
+        val cats = runCatching { loadVodCategories(profile) }.getOrDefault(emptyList())
+        val all = LinkedHashMap<Long, VodItem>()
+        cats.forEachIndexed { idx, cat ->
+            try {
+                var page = 1
+                var emptyStreak = 0
+                var guard = 0
+                while (guard < 2000) {
+                    guard++
+                    val (list, total) = fetchVodPage(profile, cat.id, page, perPage)
+                    if (list.isEmpty()) {
+                        emptyStreak++
+                        if (emptyStreak >= 2) break
+                        page++
+                        continue
+                    }
+                    emptyStreak = 0
+                    var added = 0
+                    list.forEach { item ->
+                        if (!all.containsKey(item.id)) {
+                            val stamped = if (item.categoryId != cat.id) item.copy(categoryId = cat.id) else item
+                            all[stamped.id] = stamped
+                            added++
+                        }
+                    }
+                    onProgress(idx + 1, cats.size, all.size)
+                    if (total > 0 && all.size >= total) break
+                    if (added == 0) break
+                    page++
+                }
+            } catch (e: Exception) {
+                // skip a problematic category but keep what we have
+            }
+            onProgress(idx + 1, cats.size, all.size)
+        }
+        return all.values.toList()
+    }
+
+    private suspend fun fetchVodPage(
+        profile: Profile,
+        categoryId: Long,
+        page: Int,
+        perPage: Int
+    ): Pair<List<VodItem>, Int> {
+        repeat(3) { attempt ->
+            try {
+                val resp = client.request(
+                    profile.baseUrl,
+                    "portal.php?type=vod&action=get_ordered_list",
+                    "POST",
+                    tokenFor(profile),
+                    buildMap {
+                        put("page", page.toString())
+                        put("category", categoryId.toString())
+                        put("per_page", perPage.toString())
+                    }
+                )
+                return parseVodList(resp) to parseTotal(resp)
+            } catch (e: StalkerException) {
+                if (e.isCooldown) {
+                    delay(client.cooldownRemainingMs() + 1000)
+                } else throw e
+            }
+        }
+        return emptyList() to 0
     }
 
     suspend fun vodById(profile: Profile, id: Long): VodItem? {
