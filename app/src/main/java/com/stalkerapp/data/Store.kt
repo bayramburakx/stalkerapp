@@ -280,7 +280,7 @@ class Store(private val context: Context) {
 }
 
 @kotlinx.serialization.Serializable
-internal data class CatalogMetaFile(
+data class CatalogMetaFile(
     val categories: List<Genre>,
     val itemCount: Int,
     val ts: Long,
