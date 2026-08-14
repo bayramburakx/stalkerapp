@@ -27,6 +27,7 @@ import androidx.navigation.navArgument
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.home.HomeScreen
+import com.stalkerapp.ui.live.EpgGuideScreen
 import com.stalkerapp.ui.login.LoginScreen
 import com.stalkerapp.ui.onboarding.OnboardingScreen
 import com.stalkerapp.ui.person.PersonScreen
@@ -93,7 +94,21 @@ private fun AppNav() {
             OnboardingScreen(onDone = { navController.navigate("login") { popUpTo("onboarding") { inclusive = true } } })
         }
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
-        composable("home") { HomeScreen(onOpenPlayer = { navController.navigate("player") }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenSearch = { navController.navigate("search") }) }
+        composable("home") {
+            HomeScreen(
+                onOpenPlayer = { navController.navigate("player") },
+                onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
+                onOpenSearch = { navController.navigate("search") },
+                onOpenGuide = { navController.navigate("epg") }
+            )
+        }
+        composable("epg") {
+            EpgGuideScreen(
+                profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
+                onBack = { navController.popBackStack() },
+                onOpenPlayer = { navController.navigate("player") }
+            )
+        }
         composable("search") { SearchScreen(onBack = { navController.popBackStack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }
         composable("player") { PlayerScreen(navController) }
         composable(

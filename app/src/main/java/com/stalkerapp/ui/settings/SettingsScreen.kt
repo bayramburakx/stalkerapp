@@ -1,5 +1,7 @@
 package com.stalkerapp.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,9 +32,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.stalkerapp.BuildConfig
 import com.stalkerapp.data.Portal
+import com.stalkerapp.data.UpdateChecker
+import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.AppCard
@@ -60,7 +66,30 @@ fun SettingsScreen(
     var editing by remember { mutableStateOf<Portal?>(null) }
     var showSwitch by remember { mutableStateOf(false) }
     var tmdbKey by remember(settings.tmdbApiKey) { mutableStateOf(settings.tmdbApiKey) }
+    var updateDialog by remember { mutableStateOf<UpdateInfo?>(null) }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    fun checkForUpdate() {
+        scope.launch {
+            checkingUpdate = true
+            updateMessage = null
+            try {
+                val info = UpdateChecker().latest()
+                if (info != null && UpdateChecker.isNewer(info.version, BuildConfig.VERSION_NAME)) {
+                    updateDialog = info
+                } else {
+                    updateMessage = "Güncel sürümdesiniz (v${BuildConfig.VERSION_NAME})"
+                }
+            } catch (e: Exception) {
+                updateMessage = "Güncelleme kontrol edilemedi: ${e.message ?: "ağ hatası"}"
+            } finally {
+                checkingUpdate = false
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -202,6 +231,34 @@ fun SettingsScreen(
                     enabled = tmdbKey.trim().isNotEmpty()
                 ) {
                     Text("Kaydet")
+                }
+            }
+        }
+
+        // ---------- Uygulama Güncellemesi ----------
+        AppCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Uygulama Güncellemesi", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Mevcut sürüm: v${BuildConfig.VERSION_NAME}. GitHub üzerinden yeni APK yayınlanıp yayınlanmadığını kontrol eder.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = { checkForUpdate() },
+                    enabled = !checkingUpdate
+                ) {
+                    Text(if (checkingUpdate) "Kontrol ediliyor…" else "Güncelleme Kontrol Et")
+                }
+                if (updateMessage != null) {
+                    Text(
+                        updateMessage.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -420,6 +477,28 @@ fun SettingsScreen(
             onSwitch = { p ->
                 showSwitch = false
                 vm.launchSwitch(p) { onPortalsChanged() }
+            }
+        )
+    }
+
+    updateDialog?.let { info ->
+        AlertDialog(
+            onDismissRequest = { updateDialog = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    updateDialog = null
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.url)))
+                    }
+                }) { Text("İndir") }
+            },
+            dismissButton = { TextButton(onClick = { updateDialog = null }) { Text("Sonra") } },
+            title = { Text("Yeni sürüm var!") },
+            text = {
+                Text(
+                    "v${info.version} yayınlandı (${info.publishedAt.take(10)}). " +
+                        "Güncel APK'yı indirip kurmak ister misin?"
+                )
             }
         )
     }

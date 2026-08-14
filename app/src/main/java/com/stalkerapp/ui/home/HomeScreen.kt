@@ -55,7 +55,8 @@ private data class NavItem(val icon: ImageVector, val label: String, val onClick
 fun HomeScreen(
     onOpenPlayer: () -> Unit,
     onOpenVod: (Long, Boolean) -> Unit,
-    onOpenSearch: () -> Unit = {}
+    onOpenSearch: () -> Unit = {},
+    onOpenGuide: () -> Unit = {}
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
@@ -146,7 +147,7 @@ fun HomeScreen(
         saveableStateHolder.SaveableStateProvider(tab) {
             when (tab) {
                 0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
-                1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding())
+                1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding(), onOpenGuide = onOpenGuide)
                 2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
                 3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
                 4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())

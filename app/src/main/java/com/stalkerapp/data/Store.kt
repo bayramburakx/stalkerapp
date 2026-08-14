@@ -346,7 +346,7 @@ class Store(private val context: Context) {
         if (map.remove(key) != null) {
             prefs.edit().putString(
                 KEY_EPISODE_PROGRESS,
-                json.encodeToString(MapSerializer(String.serializer()), map)
+                json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
             ).apply()
         }
     }

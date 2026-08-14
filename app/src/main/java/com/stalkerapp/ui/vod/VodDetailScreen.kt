@@ -116,6 +116,7 @@ fun VodDetailScreen(
     LifecycleResumeEffect(Unit) {
         watchedEps = app.store.watchedEpisodes()
         onPauseOrDispose { }
+    }
 
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
 
@@ -272,7 +273,7 @@ fun VodDetailScreen(
                     val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
                     val withProgress = allEps.firstOrNull { ep ->
                         val pr = app.store.episodeProgress()[episodeKey(ep, seasonNum)]
-                        pr != null && pr.positionMs in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
+                        pr != null && pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
                     }
                     if (withProgress != null) {
                         val pr = app.store.episodeProgress()[episodeKey(withProgress, seasonNum)]
@@ -295,7 +296,7 @@ fun VodDetailScreen(
     fun onPlayPressed(episode: Episode? = null) {
         val prog = progressFor(episode)
         val resume = prog != null && prog.durationMs > 0 &&
-            prog.positionMs in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
+            prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
         if (resume) {
             pendingEpisode = episode
             showResumeSheet = true

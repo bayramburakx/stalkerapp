@@ -31,6 +31,12 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Extract version
+        id: ver
+        run: |
+          V=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -42,7 +48,7 @@ jobs:
         if: github.event_name == 'push'
         with:
           tag_name: latest
-          name: Stalker Player – Güncel APK
+          name: Stalker Player v${{ steps.ver.outputs.version }} – Güncel APK
           body: |
             Otomatik derlenen güncel APK (her push'ta yenilenir).
 
