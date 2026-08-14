@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun VodDetailScreen(
     vodId: Long,
+    isSeriesHint: Boolean = false,
     onBack: () -> Unit,
     onOpenPlayer: () -> Unit
 ) {
@@ -84,7 +85,7 @@ fun VodDetailScreen(
         try {
             val it = profile?.let { p -> vm.repository.vodById(p, vodId) }
             item = it
-            if (it?.isSeries == true && profile != null) {
+            if ((it?.isSeries == true || isSeriesHint) && profile != null) {
                 seasons = vm.repository.loadSeasons(profile, vodId)
                 selectedSeason = seasons.firstOrNull()?.id
             }
@@ -98,7 +99,7 @@ fun VodDetailScreen(
     LaunchedEffect(selectedSeason) {
         val it = item ?: return@LaunchedEffect
         val sid = selectedSeason ?: return@LaunchedEffect
-        if (!it.isSeries) return@LaunchedEffect
+            if (!it.isSeries && !isSeriesHint) return@LaunchedEffect
         val p = profile ?: return@LaunchedEffect
         try {
             episodes = vm.repository.loadEpisodes(p, it.id, sid)

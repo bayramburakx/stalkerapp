@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -54,7 +56,7 @@ import com.stalkerapp.ui.components.resolveUrl
 @Composable
 fun VodScreen(
     profile: Profile?,
-    onOpenVod: (Long) -> Unit,
+    onOpenVod: (Long, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     filterIsSeries: Boolean? = null
 ) {
@@ -71,9 +73,13 @@ fun VodScreen(
     var categories by remember { mutableStateOf<List<Genre>?>(null) }
     var items by remember { mutableStateOf<List<VodItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(true) }
+    var page by remember { mutableStateOf(1) }
     var error by remember { mutableStateOf<String?>(null) }
     var selectedCategory by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
+    val gridState = rememberLazyGridState()
 
     LaunchedEffect(Unit) {
         try {
@@ -88,16 +94,48 @@ fun VodScreen(
         }
     }
 
-    LaunchedEffect(selectedCategory) {
+    LaunchedEffect(selectedCategory, query) {
         loading = true
         error = null
+        page = 1
+        hasMore = true
+        loadingMore = false
+        if (query.isNotBlank()) kotlinx.coroutines.delay(400)
         try {
-            items = vm.repository.loadVodList(profile, selectedCategory)
+            val searchCat = if (query.isNotBlank()) 0L else selectedCategory
+            items = vm.repository.loadVodList(profile, searchCat, 1, query.trim())
+            val total = vm.repository.vodTotal(profile, searchCat, query.trim())
+            hasMore = (items?.size ?: 0) < total
         } catch (e: Exception) {
             error = e.message
         } finally {
             loading = false
         }
+    }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.layoutInfo }
+            .collect { info ->
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                val total = info.totalItemsCount
+                if (total > 0 && last >= total - 4 && hasMore && !loadingMore && !loading && items?.isNotEmpty() == true) {
+                    loadingMore = true
+                    try {
+                        page += 1
+                        val searchCat = if (query.isNotBlank()) 0L else selectedCategory
+                        val more = vm.repository.loadVodList(profile, searchCat, page, query.trim())
+                        val merged = (items ?: emptyList()) + more
+                        items = merged
+                        val totalCount = vm.repository.vodTotal(profile, searchCat, query.trim())
+                        hasMore = merged.size < totalCount
+                    } catch (e: Exception) {
+                        page -= 1
+                        error = e.message
+                    } finally {
+                        loadingMore = false
+                    }
+                }
+            }
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -126,7 +164,7 @@ fun VodScreen(
                 if (filterIsSeries != true) {
                     item {
                         FilterChip(
-                            selected = selectedCategory == 0L,
+                            selected = selectedCategory == 0L && query.isBlank(),
                             onClick = { selectedCategory = 0L },
                             label = { Text("Tümü") }
                         )
@@ -168,6 +206,7 @@ fun VodScreen(
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
+                    state = gridState,
                     contentPadding = PaddingValues(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -177,8 +216,11 @@ fun VodScreen(
                             item = item,
                             baseUrl = profile.baseUrl,
                             isSeries = filterIsSeries == true || item.isSeries,
-                            onClick = { onOpenVod(item.id) }
+                            onClick = { onOpenVod(item.id, filterIsSeries == true || isSeriesItem(item)) }
                         )
+                    }
+                    if (loadingMore) {
+                        item { LoadingBox() }
                     }
                 }
             }

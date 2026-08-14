@@ -37,9 +37,13 @@ class PortalRepository(
     private val genresCache = mutableMapOf<String, List<Genre>>()
     private val channelsCache = mutableMapOf<String, MutableMap<Long, List<Channel>>>()
     private val vodGenresCache = mutableMapOf<String, List<Genre>>()
-    private val vodCache = mutableMapOf<String, MutableMap<Long, List<VodItem>>>()
+    private val vodCache = mutableMapOf<String, MutableMap<String, List<VodItem>>>()
+    private val vodTotals = mutableMapOf<String, Int>()
     private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
     private val epgCache = mutableMapOf<Long, List<EpgProgram>>()
+
+    private fun vodKey(categoryId: Long, search: String): String =
+        "$categoryId|${search.trim().lowercase()}"
 
     private val _status = MutableStateFlow<PortalStatus>(PortalStatus.Idle)
     val status: StateFlow<PortalStatus> = _status
@@ -301,13 +305,21 @@ class PortalRepository(
         return list
     }
 
-    suspend fun loadVodList(profile: Profile, categoryId: Long = 0, page: Int = 1): List<VodItem> {
-        vodCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }
-            .get(categoryId)?.let { if (page <= 1) return it }
+    suspend fun loadVodList(
+        profile: Profile,
+        categoryId: Long = 0,
+        page: Int = 1,
+        search: String = ""
+    ): List<VodItem> {
+        val pid = profile.portal?.id ?: ""
+        val cache = vodCache.getOrPut(pid) { mutableMapOf() }
+        val key = vodKey(categoryId, search)
+        if (page <= 1 && cache[key] != null) return cache[key]!!
 
         val body = buildMap {
             put("page", page.toString())
             if (categoryId > 0) put("category", categoryId.toString())
+            if (search.isNotBlank()) put("search", search.trim())
         }
         val resp = client.request(
             profile.baseUrl,
@@ -317,11 +329,19 @@ class PortalRepository(
             body
         )
         val list = parseVodList(resp)
+        vodTotals["$pid:$key"] = parseTotal(resp)
         if (page <= 1) {
-            vodCache.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[categoryId] = list
+            cache[key] = list
+        } else {
+            cache[key] = (cache[key] ?: emptyList()) + list
         }
-        list.forEach { vodItemsById.getOrPut(profile.portal?.id ?: "") { mutableMapOf() }[it.id] = it }
+        list.forEach { vodItemsById.getOrPut(pid) { mutableMapOf() }[it.id] = it }
         return list
+    }
+
+    fun vodTotal(profile: Profile, categoryId: Long = 0, search: String = ""): Int {
+        val pid = profile.portal?.id ?: ""
+        return vodTotals["$pid:${vodKey(categoryId, search)}"] ?: 0
     }
 
     suspend fun vodById(profile: Profile, id: Long): VodItem? {
@@ -365,37 +385,22 @@ class PortalRepository(
         profile: Profile,
         episode: Episode? = null
     ): String {
-        val cmdParam = when {
-            !episode?.cmd.isNullOrBlank() -> episode!!.cmd
-            item.cmd.isNotBlank() -> item.cmd
-            else -> "/media/${item.id}.mp4"
-        }
         val seriesParam = when {
             episode != null -> (episode.episodeNumber.takeIf { it > 0 } ?: 1).toString()
             item.isSeries -> "1"
             else -> "0"
         }
-        val resp = try {
-            client.request(
-                profile.baseUrl,
-                "portal.php?type=vod&action=create_link",
-                "POST",
-                tokenFor(profile),
-                mapOf(
-                    "cmd" to cmdParam,
-                    "vod_id" to item.id.toString(),
-                    "file_id" to item.id.toString(),
-                    "series" to seriesParam,
-                    "forced_storage" to "0",
-                    "disable_ad" to "1"
-                )
-            )
-        } catch (e: Exception) {
-            null
+
+        val cmdCandidates = buildList {
+            if (!episode?.cmd.isNullOrBlank()) add(episode!!.cmd)
+            if (item.cmd.isNotBlank()) add(item.cmd)
+            add("/media/${item.id}.mp4")
         }
-        if (resp != null) {
-            StalkerClient.extractUrl(resp)?.let { return fixLocalhost(it, profile) }
+
+        for (cmd in cmdCandidates) {
+            tryCreateLink(profile, cmd, item.id, seriesParam)?.let { return it }
         }
+
         episode?.cmd?.takeIf { it.isNotBlank() }?.let {
             StalkerClient.parseCmd(it)?.let { u -> return fixLocalhost(u, profile) }
         }
@@ -405,9 +410,36 @@ class PortalRepository(
         val server = profile.serverAddress
         if (server.isNotBlank()) {
             val s = if (server.startsWith("http")) server else "http://$server"
-            return "$s/${item.id}"
+            return fixLocalhost("$s/media/${item.id}.mp4", profile)
         }
         throw StalkerException("VOD akış URL'si alınamadı")
+    }
+
+    private suspend fun tryCreateLink(
+        profile: Profile,
+        cmd: String,
+        vodId: Long,
+        seriesParam: String
+    ): String? {
+        val resp = try {
+            client.request(
+                profile.baseUrl,
+                "portal.php?type=vod&action=create_link",
+                "POST",
+                tokenFor(profile),
+                mapOf(
+                    "cmd" to cmd,
+                    "vod_id" to vodId.toString(),
+                    "file_id" to vodId.toString(),
+                    "series" to seriesParam,
+                    "forced_storage" to "0",
+                    "disable_ad" to "1"
+                )
+            )
+        } catch (e: Exception) {
+            null
+        }
+        return resp?.let { StalkerClient.extractUrl(it)?.let { u -> fixLocalhost(u, profile) } }
     }
 
     private fun fixLocalhost(url: String, profile: Profile): String {
@@ -443,6 +475,13 @@ class PortalRepository(
             is JsonArray -> el.mapNotNull { it as? JsonObject }
             else -> emptyList()
         }
+    }
+
+    private fun parseTotal(el: JsonElement): Int {
+        val obj = el as? JsonObject ?: return 0
+        val t = obj["total_items"]?.asJsonPrimitiveOrNull()?.contentOrNull
+            ?: obj["total"]?.asJsonPrimitiveOrNull()?.contentOrNull
+        return t?.toIntOrNull() ?: 0
     }
 
     private fun parseGenres(el: JsonElement): List<Genre> {

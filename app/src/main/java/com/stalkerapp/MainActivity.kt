@@ -25,6 +25,7 @@ import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.home.HomeScreen
 import com.stalkerapp.ui.live.LiveTvScreen
 import com.stalkerapp.ui.login.LoginScreen
+import com.stalkerapp.ui.search.SearchScreen
 import com.stalkerapp.ui.theme.StalkerTheme
 import com.stalkerapp.ui.vod.VodDetailScreen
 import com.stalkerapp.playback.PlaybackManager
@@ -72,14 +73,19 @@ private fun AppNav() {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "login") {
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
-        composable("home") { HomeScreen(onOpenPlayer = { navController.navigate("player") }, onOpenVod = { id -> navController.navigate("vod/$id") }) }
+        composable("home") { HomeScreen(onOpenPlayer = { navController.navigate("player") }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenSearch = { navController.navigate("search") }) }
+        composable("search") { SearchScreen(onBack = { navController.popBackStack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }
         composable("player") { PlayerScreen(navController) }
         composable(
-            route = "vod/{vodId}",
-            arguments = listOf(navArgument("vodId") { type = NavType.LongType })
+            route = "vod/{vodId}?series={series}",
+            arguments = listOf(
+                navArgument("vodId") { type = NavType.LongType },
+                navArgument("series") { type = NavType.BoolType; defaultValue = false }
+            )
         ) { entry ->
             VodDetailScreen(
                 vodId = entry.arguments?.getLong("vodId") ?: 0L,
+                isSeriesHint = entry.arguments?.getBoolean("series") ?: false,
                 onBack = { navController.popBackStack() },
                 onOpenPlayer = { navController.navigate("player") }
             )

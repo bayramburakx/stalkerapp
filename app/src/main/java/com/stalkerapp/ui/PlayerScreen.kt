@@ -73,6 +73,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.view.WindowCompat
@@ -82,10 +83,12 @@ import androidx.navigation.NavHostController
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
+import kotlin.math.abs
 import android.widget.Toast
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Close
@@ -109,6 +112,8 @@ import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.delay
+
+private enum class GestureMode { BRIGHTNESS, VOLUME, SEEK }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,6 +148,20 @@ fun PlayerScreen(navController: NavHostController) {
     var duration by remember { mutableStateOf(0L) }
     var seeking by remember { mutableStateOf(false) }
     val isLive = !PlaybackManager.isVod()
+
+    val audioManager = remember {
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }
+    val audioMax = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 1
+    var volume by remember {
+        mutableStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0)
+    }
+    val initBrightness = activity?.window?.attributes?.screenBrightness ?: -1f
+    var brightness by remember { mutableStateOf(if (initBrightness < 0f) 0.5f else initBrightness) }
+    var gestureMode by remember { mutableStateOf<GestureMode?>(null) }
+    var gestureStartPos by remember { mutableStateOf(0L) }
+    var gestureAccumDx by remember { mutableStateOf(0f) }
+    var gestureText by remember { mutableStateOf<String?>(null) }
 
     val playerView = remember {
         PlayerView(context).apply {
@@ -270,10 +289,102 @@ fun PlayerScreen(navController: NavHostController) {
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectTapGestures { if (!locked) overlayVisible = !overlayVisible }
+                detectTapGestures(
+                    onTap = { if (!locked) overlayVisible = !overlayVisible },
+                    onDoubleTap = { offset ->
+                        if (!locked) {
+                            when {
+                                offset.x < size.width / 3 -> PlaybackManager.seekBack(10_000L)
+                                offset.x > size.width * 2 / 3 -> PlaybackManager.seekForward(10_000L)
+                                else -> PlaybackManager.togglePlayPause()
+                            }
+                        }
+                    }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {
+                        gestureMode = null
+                        gestureStartPos = PlaybackManager.player?.currentPosition ?: 0L
+                        gestureAccumDx = 0f
+                    },
+                    onDrag = { change, dragAmount ->
+                        if (locked) return@detectDragGestures
+                        change.consume()
+                        val p = PlaybackManager.player ?: return@detectDragGestures
+                        val dur = if (p.duration > 0) p.duration else 0L
+                        if (gestureMode == null) {
+                            gestureMode = if (abs(dragAmount.x) > abs(dragAmount.y)) {
+                                GestureMode.SEEK
+                            } else if (change.position.x < size.width / 2) {
+                                GestureMode.BRIGHTNESS
+                            } else {
+                                GestureMode.VOLUME
+                            }
+                        }
+                        when (gestureMode) {
+                            GestureMode.SEEK -> {
+                                seeking = true
+                                gestureAccumDx += dragAmount.x
+                                val deltaMs = ((gestureAccumDx / size.width) * dur).toLong()
+                                position = (gestureStartPos + deltaMs).coerceIn(0L, dur)
+                                gestureText = "${formatMs(position)} / ${formatMs(dur)}"
+                            }
+                            GestureMode.BRIGHTNESS -> {
+                                val newB = (brightness - dragAmount.y / size.height)
+                                    .coerceIn(0.05f, 1f)
+                                brightness = newB
+                                activity?.let { act ->
+                                    act.window.attributes = act.window.attributes.apply {
+                                        screenBrightness = newB
+                                    }
+                                }
+                                gestureText = "Parlaklık %${(newB * 100).toInt()}"
+                            }
+                            GestureMode.VOLUME -> {
+                                val newV = (volume - (dragAmount.y / size.height * audioMax).toInt())
+                                    .coerceIn(0, audioMax)
+                                volume = newV
+                                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
+                                val pct = if (audioMax > 0) (newV * 100 / audioMax) else 0
+                                gestureText = "Ses %$pct"
+                            }
+                            null -> {}
+                        }
+                    },
+                    onDragEnd = {
+                        if (gestureMode == GestureMode.SEEK) {
+                            PlaybackManager.seekTo(position)
+                            seeking = false
+                        }
+                        gestureMode = null
+                        gestureText = null
+                    },
+                    onDragCancel = {
+                        if (gestureMode == GestureMode.SEEK) seeking = false
+                        gestureMode = null
+                        gestureText = null
+                    }
+                )
             }
     ) {
         AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
+
+        if (gestureText != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    gestureText.orEmpty(),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
 
         if (isBuffering) {
             CircularProgressIndicator(

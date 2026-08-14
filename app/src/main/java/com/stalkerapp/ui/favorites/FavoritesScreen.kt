@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 fun FavoritesScreen(
     profile: Profile?,
     onOpenPlayer: () -> Unit,
-    onOpenVod: (Long) -> Unit,
+    onOpenVod: (Long, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (profile == null) {
@@ -110,7 +110,7 @@ fun FavoritesScreen(
                             VodPoster(
                                 item = item,
                                 baseUrl = profile.baseUrl,
-                                onClick = { onOpenVod(item.id) },
+                                onClick = { onOpenVod(item.id, item.isSeries) },
                                 width = 120
                             )
                         }

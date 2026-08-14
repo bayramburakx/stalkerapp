@@ -12,6 +12,9 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,7 +33,8 @@ import com.stalkerapp.ui.vod.VodScreen
 @Composable
 fun HomeScreen(
     onOpenPlayer: () -> Unit,
-    onOpenVod: (Long) -> Unit
+    onOpenVod: (Long, Boolean) -> Unit,
+    onOpenSearch: () -> Unit = {}
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = viewModel { MainViewModel(app) }
@@ -39,6 +43,16 @@ fun HomeScreen(
     var tab by remember { mutableIntStateOf(0) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Stalker Player") },
+                actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Default.Search, contentDescription = "Ara")
+                    }
+                }
+            )
+        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
