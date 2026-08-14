@@ -17,7 +17,6 @@ import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Settings
 import com.stalkerapp.data.Store
 import com.stalkerapp.data.VodItem
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,80 +48,43 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     val statusMessage: StateFlow<String?> = _statusMessage
 
     // ---------- VOD catalog (background sync) ----------
-    private val _vodCatalog = MutableStateFlow(VodCatalogState())
-    val vodCatalog: StateFlow<VodCatalogState> = _vodCatalog
-    private var vodSyncJob: Job? = null
+    // The sync is owned by the app-lifetime VodSyncManager so it keeps running
+    // while the app is backgrounded and resumes from a checkpoint after a restart.
+    val vodCatalog: StateFlow<VodCatalogState> = StalkerApp.instance.vodSyncManager.progress
 
     fun syncVodCatalog(profile: Profile, force: Boolean = false) {
-        if (_vodCatalog.value.status == VodCatalogStatus.Syncing && !force) return
-        vodSyncJob?.cancel()
-        vodSyncJob = viewModelScope.launch {
-            _vodCatalog.value = _vodCatalog.value.copy(status = VodCatalogStatus.Syncing)
-            val acc = mutableListOf<VodItem>()
-            try {
-                val portalId = profile.portal?.id ?: ""
-                repository.syncVodCatalog(
-                    profile,
-                    onItem = { acc.add(it) },
-                    onProgress = { done, total, loaded ->
-                        _vodCatalog.value = _vodCatalog.value.copy(
-                            doneCategories = done,
-                            totalCategories = total,
-                            loadedCount = loaded,
-                            allItems = acc.toList()
-                        )
-                    }
-                )
-                val cats = runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
-                store.saveVodCatalog(portalId, acc, cats)
-                _vodCatalog.value = VodCatalogState(
-                    status = VodCatalogStatus.Ready,
-                    doneCategories = cats.size,
-                    totalCategories = cats.size,
-                    loadedCount = acc.size,
-                    allItems = acc,
-                    categories = cats,
-                    lastSync = System.currentTimeMillis()
-                )
-            } catch (e: Exception) {
-                if (_vodCatalog.value.status != VodCatalogStatus.Ready) {
-                    _vodCatalog.value = _vodCatalog.value.copy(status = VodCatalogStatus.Error)
-                }
-                showMessage("VOD senkron hatası: ${e.message}")
-            }
-        }
+        StalkerApp.instance.vodSyncManager.ensureSynced(profile, force)
+        VodSyncService.start(app)
     }
 
     /**
      * Ensures the VOD catalog is available. On app launch this just loads the
-     * persisted disk cache (instant, NO network sync) so the user is not forced
-     * to re-sync every time. A background sync only runs once when there is no
-     * cache at all (e.g. first run or after switching to a new portal). Use
-     * [syncVodCatalog] for an explicit manual refresh.
+     * persisted disk cache (instant, NO network sync) when it is already
+     * complete, so the user is not forced to re-sync every time. A background
+     * sync (in a foreground service, so it survives being backgrounded or closed)
+     * only runs when there is no complete cache yet, or to resume an
+     * interrupted sync from its checkpoint.
      */
     fun syncVodIfNeeded(profile: Profile) {
-        val cur = _vodCatalog.value
-        if (cur.status == VodCatalogStatus.Syncing) return
-        val portalId = profile.portal?.id ?: ""
+        val portalId = profile.portal?.id ?: return
         val cached = store.loadVodCatalog(portalId)
-        if (cached != null && cached.first.isNotEmpty()) {
-            _vodCatalog.value = VodCatalogState(
-                status = VodCatalogStatus.Ready,
-                doneCategories = cached.second.size,
-                totalCategories = cached.second.size,
-                loadedCount = cached.first.size,
-                allItems = cached.first,
-                categories = cached.second,
-                lastSync = cached.third
-            )
+        val doneCats = store.loadVodCatalogDoneCats(portalId)
+        val complete = cached != null && cached.first.isNotEmpty() && doneCats.isEmpty()
+        if (complete) {
+            StalkerApp.instance.vodSyncManager.publishCached(profile)
             return
         }
-        syncVodCatalog(profile, force = true)
+        StalkerApp.instance.vodSyncManager.ensureSynced(profile)
+        VodSyncService.start(app)
     }
 
     fun resetVodCatalog() {
-        vodSyncJob?.cancel()
-        _vodCatalog.value = VodCatalogState()
+        StalkerApp.instance.vodSyncManager.reset()
+        StalkerApp.instance.store.clearVodCatalogDoneCats(profileId())
+    }
+
+    private fun profileId(): String {
+        return StalkerApp.instance.repository.cachedProfile()?.portal?.id ?: ""
     }
 
     init {
@@ -215,7 +177,7 @@ data class VodCatalogState(
     val byId: Map<Long, VodItem> get() = allItems.associateBy { it.id }
     val isSeriesItem: (VodItem) -> Boolean = { item ->
         item.isSeries || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() ||
-            categories.any { c -> c.id == item.categoryId && c.title.contains("dizi", ignoreCase = true) }
+            categories.any { c -> c.id == item.categoryId && c.title.let { t -> t.contains("dizi", ignoreCase = true) || t.contains("series", ignoreCase = true) || t.contains("serial", ignoreCase = true) } }
     }
 }
 

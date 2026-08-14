@@ -153,6 +153,38 @@ class Store(private val context: Context) {
         Triple(data.items, data.categories, data.ts)
     }.getOrNull()
 
+    fun appendVodCatalog(portalId: String, newItems: List<VodItem>, categories: List<Genre>) {
+        runCatching {
+            val existing = loadVodCatalog(portalId)
+            val merged = if (existing == null) {
+                newItems.associateBy { it.id }
+            } else {
+                (existing.first.associateBy { it.id } + newItems.associateBy { it.id }).toMap()
+            }
+            val cats = if (existing == null || existing.second.isEmpty()) categories else existing.second
+            val file = File(context.filesDir, "vod_catalog_$portalId.json")
+            file.writeText(
+                json.encodeToString(
+                    VodCatalogFile.serializer(),
+                    VodCatalogFile(merged.values.toList(), cats, System.currentTimeMillis())
+                )
+            )
+            saveVodCatalogDoneCats(portalId, (loadVodCatalogDoneCats(portalId) + newItems.map { it.categoryId }.toSet()).toList())
+        }
+    }
+
+    fun saveVodCatalogDoneCats(portalId: String, doneCatIds: List<Int>) {
+        prefs.edit().putString(KEY_VOD_DONE_CATS, json.encodeToString(ListSerializer(Int.serializer()), doneCatIds)).apply()
+    }
+
+    fun loadVodCatalogDoneCats(portalId: String): Set<Int> = runCatching {
+        json.decodeFromString(ListSerializer(Int.serializer()), prefs.getString(KEY_VOD_DONE_CATS, "[]").orEmpty()).toSet()
+    }.getOrDefault(emptySet())
+
+    fun clearVodCatalogDoneCats(portalId: String) {
+        prefs.edit().remove(KEY_VOD_DONE_CATS).apply()
+    }
+
     fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
         val map = loadVodProgress().toMutableMap()
         map[id] = VodProgress(positionMs, durationMs)
@@ -187,6 +219,7 @@ class Store(private val context: Context) {
         private const val KEY_FAVORITE_CHANNELS = "favorite_channels"
         private const val KEY_FAVORITE_VODS = "favorite_vods"
         private const val KEY_VOD_PROGRESS = "vod_progress"
+        private const val KEY_VOD_DONE_CATS = "vod_done_cats"
     }
 }
 

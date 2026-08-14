@@ -1,0 +1,169 @@
+package com.stalkerapp.ui
+
+import com.stalkerapp.data.Genre
+import com.stalkerapp.data.PortalRepository
+import com.stalkerapp.data.Profile
+import com.stalkerapp.data.Store
+import com.stalkerapp.data.VodItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.CoroutineContext
+
+/**
+ * Owns the (potentially long-running) VOD catalog sync. Lives on an
+ * application-lifetime [CoroutineScope] so it keeps running while the app is
+ * backgrounded, and can resume from a persisted checkpoint after the process
+ * restarts (app closed / killed). UI observes [progress].
+ */
+class VodSyncManager(
+    context: CoroutineContext,
+    private val repository: PortalRepository,
+    private val store: Store
+) {
+    private val scope = CoroutineScope(SupervisorJob() + context)
+    private val _progress = MutableStateFlow(VodCatalogState())
+    val progress: StateFlow<VodCatalogState> = _progress.asStateFlow()
+
+    private var job: kotlinx.coroutines.Job? = null
+    private val mutex = Mutex()
+    private val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
+
+    fun isSeriesItem(item: VodItem): Boolean {
+        if (item.isSeries) return true
+        val title = _progress.value.categories.find { it.id == item.categoryId }?.title
+        val t = title ?: item.categoryId.toString()
+        return seriesKeywords.any { t.contains(it, ignoreCase = true) }
+    }
+
+    /** Starts (or resumes) syncing. No-op while a sync is already in progress. */
+    fun ensureSynced(profile: Profile, force: Boolean = false) {
+        if (_progress.value.status == VodCatalogStatus.Syncing && !force) return
+        job?.cancel()
+        job = scope.launch { runSync(profile, force) }
+    }
+
+    /** Publishes an already-complete cached catalog to the UI without any network. */
+    fun publishCached(profile: Profile) {
+        val portalId = profile.portal?.id ?: return
+        val cached = store.loadVodCatalog(portalId) ?: return
+        _progress.value = VodCatalogState(
+            status = VodCatalogStatus.Ready,
+            doneCategories = cached.second.size,
+            totalCategories = cached.second.size,
+            loadedCount = cached.first.size,
+            allItems = cached.first,
+            categories = cached.second,
+            lastSync = cached.third
+        )
+    }
+
+    /** Cancels any running sync and clears the in-memory progress. */
+    fun reset() {
+        job?.cancel()
+        _progress.value = VodCatalogState()
+    }
+
+    private fun stamp(item: VodItem, seriesCatIds: Set<Int>): VodItem {
+        var it = item
+        if (it.categoryId != 0 && seriesCatIds.contains(it.categoryId)) it = it.copy(isSeries = true)
+        return it
+    }
+
+    private suspend fun runSync(profile: Profile, force: Boolean) {
+        val portalId = profile.portal?.id ?: ""
+        val cached = store.loadVodCatalog(portalId)
+        val doneCats = store.loadVodCatalogDoneCats(portalId)
+        val baseItems = if (force) emptyList() else (cached?.first ?: emptyList())
+        var cats = if (cached != null && cached.second.isNotEmpty()) cached.second
+        else runCatching { repository.loadVodCategories(profile) }.getOrDefault(emptyList())
+        if (force) store.clearVodCatalogDoneCats(portalId)
+
+        _progress.value = _progress.value.copy(
+            status = VodCatalogStatus.Syncing,
+            categories = cats,
+            allItems = baseItems,
+            loadedCount = baseItems.size,
+            doneCategories = if (force) 0 else doneCats.size,
+            totalCategories = cats.size
+        )
+
+        try {
+            val seriesCatIds = cats.filter { it.title.let { t -> seriesKeywords.any { kw -> t.contains(kw, true) } } }
+                .map { it.id }.toSet()
+            val all = ConcurrentHashMap<Long, VodItem>()
+            baseItems.forEach { all[it.id] = it }
+            val remaining = cats.filter { force || !doneCats.contains(it.id) }
+
+            // 1) Fast single pass (Tivimate-style: one huge per_page request).
+            var singleOk = false
+            if (force || baseItems.isEmpty()) {
+                runCatching {
+                    val (items, total) = repository.fetchAllVod(profile, 100000)
+                    val stamped = items.map { stamp(it, seriesCatIds) }
+                    stamped.forEach { all[it.id] = it }
+                    store.appendVodCatalog(portalId, stamped, cats)
+                    singleOk = stamped.size >= 200 && (total <= stamped.size + 1000 || total == 0)
+                    _progress.value = _progress.value.copy(
+                        loadedCount = all.size,
+                        doneCategories = cats.size,
+                        totalCategories = cats.size,
+                        allItems = all.values.toList()
+                    )
+                }
+            }
+
+            // 2) Parallel per-category fetch for any gaps (Tivimate fetches per category).
+            if (!singleOk) {
+                val sem = Semaphore(4)
+                coroutineScope {
+                    remaining.forEach { cat ->
+                        launch {
+                            sem.acquire()
+                            try {
+                                val items = repository.fetchVodCategory(profile, cat.id.toLong(), 5000)
+                                val stamped = items.map { stamp(it, seriesCatIds) }
+                                stamped.forEach { all[it.id] = it }
+                                store.appendVodCatalog(portalId, stamped, cats)
+                                mutex.withLock {
+                                    _progress.value = _progress.value.copy(
+                                        doneCategories = _progress.value.doneCategories + 1,
+                                        loadedCount = all.size,
+                                        allItems = all.values.toList()
+                                    )
+                                }
+                            } catch (_: Exception) {
+                            } finally {
+                                sem.release()
+                            }
+                        }
+                    }
+                }
+            }
+
+            store.clearVodCatalogDoneCats(portalId)
+            cats = store.loadVodCatalog(portalId)?.second ?: cats
+            _progress.value = _progress.value.copy(
+                status = VodCatalogStatus.Ready,
+                doneCategories = cats.size,
+                totalCategories = cats.size,
+                loadedCount = all.size,
+                allItems = all.values.toList(),
+                categories = cats,
+                lastSync = System.currentTimeMillis()
+            )
+        } catch (e: Exception) {
+            if (_progress.value.status != VodCatalogStatus.Ready) {
+                _progress.value = _progress.value.copy(status = VodCatalogStatus.Error)
+            }
+        }
+    }
+}

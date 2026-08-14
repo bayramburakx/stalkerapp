@@ -290,6 +290,48 @@ class PortalRepository(
         return programs
     }
 
+    /**
+     * Fast "all" pass (Tivimate-style): requests a very large `per_page` so the
+     * whole library comes back in one or two requests instead of slowly paging
+     * with cooldown. Returns the items plus the portal-reported total (0 if unknown).
+     */
+    suspend fun fetchAllVod(profile: Profile, perPage: Int = 100000): Pair<List<VodItem>, Int> {
+        val out = mutableListOf<VodItem>()
+        var total = 0
+        var page = 1
+        var guard = 0
+        while (guard < 64) {
+            guard++
+            val (list, t) = fetchVodPage(profile, 0, page, perPage)
+            if (t > 0) total = t
+            if (list.isEmpty()) break
+            out += list
+            if (total > 0 && out.size >= total) break
+            page++
+        }
+        return out to total
+    }
+
+    /** Pages a single VOD category fully and returns its items (category stamped). */
+    suspend fun fetchVodCategory(profile: Profile, catId: Long, perPage: Int = 5000): List<VodItem> {
+        val out = mutableListOf<VodItem>()
+        var page = 1
+        var guard = 0
+        while (guard < 4000) {
+            guard++
+            val (list, total) = fetchVodPage(profile, catId, page, perPage)
+            if (list.isEmpty()) {
+                if (page > 1) break
+                page++
+                continue
+            }
+            out += list.map { if (it.categoryId == 0L) it.copy(categoryId = catId.toInt()) else it }
+            if (total > 0 && out.size >= total) break
+            page++
+        }
+        return out
+    }
+
     // ---------- VOD ----------
 
     suspend fun loadVodCategories(profile: Profile): List<Genre> {
