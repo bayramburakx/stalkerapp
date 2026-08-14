@@ -2,6 +2,8 @@ package com.stalkerapp.ui.vod
 
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -509,6 +513,26 @@ fun VodDetailScreen(
                 }
             }
 
+            // ---------- Fragman: sinopsisin altında, gömülü oynatıcı ----------
+            if (trailerKey.isNotBlank()) {
+                item {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            "Fragman",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                        TrailerPlayer(
+                            key = trailerKey,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+            }
+
             // ---------- Oyuncular: yuvarlak baş harfler + isimler ----------
             if (actors.isNotEmpty()) {
                 item {
@@ -826,6 +850,65 @@ private fun ResumeSheet(
             ) {
                 Text("Baştan İzle")
             }
+        }
+    }
+}
+
+/**
+ * Fragman oynatıcı: önce YouTube küçük resmi + oynat butonu gösterir; dokununca
+ * gömülü WebView oynatıcıya geçer (YouTube embed). Gömülü oynatıcı ağır
+ * olduğundan talep üzerine yüklenir.
+ */
+@Composable
+private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
+    var playing by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black)
+    ) {
+        if (!playing) {
+            AsyncImage(
+                model = "https://img.youtube.com/vi/$key/hqdefault.jpg",
+                contentDescription = "Fragman",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.25f))
+                    .clickable { playing = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Fragmanı oynat",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        webViewClient = WebViewClient()
+                        loadUrl("https://www.youtube.com/embed/$key?autoplay=1&playsinline=1&rel=0")
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
