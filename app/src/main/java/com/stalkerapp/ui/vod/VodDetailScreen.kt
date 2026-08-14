@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -265,11 +267,13 @@ fun VodDetailScreen(
             }
             if (isSeries) {
                 item {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                    // Horizontal scroll: series can have many seasons (e.g. 8+) that
+                    // don't fit on one screen — chips must scroll instead of overflowing.
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        seasons.forEach { s ->
+                        items(seasons, key = { it.id }) { s ->
                             FilterChip(
                                 selected = selectedSeason == s.id,
                                 onClick = { selectedSeason = s.id },
@@ -283,7 +287,7 @@ fun VodDetailScreen(
                     episodes.orEmpty().isEmpty() -> item { EmptyState("Bölüm bulunamadı") }
                     else -> items(episodes.orEmpty()) { ep ->
                         Text(
-                            text = "${ep.episodeNumber}. ${ep.name}",
+                            text = "${ep.episodeNumber}. ${ep.name.ifBlank { "Bölüm" }}",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()

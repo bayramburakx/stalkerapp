@@ -1045,7 +1045,9 @@ class PortalRepository(
             val cmd = seriesEpisodeCmd(realId, seasonId, n)
             Episode(
                 id = n.toLong(),
-                name = "$n. Bölüm",
+                // UI renders "${episodeNumber}. ${name}" — keep the number out of
+                // the name so fallback episodes show "1. Bölüm", not "1. 1. Bölüm".
+                name = "",
                 episodeNumber = n,
                 cmd = cmd
             )
