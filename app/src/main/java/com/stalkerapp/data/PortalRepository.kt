@@ -582,16 +582,35 @@ class PortalRepository(
      * namespaced by [SERIES_CAT_BASE] so they can't collide with VOD categories
      * in the shared catalog.
      */
+    /**
+     * Categories of the separate `type=series` library. Some portals (this one
+     * included) keep series in their own namespace with ids like "22695:22695"
+     * and their own categories, completely outside `type=vod`. Category ids are
+     * namespaced by [SERIES_CAT_BASE] so they can't collide with VOD categories
+     * in the shared catalog.
+     */
     suspend fun loadSeriesCategories(profile: Profile): List<Genre> {
         val pid = profile.portal?.id ?: ""
         seriesGenresCache[pid]?.let { return it }
-        val resp = client.request(
-            profile.baseUrl,
-            "portal.php?type=series&action=get_categories",
-            "POST",
-            tokenFor(profile),
-            mapOf("js" to "1")
-        )
+        // Cooldown-aware: the portal may be rate-limiting right after the heavy
+        // VOD sync, and this call must not fail the whole series pass silently.
+        var resp: JsonElement? = null
+        repeat(4) {
+            if (resp == null) {
+                try {
+                    resp = client.request(
+                        profile.baseUrl,
+                        "portal.php?type=series&action=get_categories",
+                        "POST",
+                        tokenFor(profile),
+                        mapOf("js" to "1")
+                    )
+                } catch (e: StalkerException) {
+                    if (e.isCooldown) delay(client.cooldownRemainingMs() + 1000)
+                }
+            }
+        }
+        resp ?: return emptyList()
         val list = parseGenres(resp).mapNotNull { g ->
             if (g.id <= 0) null else g.copy(id = SERIES_CAT_BASE + g.id)
         }

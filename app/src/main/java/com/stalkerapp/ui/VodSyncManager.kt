@@ -128,6 +128,57 @@ class VodSyncManager(
             // library once more for nothing.
             val remaining = cats.filter { it.id != 0L && (force || it.id !in doneCats) }
 
+            var portalTotal = 0
+
+            // 0) Separate series library FIRST. Portals like this one keep series
+            // in their own `type=series` namespace (thousands of titles with real
+            // season/episode structures) that the VOD passes never see — without
+            // this pass the Dizi tab only shows the handful of dated episodes in
+            // the VOD "DIZILERI" categories. It runs BEFORE the heavy VOD passes
+            // so the portal hasn't been rate-limited into a cooldown yet (a
+            // silent failure here used to leave the catalog permanently series-less
+            // because the completed meta short-circuits future syncs). Series
+            // category ids are namespaced so they can't collide with VOD
+            // categories in chunks/done-cats.
+            runCatching {
+                val seriesCats = repository.loadSeriesCategories(profile)
+                if (seriesCats.isNotEmpty()) {
+                    cats = cats + seriesCats
+                    val seriesRemaining = seriesCats.filter { it.id != 0L && (force || it.id !in doneCats) }
+                    if (seriesRemaining.isNotEmpty()) {
+                        val sem = Semaphore(8)
+                        coroutineScope {
+                            seriesRemaining.forEach { cat ->
+                                launch {
+                                    sem.acquire()
+                                    try {
+                                        val items = repository.fetchSeriesCategory(profile, cat.id, 5000)
+                                        items.forEach { all[it.id] = it }
+                                        store.saveVodCategoryChunk(portalId, cat.id, items)
+                                        val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
+                                            store.saveVodCatalogDoneCats(portalId, it.toList())
+                                        }
+                                        mutex.withLock {
+                                            _progress.value = _progress.value.copy(
+                                                doneCategories = doneNow.size,
+                                                loadedCount = all.size,
+                                                allItems = all.values.toList(),
+                                                categories = cats,
+                                                totalCategories = cats.size,
+                                                portalTotal = portalTotal
+                                            )
+                                        }
+                                    } catch (_: Exception) {
+                                    } finally {
+                                        sem.release()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 1) Fast single pass (Tivimate-style: one huge per_page request, paged
             // until the portal stops returning items). We trust it only when it
             // actually retrieved a substantial number of items (and got close to
@@ -137,7 +188,6 @@ class VodSyncManager(
             // thousands of sequential requests for this pass, so we skip it and
             // go straight to the parallel per-category enumeration (step 2),
             // which is complete on such portals.
-            var portalTotal = 0
             var singleOk = false
             val tinyPages = runCatching {
                 repository.probeVodPageParam(profile)
@@ -232,51 +282,6 @@ class VodSyncManager(
                                 } catch (_: Exception) {
                                 } finally {
                                     sem.release()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4) Separate series library. Portals like this one keep series in
-            // their own `type=series` namespace (thousands of titles with real
-            // season/episode structures) that the VOD passes never see — without
-            // this pass the Dizi tab only shows the handful of dated episodes in
-            // the VOD "DIZILERI" categories. Series category ids are namespaced
-            // so they can't collide with VOD categories in chunks/done-cats.
-            runCatching {
-                val seriesCats = repository.loadSeriesCategories(profile)
-                if (seriesCats.isNotEmpty()) {
-                    cats = cats + seriesCats
-                    val seriesRemaining = seriesCats.filter { it.id != 0L && (force || it.id !in doneCats) }
-                    if (seriesRemaining.isNotEmpty()) {
-                        val sem = Semaphore(8)
-                        coroutineScope {
-                            seriesRemaining.forEach { cat ->
-                                launch {
-                                    sem.acquire()
-                                    try {
-                                        val items = repository.fetchSeriesCategory(profile, cat.id, 5000)
-                                        items.forEach { all[it.id] = it }
-                                        store.saveVodCategoryChunk(portalId, cat.id, items)
-                                        val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
-                                            store.saveVodCatalogDoneCats(portalId, it.toList())
-                                        }
-                                        mutex.withLock {
-                                            _progress.value = _progress.value.copy(
-                                                doneCategories = doneNow.size,
-                                                loadedCount = all.size,
-                                                allItems = all.values.toList(),
-                                                categories = cats,
-                                                totalCategories = cats.size,
-                                                portalTotal = portalTotal
-                                            )
-                                        }
-                                    } catch (_: Exception) {
-                                    } finally {
-                                        sem.release()
-                                    }
                                 }
                             }
                         }
