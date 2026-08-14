@@ -33,6 +33,43 @@ class Store(private val context: Context) {
 
     fun activePortal(): Portal? = activePortalId()?.let { id -> portals().firstOrNull { it.id == id } }
 
+    fun isOnboardingDone(): Boolean = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
+
+    fun setOnboardingDone(done: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_DONE, done).apply()
+    }
+
+    /** Persists the last connected profile so the app can start straight into Home
+     *  without a login round-trip (auto-login). */
+    fun saveProfile(profile: Profile) {
+        val pid = profile.portal?.id ?: return
+        val map = loadProfiles().toMutableMap()
+        map[pid] = profile
+        prefs.edit().putString(
+            KEY_PROFILES,
+            json.encodeToString(MapSerializer(String.serializer(), Profile.serializer()), map)
+        ).apply()
+    }
+
+    fun loadProfiles(): Map<String, Profile> = runCatching {
+        json.decodeFromString(
+            MapSerializer(String.serializer(), Profile.serializer()),
+            prefs.getString(KEY_PROFILES, "{}").orEmpty()
+        )
+    }.getOrDefault(emptyMap())
+
+    fun loadProfile(portalId: String): Profile? = loadProfiles()[portalId]
+
+    fun deleteProfile(portalId: String) {
+        val map = loadProfiles().toMutableMap()
+        if (map.remove(portalId) != null) {
+            prefs.edit().putString(
+                KEY_PROFILES,
+                json.encodeToString(MapSerializer(String.serializer(), Profile.serializer()), map)
+            ).apply()
+        }
+    }
+
     fun savePortal(portal: Portal) {
         val list = portals().toMutableList()
         val idx = list.indexOfFirst { it.id == portal.id }
@@ -42,6 +79,7 @@ class Store(private val context: Context) {
 
     fun deletePortal(id: String) {
         savePortals(portals().filterNot { it.id == id })
+        deleteProfile(id)
         if (activePortalId() == id) setActivePortalId(null)
     }
 
@@ -270,6 +308,8 @@ class Store(private val context: Context) {
 
         private const val KEY_PORTALS = "portals"
         private const val KEY_ACTIVE_PORTAL = "active_portal"
+        private const val KEY_ONBOARDING_DONE = "onboarding_done"
+        private const val KEY_PROFILES = "profiles"
         private const val KEY_SETTINGS = "settings"
         private const val KEY_FAVORITES = "favorites"
         private const val KEY_FAVORITE_CHANNELS = "favorite_channels"

@@ -17,7 +17,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
-        android:theme="@style/Theme.StalkerApp">
+        android:theme="@style/Theme.StalkerApp.Starting">
 
         <activity
             android:name=".MainActivity"
@@ -25,7 +25,7 @@
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
             android:supportsPictureInPicture="true"
-            android:theme="@style/Theme.StalkerApp">
+            android:theme="@style/Theme.StalkerApp.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

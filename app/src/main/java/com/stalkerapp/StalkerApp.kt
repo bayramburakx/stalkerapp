@@ -7,7 +7,10 @@ import com.stalkerapp.data.Store
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.VodSyncManager
 import com.stalkerapp.ui.VodSyncService
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class StalkerApp : Application() {
 
@@ -18,6 +21,8 @@ class StalkerApp : Application() {
     lateinit var vodSyncManager: VodSyncManager
         private set
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         store = Store(this)
@@ -26,10 +31,22 @@ class StalkerApp : Application() {
         PlaybackManager.init(this, store, repository)
         instance = this
 
-        // Resume an interrupted sync (or run the first one) in the background.
+        // Auto-login: diske kayıtlı profil ile doğrudan Ana Sayfa'ya başlanır
+        // (login ekranı atlanır). Arka planda sessizce yeniden bağlanılır:
+        // token + sunucu profili tazelenir; bağlantı başarısız olursa bile
+        // diskteki profil ile devam edilir (MAC parametreleri çoğu istek için
+        // yeterlidir).
         val portalId = store.activePortalId().orEmpty()
-        if (portalId.isNotBlank() && needsSync(portalId)) {
-            repository.cachedProfile()?.let { VodSyncService.start(this) }
+        if (portalId.isNotBlank()) {
+            repository.restoreProfileFromDisk()
+            val portal = store.activePortal()
+            if (portal != null) {
+                scope.launch { runCatching { repository.connect(portal) } }
+            }
+            // Resume an interrupted sync (or run the first one) in the background.
+            if (needsSync(portalId)) {
+                repository.cachedProfile()?.let { VodSyncService.start(this) }
+            }
         }
     }
 

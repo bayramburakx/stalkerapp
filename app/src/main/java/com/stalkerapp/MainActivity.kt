@@ -13,18 +13,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.home.HomeScreen
-import com.stalkerapp.ui.live.LiveTvScreen
 import com.stalkerapp.ui.login.LoginScreen
+import com.stalkerapp.ui.onboarding.OnboardingScreen
 import com.stalkerapp.ui.search.SearchScreen
 import com.stalkerapp.ui.theme.StalkerTheme
 import com.stalkerapp.ui.vod.VodDetailScreen
@@ -32,6 +35,7 @@ import com.stalkerapp.playback.PlaybackManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -70,8 +74,22 @@ private fun NotificationPermission() {
 
 @Composable
 private fun AppNav() {
+    val app = LocalContext.current.applicationContext as StalkerApp
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "login") {
+    // Başlangıç ekranı: ilk açılışta onboarding; kayıtlı profil varsa doğrudan
+    // Ana Sayfa (otomatik giriş, login ekranı atlanır); yoksa login.
+    val startDestination = remember {
+        when {
+            !app.store.isOnboardingDone() -> "onboarding"
+            app.store.activePortal() != null &&
+                app.store.loadProfile(app.store.activePortalId().orEmpty()) != null -> "home"
+            else -> "login"
+        }
+    }
+    NavHost(navController = navController, startDestination = startDestination) {
+        composable("onboarding") {
+            OnboardingScreen(onDone = { navController.navigate("login") { popUpTo("onboarding") { inclusive = true } } })
+        }
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
         composable("home") { HomeScreen(onOpenPlayer = { navController.navigate("player") }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenSearch = { navController.navigate("search") }) }
         composable("search") { SearchScreen(onBack = { navController.popBackStack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }

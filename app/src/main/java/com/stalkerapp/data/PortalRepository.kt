@@ -91,6 +91,19 @@ class PortalRepository(
         return profiles[portal.id]
     }
 
+    /**
+     * Restores the last connected profile from disk so the app can start straight
+     * into Home without a login round-trip (auto-login). Also re-arms the device
+     * MAC so portal requests carry the auth params the middleware expects.
+     */
+    fun restoreProfileFromDisk(): Profile? {
+        val portal = store.activePortal() ?: return null
+        val saved = store.loadProfile(portal.id) ?: return null
+        profiles[portal.id] = saved
+        client.setDevice(saved.mac.ifEmpty { portal.mac })
+        return saved
+    }
+
     suspend fun channelStreamUrl(ch: Channel, profile: Profile): String {
         val base = profile.baseUrl
         val resp = try {
@@ -224,6 +237,7 @@ class PortalRepository(
             handshakeTokens[portal.id] = hToken
             streamTokens[portal.id] = streamToken
             profiles[portal.id] = profile
+            store.saveProfile(profile)
             store.savePortal(portal.copy(mac = mac))
             store.setActivePortalId(portal.id)
             _status.value = PortalStatus.Connected(profile)
