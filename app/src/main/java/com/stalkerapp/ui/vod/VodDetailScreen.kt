@@ -1,5 +1,7 @@
 package com.stalkerapp.ui.vod
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,28 +14,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,11 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Episode
@@ -63,7 +69,6 @@ import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VodDetailScreen(
     vodId: Long,
@@ -81,6 +86,7 @@ fun VodDetailScreen(
     var episodes by remember { mutableStateOf<List<Episode>?>(null) }
     var selectedSeason by remember { mutableStateOf<Long?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var loadingEpisodes by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf(false) }
 
@@ -115,7 +121,9 @@ fun VodDetailScreen(
                     year = info.year.ifBlank { base.year },
                     rating = info.rating.ifBlank { base.rating },
                     genres = info.genres.ifBlank { base.genres },
-                    description = info.description.ifBlank { base.description }
+                    description = info.description.ifBlank { base.description },
+                    duration = info.duration.ifBlank { base.duration },
+                    writers = info.writers.ifBlank { base.writers }
                 )
             } else base
             val merged = item
@@ -135,10 +143,14 @@ fun VodDetailScreen(
         val sid = selectedSeason ?: return@LaunchedEffect
             if (!it.isSeries && !isSeriesHint) return@LaunchedEffect
         val p = profile ?: return@LaunchedEffect
+        loadingEpisodes = true
+        episodes = null
         try {
             episodes = vm.repository.loadEpisodes(p, it.id, sid)
         } catch (e: Exception) {
             error = e.message
+        } finally {
+            loadingEpisodes = false
         }
     }
 
@@ -151,6 +163,16 @@ fun VodDetailScreen(
     }
 
     val isSeries = it.isSeries || isSeriesHint
+    // Poster hero: anasayfadaki gibi ekran yüksekliğinin yarısı kadar.
+    val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp / 2f }
+    val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
+    val isFavorite = remember(favVods, it) { favVods.any { f -> f.id == it.id } }
+    val yearText = it.year.take(4).takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
+    val genre = it.genres.trim().ifBlank {
+        catalog.categories.firstOrNull { c -> c.id == it.categoryId }?.title.orEmpty()
+    }
+    val actors = it.actors.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    val durationText = formatDuration(it.duration)
 
     fun play(episode: Episode? = null) {
         val p = profile ?: return
@@ -168,139 +190,358 @@ fun VodDetailScreen(
             }
         }
     }
-    val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
-    val isFavorite = remember(favVods, it) { it != null && favVods.any { f -> f.id == it.id } }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(it.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { it.let { v -> vm.toggleFavoriteVod(v) } }) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favori",
-                            tint = if (isFavorite) Color(0xFFFF5252) else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            // ---------- Hero: poster, yarım ekran, anasayfadaki gibi ----------
             item {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().height(heroHeight)) {
                     AsyncImage(
                         model = resolveUrl(it.poster, profile?.baseUrl.orEmpty()),
                         contentDescription = it.name,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(width = 140.dp, height = 200.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                        modifier = Modifier.fillMaxSize()
                     )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(it.name, style = MaterialTheme.typography.titleLarge)
-                        it.originalName.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        val categoryTitle = catalog.categories.firstOrNull { c -> c.id == it.categoryId }?.title
-                        listOfNotNull(
-                            categoryTitle?.let { "Kategori: $it" },
-                            it.year.takeIf { it.isNotBlank() }?.let { "Yıl: $it" },
-                            it.country.takeIf { it.isNotBlank() }?.let { "Ülke: $it" },
-                            it.genres.takeIf { it.isNotBlank() }?.let { "Tür: $it" },
-                            it.director.takeIf { it.isNotBlank() }?.let { "Yönetmen: $it" },
-                            it.actors.takeIf { it.isNotBlank() }?.let { "Oyuncular: $it" }
-                        ).forEach {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Üstten şeffaf, alta doğru koyulaşan yumuşak geçiş.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to Color.Transparent,
+                                        0.30f to Color.Black.copy(alpha = 0.15f),
+                                        0.60f to Color.Black.copy(alpha = 0.50f),
+                                        1.0f to Color.Black.copy(alpha = 0.88f)
+                                    )
+                                )
                             )
-                        }
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 24.dp, vertical = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            it.name,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                shadow = Shadow(color = Color.Black, blurRadius = 12f)
+                            ),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         Spacer(Modifier.height(8.dp))
-                        if (it.rating.isNotBlank()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Text(" IMDb: ${it.rating}", style = MaterialTheme.typography.titleMedium)
+                        // DİZİ/FİLM • tür (yıl burada değil, altta gösterilir).
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                if (isSeries) "DİZİ" else "FİLM",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (genre.isNotBlank()) {
+                                Text("•", color = Color.White.copy(alpha = 0.8f))
+                                Text(
+                                    genre,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 200.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Oynat: beyaz zemin, siyah kalın yazı.
+                            Button(
+                                onClick = { play() },
+                                enabled = !playing,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color.Black
+                                ),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                if (playing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.Black
+                                    )
+                                } else {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Oynat", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                }
+                            }
+                            // Favori: Oynat'ın hemen sağında, yuvarlak içinde kalp.
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.20f))
+                                    .clickable { vm.toggleFavoriteVod(it) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Favori",
+                                    tint = if (isFavorite) Color(0xFFFF5252) else Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
                         }
                     }
                 }
             }
+
+            // ---------- Bilgiler: yıl • süre, yönetmen, yazar, sinopsis ----------
             item {
-                Button(
-                    onClick = { play() },
-                    enabled = !playing,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                ) {
-                    if (playing) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Text("İzle")
-                    }
-                }
-            }
-            if (it.description.isNotBlank()) {
-                item {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Konu", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(it.description, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-            if (isSeries) {
-                item {
-                    // Horizontal scroll: series can have many seasons (e.g. 8+) that
-                    // don't fit on one screen — chips must scroll instead of overflowing.
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(seasons, key = { it.id }) { s ->
-                            FilterChip(
-                                selected = selectedSeason == s.id,
-                                onClick = { selectedSeason = s.id },
-                                label = { Text(s.name.ifBlank { s.id.toString() }) }
-                            )
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    val metaParts = listOfNotNull(
+                        yearText.takeIf { it.isNotBlank() },
+                        durationText.takeIf { it.isNotBlank() }
+                    )
+                    if (metaParts.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            metaParts.forEachIndexed { index, part ->
+                                if (index > 0) Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(part, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
                         }
+                        Spacer(Modifier.height(10.dp))
                     }
-                }
-                when {
-                    episodes == null && loading -> item { LoadingBox() }
-                    episodes.orEmpty().isEmpty() -> item { EmptyState("Bölüm bulunamadı") }
-                    else -> items(episodes.orEmpty()) { ep ->
+                    it.director.takeIf { d -> d.isNotBlank() }?.let { d ->
+                        Text("Yönetmen: $d", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    it.writers.takeIf { w -> w.isNotBlank() }?.let { w ->
+                        Text("Yazar: $w", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    if (it.description.isNotBlank()) {
                         Text(
-                            text = "${ep.episodeNumber}. ${ep.name.ifBlank { "Bölüm" }}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { play(ep) }
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                            it.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
+
+            // ---------- Oyuncular: yuvarlak baş harfler + isimler ----------
+            if (actors.isNotEmpty()) {
+                item {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            "Oyuncular",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            items(actors) { name ->
+                                Column(
+                                    modifier = Modifier.width(72.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            initials(name),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---------- Dizi: sezon kutuları + S1B1 bölüm kartları ----------
+            if (isSeries) {
+                item {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            "Sezonlar",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(seasons, key = { it.id }) { s ->
+                                val sel = selectedSeason == s.id
+                                val shape = RoundedCornerShape(12.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(shape)
+                                        .background(
+                                            if (sel) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        .border(1.dp, if (sel) Color.Transparent else MaterialTheme.colorScheme.outline, shape)
+                                        .clickable { selectedSeason = s.id }
+                                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                                ) {
+                                    Text(
+                                        seasonLabel(s),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                when {
+                    loadingEpisodes -> item { LoadingBox() }
+                    episodes.orEmpty().isEmpty() -> item { EmptyState("Bölüm bulunamadı") }
+                    else -> item {
+                        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                            Text(
+                                "Bölümler",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(episodes.orEmpty(), key = { it.id }) { ep ->
+                                    val seasonNum = selectedSeason ?: 0
+                                    Box(
+                                        modifier = Modifier
+                                            .width(112.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            .clickable { play(ep) }
+                                            .padding(vertical = 16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                "S${seasonNum}B${ep.episodeNumber}",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            if (ep.name.isNotBlank()) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    ep.name,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    textAlign = TextAlign.Center,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (error != null) {
                 item { Text(error.orEmpty(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
             }
-            item { Spacer(Modifier.height(32.dp)) }
+            item { Spacer(Modifier.height(48.dp)) }
+        }
+
+        // ---------- Üst bar: şeffaf arka plan, sadece geri tuşu (kalp yok) ----------
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.35f))
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+            }
         }
     }
+}
+
+/** Süre: portal dakika ya da saniye verebilir; ikisini de "X sa Y dk" / "X dk" biçimine çevirir. */
+private fun formatDuration(raw: String): String {
+    val n = raw.trim().toLongOrNull() ?: return ""
+    if (n <= 0) return ""
+    return if (n >= 600) {
+        val h = n / 3600
+        val m = (n % 3600) / 60
+        when {
+            h > 0 && m > 0 -> "${h} sa ${m} dk"
+            h > 0 -> "${h} sa"
+            else -> "$m dk"
+        }
+    } else "$n dk"
+}
+
+/** Oyuncu dairesi için baş harfler: ad + soyadın ilk harfleri. */
+private fun initials(name: String): String {
+    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (parts.isEmpty()) return "?"
+    val first = parts.first().firstOrNull()?.uppercase() ?: ""
+    val second = if (parts.size > 1) parts[1].firstOrNull()?.uppercase() ?: "" else ""
+    return first + second
+}
+
+/** Sezon etiketi: "Season 1"/"Sezon 1" gibi tekrarları "1. Sezon" biçimine çevirir. */
+private fun seasonLabel(s: Season): String {
+    val name = s.name.trim()
+    if (name.isBlank()) return "${s.id}. Sezon"
+    if (name.matches(Regex("(?i)(season|sezon|staffel)\\s*\\d+"))) return "${s.id}. Sezon"
+    return name
 }

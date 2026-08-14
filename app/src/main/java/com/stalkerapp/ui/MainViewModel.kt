@@ -47,6 +47,19 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage
 
+    // Ana sayfadaki "Canlı TV" önizlemesi için kanal listesi. Sekmeler arası
+    // geçişlerde her seferinde ağ isteği yapılmaması için bir kez yüklenip
+    // önbellekte tutulur (uygulama açık kaldığı sürece).
+    private val _homeChannels = MutableStateFlow<List<Channel>?>(null)
+    val homeChannels: StateFlow<List<Channel>?> = _homeChannels
+
+    suspend fun loadHomeChannels(profile: Profile) {
+        if (_homeChannels.value == null) {
+            _homeChannels.value =
+                runCatching { repository.loadChannels(profile, 0).take(30) }.getOrNull()
+        }
+    }
+
     // ---------- VOD catalog (background sync) ----------
     // The sync is owned by the app-lifetime VodSyncManager so it keeps running
     // while the app is backgrounded and resumes from a checkpoint after a restart.

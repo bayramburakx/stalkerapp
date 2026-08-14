@@ -1,6 +1,7 @@
 package com.stalkerapp.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,9 +24,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
@@ -49,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlin.math.abs
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
@@ -86,14 +92,17 @@ fun HomeDashboardScreen(
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
 
-    var channels by remember { mutableStateOf<List<Channel>?>(null) }
-    var loadingChannels by remember { mutableStateOf(true) }
+    // Kanallar ViewModel'de önbelleklenir: sekmeler arası geçişte ağ isteği
+    // tekrarlanmaz, bu da menü geçişlerindeki takılmayı azaltır.
+    val homeChannels by vm.homeChannels.collectAsStateWithLifecycle()
+    var loadingChannels by remember { mutableStateOf(homeChannels == null) }
 
     LaunchedEffect(Unit) {
         vm.syncVodIfNeeded(profile)
-        try {
-            channels = vm.repository.loadChannels(profile, 0).take(30)
-        } catch (_: Exception) { }
+        if (homeChannels == null) {
+            loadingChannels = true
+            vm.loadHomeChannels(profile)
+        }
         loadingChannels = false
     }
 
@@ -216,12 +225,12 @@ fun HomeDashboardScreen(
         Section(title = "Canlı TV", onSeeAll = { onGotoTab(1) }) {
             when {
                 loadingChannels -> LoadingBox()
-                channels.isNullOrEmpty() -> EmptyState("Kanal bulunamadı")
+                homeChannels.isNullOrEmpty() -> EmptyState("Kanal bulunamadı")
                 else -> LazyRow(
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(channels!!, key = { it.id }) { ch ->
+                    items(homeChannels.orEmpty(), key = { it.id }) { ch ->
                         ChannelCard(
                             channel = ch,
                             baseUrl = profile.baseUrl,
@@ -296,22 +305,33 @@ private fun HeroBanner(
         val genre = item.genres.trim().ifBlank { catTitle(item.categoryId) }
 
         Box(modifier = Modifier.fillMaxSize()) {
+            // Kaydırma sırasında görsel hafifçe yakınlaşır (parallax/zoom efekti):
+            // sayfa merkezden uzaklaştıkça 1.0 → 1.3 arası ölçeklenir.
+            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+            val zoom = 1f + (abs(pageOffset) * 0.15f).coerceAtMost(0.30f)
             AsyncImage(
                 model = resolveUrl(item.poster, baseUrl),
                 contentDescription = item.name,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = zoom
+                        scaleY = zoom
+                    }
             )
-            // Ortalanmış metin için her yerde yeterli kontrast sağlayan karartma.
+            // Üstten şeffaf, alta doğru koyulaşan yumuşak geçiş: slider'ın alt
+            // kenarı keskin bitmez, içerik sayfa arka planına karışır.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
                             colorStops = arrayOf(
-                                0.0f to Color.Black.copy(alpha = 0.30f),
-                                0.45f to Color.Black.copy(alpha = 0.55f),
-                                1.0f to Color.Black.copy(alpha = 0.88f)
+                                0.0f to Color.Transparent,
+                                0.30f to Color.Black.copy(alpha = 0.20f),
+                                0.60f to Color.Black.copy(alpha = 0.55f),
+                                1.0f to Color.Black.copy(alpha = 0.92f)
                             )
                         )
                     )
@@ -389,20 +409,38 @@ private fun Section(title: String, onSeeAll: (() -> Unit)?, content: @Composable
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(width = 4.dp, height = 18.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.primary)
+            // Başlıklar büyük + kalın; mavi aksan çubuğu yok.
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
             )
-            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (onSeeAll != null) {
-                Text(
-                    "Tümü",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onSeeAll() }
-                )
+                // "Tümü": alt menüdeki cam pill ile aynı görünüm + sağ ok simgesi.
+                val pillShape = RoundedCornerShape(50)
+                Row(
+                    modifier = Modifier
+                        .clip(pillShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.70f))
+                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), pillShape)
+                        .clickable { onSeeAll() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Tümü",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
         content()
@@ -441,28 +479,35 @@ private fun ContinueWatchingCard(
     durationMs: Long,
     onClick: () -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .width(130.dp)
             .clickable(onClick = onClick)
     ) {
-        Card {
-            Box {
-                AsyncImage(
-                    model = resolveUrl(item.poster, baseUrl),
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)
-                )
-                LinearProgressIndicator(
-                    progress = { if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f },
-                    modifier = Modifier.fillMaxWidth().height(4.dp).align(Alignment.BottomCenter),
-                    color = Color(0xFFE50914)
-                )
-            }
-            Column(modifier = Modifier.padding(6.dp)) {
-                Text(item.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(10.dp))
+        ) {
+            AsyncImage(
+                model = resolveUrl(item.poster, baseUrl),
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            LinearProgressIndicator(
+                progress = { if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f },
+                modifier = Modifier.fillMaxWidth().height(4.dp).align(Alignment.BottomCenter),
+                color = Color(0xFFE50914)
+            )
         }
+        Text(
+            item.name,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp)
+        )
     }
 }

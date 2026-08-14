@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -23,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -202,45 +199,47 @@ fun VodScreen(
 
 @Composable
 fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boolean = item.isSeries, posterWidth: Int? = null) {
-    Card(
-        shape = RoundedCornerShape(10.dp),
+    // Gri kart arka planı yok: sadece poster + altında başlık ve yıl.
+    Column(
         modifier = Modifier
             .then(if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth())
             .clickable(onClick = onClick)
     ) {
-        Column {
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
-                AsyncImage(
-                    model = resolveUrl(item.poster, baseUrl),
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
-                )
-                if (isSeries) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(4.dp)
-                            .background(Color(0xFFE50914), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            "DİZİ",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
+        Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+            AsyncImage(
+                model = resolveUrl(item.poster, baseUrl),
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+            )
+            if (isSeries) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .background(Color(0xFFE50914), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "DİZİ",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
             }
-            Column(modifier = Modifier.padding(6.dp).heightIn(min = 46.dp)) {
+        }
+        Column(modifier = Modifier.padding(top = 6.dp)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // Tarih olarak sadece yıl gösterilir (portal tam tarih dönebilir).
+            val year = item.year.take(4).takeIf { it.isNotBlank() && it.all(Char::isDigit) }.orEmpty()
+            if (year.isNotBlank()) {
                 Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = listOf(item.year, item.rating).filter { it.isNotBlank() }.joinToString(" · "),
+                    text = year,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

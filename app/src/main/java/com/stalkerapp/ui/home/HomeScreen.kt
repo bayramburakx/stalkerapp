@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +63,10 @@ fun HomeScreen(
 
     var tab by remember { mutableIntStateOf(0) }
     val gotoTab: (Int) -> Unit = { tab = it }
+    // Sekmeler arası geçişte her ekranın durumu (pager sayfası, kaydırma
+    // konumu, arama/ filtre girişleri) korunur — sıfırdan kurulmadığı için
+    // menü geçişleri daha akıcı olur.
+    val saveableStateHolder = rememberSaveableStateHolder()
 
     val navItems = listOf(
         NavItem(Icons.Default.Home, "Ana Sayfa"),
@@ -90,7 +95,7 @@ fun HomeScreen(
                     .height(62.dp)
                     .shadow(18.dp, glassShape)
                     .clip(glassShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
@@ -113,13 +118,15 @@ fun HomeScreen(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(40),
-                                color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                // Aktif öğe: açık gri yarı saydam zemin (cam üzerinde
+                                // açık gri görünür) + beyaz simge.
+                                color = if (selected) Color.White.copy(alpha = 0.18f) else Color.Transparent,
                                 modifier = Modifier.padding(4.dp)
                             ) {
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = item.label,
-                                    tint = if (selected) MaterialTheme.colorScheme.primary
+                                    tint = if (selected) Color.White
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(9.dp).size(22.dp)
                                 )
@@ -133,18 +140,21 @@ fun HomeScreen(
         // İçerik yüzen cam pill'in ARKASINDAN akar (sadece üst iç boşluk
         // uygulanır); böylece pill'in arkasında dolu bir bant görünmez ve cam
         // efekt gerçek olur. Her sekme kendi listesinin sonuna pill yüksekliği
-        // kadar boşluk ekler.
+        // kadar boşluk ekler. SaveableStateProvider sayesinde sekme değişince
+        // ekran durumu (kaydırma konumu, pager sayfası) kaybolmaz.
         val contentModifier = Modifier.padding(top = padding.calculateTopPadding())
-        when (tab) {
-            0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
-            1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding())
-            2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
-            3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
-            4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
-            5 -> SettingsScreen(vm, contentModifier.statusBarsPadding()) {
-                val p = vm.repository.cachedProfile()
-                profile = p
-                if (p != null) vm.syncVodIfNeeded(p)
+        saveableStateHolder.SaveableStateProvider(tab) {
+            when (tab) {
+                0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
+                1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding())
+                2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
+                3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
+                4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
+                5 -> SettingsScreen(vm, contentModifier.statusBarsPadding()) {
+                    val p = vm.repository.cachedProfile()
+                    profile = p
+                    if (p != null) vm.syncVodIfNeeded(p)
+                }
             }
         }
     }

@@ -77,6 +77,8 @@ data class VodItem(
     val rating: String = "",
     val genres: String = "",
     val actors: String = "",
+    @SerialName("time") val duration: String = "",
+    @SerialName("writers") val writers: String = "",
     @SerialName("series") val seriesRef: String = "",
     val cmd: String = "",
     @SerialName("selected_season") val selectedSeason: String = "",
