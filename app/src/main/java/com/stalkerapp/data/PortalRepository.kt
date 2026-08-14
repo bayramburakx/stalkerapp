@@ -1020,7 +1020,8 @@ class PortalRepository(
                 director = o["director"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 country = o["country"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 rating = o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["genres_str"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 actors = o["actors"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 seriesRef = seriesRef,
                 isSeries = seriesRef.isNotBlank(),
@@ -1046,7 +1047,7 @@ class PortalRepository(
             director = str("director"),
             country = str("country"),
             rating = str("rating_imdb").ifBlank { str("rating") },
-            genres = str("genre").ifBlank { str("genres") },
+            genres = str("genres_str").ifBlank { str("genre") }.ifBlank { str("genres") },
             actors = str("actors"),
             seriesRef = seriesRef,
             isSeries = seriesRef.isNotBlank()

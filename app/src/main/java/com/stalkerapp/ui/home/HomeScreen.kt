@@ -1,5 +1,7 @@
 package com.stalkerapp.ui.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -32,7 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -73,48 +77,58 @@ fun HomeScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            // Tek pill-shaped kapsayıcı: arka plan tamamen şeffaf, simgeler ayrı
-            // ayrı pill değil hep birlikte tek pill içinde. Sadece seçili öğenin
-            // kendi vurgu arka planı kalır.
+            // Tek glass (cam) pill: yanlardan tam yuvarlak, gölge + boşluk ile
+            // yüzer (floating) hissi, yarı saydam cam arka plan. `blur` içerik
+            // listesini cam efektiyle bulanıklaştırır (API 31+); eski cihazlarda
+            // yarı saydam arka plan yeterli gelir. Simgeler cam katmanının üstünde
+            // ayrı bir katmanda çizilir, böylece bulanıklaşmaz.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(30.dp),
-                    color = Color.Transparent,
-                    shadowElevation = 0.dp,
-                    modifier = Modifier.fillMaxWidth().height(62.dp)
+                val glassShape = RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(62.dp)
+                        .shadow(18.dp, glassShape, clip = false)
+                        .clip(glassShape)
+                        .blur(18.dp)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                            shape = glassShape
+                        )
+                )
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        navItems.forEachIndexed { index, item ->
-                            val selected = index == tab && item.onClick == null
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(30.dp))
-                                    .clickable { if (item.onClick != null) item.onClick() else tab = index },
-                                contentAlignment = Alignment.Center
+                    navItems.forEachIndexed { index, item ->
+                        val selected = index == tab && item.onClick == null
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                .clip(glassShape)
+                                .clickable { if (item.onClick != null) item.onClick() else tab = index },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(40),
+                                color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                modifier = Modifier.padding(4.dp)
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                    modifier = Modifier.padding(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = item.icon,
-                                        contentDescription = item.label,
-                                        tint = if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(9.dp).size(22.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = item.label,
+                                    tint = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(9.dp).size(22.dp)
+                                )
                             }
                         }
                     }

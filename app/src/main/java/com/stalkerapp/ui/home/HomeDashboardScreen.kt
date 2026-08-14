@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -37,10 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -112,9 +116,13 @@ fun HomeDashboardScreen(
             .padding(bottom = 8.dp)
     ) {
         if (featured.isNotEmpty()) {
+            val catTitle = remember(catalog) {
+                catalog.categories.associate { it.id to it.title }
+            }
             HeroBanner(
                 items = featured,
                 baseUrl = profile.baseUrl,
+                catTitle = { id -> catTitle[id].orEmpty() },
                 onOpenVod = onOpenVod
             )
         }
@@ -254,10 +262,10 @@ fun HomeDashboardScreen(
 private fun HeroBanner(
     items: List<VodItem>,
     baseUrl: String,
+    catTitle: (Long) -> String,
     onOpenVod: (Long, Boolean) -> Unit
 ) {
-    // Hero covers ~1.5/3 (half) of the screen height so it doesn't look short.
-    val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp * 1.5f / 3f }
+    // Hero: 3/2 en-boy oranı, tüm içerik ortalanmış.
     val pagerState = rememberPagerState(pageCount = { items.size })
 
     LaunchedEffect(pagerState) {
@@ -274,10 +282,15 @@ private fun HeroBanner(
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
-            .height(heroHeight)
+            .aspectRatio(3f / 2f)
     ) { page ->
         val item = items[page]
         val isSeries = item.isSeries || item.seriesRef.isNotBlank()
+        // Yıl: portal "2026-08-14" gibi tam tarih döndürebilir, sadece yılı göster.
+        val yearText = item.year.take(4).takeIf { it.isNotBlank() && it.all(Char::isDigit) }.orEmpty()
+        // Tür: listedeki `genres_str` (ör. "Komedi"); yoksa kategori başlığına düş.
+        val genre = item.genres.trim().ifBlank { catTitle(item.categoryId) }
+
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
                 model = resolveUrl(item.poster, baseUrl),
@@ -285,54 +298,79 @@ private fun HeroBanner(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
+            // Ortalanmış metin için her yerde yeterli kontrast sağlayan karartma.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
                             colorStops = arrayOf(
-                                0.15f to Color.Transparent,
-                                0.75f to Color.Black.copy(alpha = 0.9f)
+                                0.0f to Color.Black.copy(alpha = 0.30f),
+                                0.45f to Color.Black.copy(alpha = 0.55f),
+                                1.0f to Color.Black.copy(alpha = 0.88f)
                             )
                         )
                     )
             )
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
+                // 1) Başlık (en üstte)
                 Text(
                     item.name,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        shadow = Shadow(color = Color.Black, blurRadius = 12f)
+                    ),
                     color = Color.White,
+                    textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSeries) Color(0xFFE50914) else MaterialTheme.colorScheme.primary)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
+                Spacer(modifier = Modifier.height(10.dp))
+                // 2) DİZİ/FİLM • tür • yıl (nokta ayraçlı, ortada)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        if (isSeries) "DİZİ" else "FİLM",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (genre.isNotBlank()) {
+                        Text("•", color = Color.White.copy(alpha = 0.8f))
                         Text(
-                            if (isSeries) "DİZİ" else "FİLM",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall
+                            genre,
+                            color = Color.White.copy(alpha = 0.9f),
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 160.dp)
                         )
                     }
-                    if (item.year.isNotBlank()) {
-                        Text(item.year, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+                    if (yearText.isNotBlank()) {
+                        Text("•", color = Color.White.copy(alpha = 0.8f))
+                        Text(yearText, color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelLarge)
                     }
                 }
+                Spacer(modifier = Modifier.height(18.dp))
+                // 3) Detayları Gör butonu (beyaz zemin, siyah kalın yazı, ortada)
                 Button(
                     onClick = { onOpenVod(item.id, isSeries) },
-                    modifier = Modifier.width(170.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    ),
+                    modifier = Modifier.height(46.dp)
                 ) {
-                    Text("Detayları Gör")
+                    Text("Detayları Gör", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                 }
             }
         }
