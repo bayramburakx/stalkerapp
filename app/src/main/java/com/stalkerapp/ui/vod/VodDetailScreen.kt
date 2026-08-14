@@ -212,8 +212,32 @@ fun VodDetailScreen(
     val actors = it.actors.split(",").map { it.trim() }.filter { it.isNotBlank() }
     val durationText = formatDuration(it.duration)
 
+    // Benzer İçerikler: tür/kategori benzerliğinden istemci tarafı öneriler.
+    // LazyColumn DSL'i composable olmadığı için burada (dışarıda) hesaplanır.
+    val similar = remember(catalog.allItems, it, isSeries) {
+        val tokens = (it.genres + " " + it.country).split(Regex("[,\\s]+"))
+            .map { t -> t.trim().lowercase() }.filter { t -> t.length > 1 }.toSet()
+        catalog.allItems
+            .filter { c -> c.id != it.id && catalog.isSeriesItem(c) == isSeries }
+            .map { c ->
+                val score = tokens.count { t -> c.genres.contains(t, ignoreCase = true) } * 2 +
+                    (if (c.categoryId == it.categoryId) 1 else 0)
+                c to score
+            }
+            .filter { s -> s.second > 0 }
+            .sortedByDescending { s -> s.second }
+            .take(12)
+            .map { s -> s.first }
+    }
+
     fun episodeKey(ep: Episode?, seasonNum: Long): String =
         "${it.id}:$seasonNum:${ep?.episodeNumber}"
+
+    /** İzlenmemiş ilk bölüm; hepsi izlendiyse ilk bölüm. */
+    fun firstEpisodeToPlay(allEps: List<Episode>, seasonNum: Long): Episode {
+        val seen = watchedEps
+        return allEps.firstOrNull { episodeKey(it, seasonNum) !in seen } ?: allEps.first()
+    }
 
     fun play(episode: Episode? = null) {
         val p = profile ?: return
@@ -241,12 +265,6 @@ fun VodDetailScreen(
                 playing = false
             }
         }
-    }
-
-    /** İzlenmemiş ilk bölüm; hepsi izlendiyse ilk bölüm. */
-    fun firstEpisodeToPlay(allEps: List<Episode>, seasonNum: Long): Episode {
-        val seen = watchedEps
-        return allEps.firstOrNull { episodeKey(it, seasonNum) !in seen } ?: allEps.first()
     }
 
     fun progressFor(episode: Episode?): com.stalkerapp.data.VodProgress? {
@@ -675,21 +693,6 @@ fun VodDetailScreen(
             }
 
             // ---------- Benzer İçerikler (tür/kategori benzerliği) ----------
-            val similar = remember(catalog.allItems, it) {
-                val tokens = (it.genres + " " + it.country).split(Regex("[,\\s]+"))
-                    .map { t -> t.trim().lowercase() }.filter { t -> t.length > 1 }.toSet()
-                catalog.allItems
-                    .filter { c -> c.id != it.id && catalog.isSeriesItem(c) == isSeries }
-                    .map { c ->
-                        val score = tokens.count { t -> c.genres.contains(t, ignoreCase = true) } * 2 +
-                            (if (c.categoryId == it.categoryId) 1 else 0)
-                        c to score
-                    }
-                    .filter { s -> s.second > 0 }
-                    .sortedByDescending { s -> s.second }
-                    .take(12)
-                    .map { s -> s.first }
-            }
             if (similar.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
