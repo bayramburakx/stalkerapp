@@ -149,7 +149,7 @@ fun VodScreen(
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = "Kataloğu yenile",
-                    tint = if (catalog.status == VodCatalogStatus.Syncing) LocalContentColor.current.copy(alpha = 0.4f)
+                    tint = if (catalog.status == VodCatalogStatus.Syncing) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     else MaterialTheme.colorScheme.primary
                 )
             }
