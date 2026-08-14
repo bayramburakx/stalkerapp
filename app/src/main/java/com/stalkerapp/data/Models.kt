@@ -81,7 +81,9 @@ data class VodItem(
     val cmd: String = "",
     @SerialName("selected_season") val selectedSeason: String = "",
     @SerialName("series_data") val seriesData: String = "",
-    var isSeries: Boolean = false
+    var isSeries: Boolean = false,
+    /** Real series id on portals with a separate series library (`type=series`); 0 for plain VOD. */
+    val seriesId: Long = 0
 )
 
 @Serializable

@@ -1,5 +1,6 @@
 package com.stalkerapp.data
 
+import android.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +19,17 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 fun JsonElement?.asJsonPrimitiveOrNull(): JsonPrimitive? = this as? JsonPrimitive
+
+/**
+ * Catalog-id base for series items on portals with a separate `type=series`
+ * library (ids come back as "seriesId:fileId"). Adding this base keeps series
+ * ids from colliding with plain VOD ids in the catalog, and lets
+ * [PortalRepository.realSeriesId] recover the real id for API calls.
+ */
+private const val SERIES_ID_BASE = 10_000_000_000L
+
+/** Catalog-id base for `type=series` category ids (kept apart from VOD category ids). */
+private const val SERIES_CAT_BASE = 100_000L
 
 sealed class PortalStatus {
     data object Idle : PortalStatus()
@@ -38,6 +50,12 @@ class PortalRepository(
     private val genresCache = mutableMapOf<String, List<Genre>>()
     private val channelsCache = mutableMapOf<String, MutableMap<Long, List<Channel>>>()
     private val vodGenresCache = mutableMapOf<String, List<Genre>>()
+    private val seriesGenresCache = mutableMapOf<String, List<Genre>>()
+    // Series season structure: seriesId -> (season number, episode numbers).
+    // This portal has no get_season_list/get_episodes; seasons come back as
+    // get_ordered_list&movie_id=<seriesId> items whose `series` array lists the
+    // episode numbers. Cache them so loadEpisodes can build playable episodes.
+    private val seriesSeasonsCache = mutableMapOf<Long, List<Pair<Long, List<Int>>>>()
     private val vodCache = mutableMapOf<String, MutableMap<String, List<VodItem>>>()
     private val vodTotals = mutableMapOf<String, Int>()
     private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
@@ -557,6 +575,88 @@ class PortalRepository(
         return list
     }
 
+    /**
+     * Categories of the separate `type=series` library. Some portals (this one
+     * included) keep series in their own namespace with ids like "22695:22695"
+     * and their own categories, completely outside `type=vod`. Category ids are
+     * namespaced by [SERIES_CAT_BASE] so they can't collide with VOD categories
+     * in the shared catalog.
+     */
+    suspend fun loadSeriesCategories(profile: Profile): List<Genre> {
+        val pid = profile.portal?.id ?: ""
+        seriesGenresCache[pid]?.let { return it }
+        val resp = client.request(
+            profile.baseUrl,
+            "portal.php?type=series&action=get_categories",
+            "POST",
+            tokenFor(profile),
+            mapOf("js" to "1")
+        )
+        val list = parseGenres(resp).mapNotNull { g ->
+            if (g.id <= 0) null else g.copy(id = SERIES_CAT_BASE + g.id)
+        }
+        seriesGenresCache[pid] = list
+        return list
+    }
+
+    /** Real (portal) category id for a namespaced series category id. */
+    fun realSeriesCatId(catId: Long): Long =
+        if (catId >= SERIES_CAT_BASE) catId - SERIES_CAT_BASE else catId
+
+    /**
+     * Pages a single series category fully (the separate `type=series` library).
+     * Items get namespaced ids (series id base) and category ids so they can live
+     * next to VOD items in the catalog without collisions.
+     */
+    suspend fun fetchSeriesCategory(
+        profile: Profile,
+        catId: Long,
+        perPage: Int = 5000
+    ): List<VodItem> {
+        val realCat = realSeriesCatId(catId)
+        val out = mutableListOf<VodItem>()
+        val seen = HashSet<Long>()
+        var page = 1
+        var guard = 0
+        var dupStreak = 0
+        var pageSize = 0
+        var maxPages = 2000
+        while (guard < maxPages) {
+            guard++
+            val (list, total) = fetchVodPage(profile, page, perPage, mapOf("category" to realCat.toString()), series = true)
+            if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
+            if (list.isEmpty()) {
+                if (page > 1) break
+                page++
+                continue
+            }
+            if (total > 0 && pageSize > 0) maxPages = minOf((total / pageSize) + 20, 2000)
+            var added = 0
+            list.forEach { item ->
+                if (seen.add(item.id)) {
+                    // Namespace the portal category id so it matches the catalog's
+                    // series categories (SERIES_CAT_BASE + real id).
+                    val realCat = if (item.categoryId != 0L) item.categoryId else realSeriesCatId(catId)
+                    out += item.copy(categoryId = SERIES_CAT_BASE + realCat)
+                    added++
+                }
+            }
+            if (added == 0) {
+                if (++dupStreak >= 2) break
+                page++
+                continue
+            }
+            dupStreak = 0
+            if (out.size > 300_000) break
+            page++
+        }
+        return out
+    }
+
+    /** Real series id for a namespaced catalog id (0 if not namespaced). */
+    fun realSeriesId(vodId: Long): Long =
+        if (vodId >= SERIES_ID_BASE) vodId - SERIES_ID_BASE else 0
+
     suspend fun loadVodList(
         profile: Profile,
         categoryId: Long = 0,
@@ -605,6 +705,8 @@ class PortalRepository(
         genresCache.clear()
         channelsCache.clear()
         vodGenresCache.clear()
+        seriesGenresCache.clear()
+        seriesSeasonsCache.clear()
         vodCache.clear()
         vodTotals.clear()
         vodItemsById.clear()
@@ -764,14 +866,16 @@ class PortalRepository(
         profile: Profile,
         page: Int,
         perPage: Int,
-        params: Map<String, String>
+        params: Map<String, String>,
+        series: Boolean = false
     ): Pair<List<VodItem>, Int> {
         // Which page param this portal honors ("page" or "p") — cached after
         // the first call, so this is cheap inside paging loops.
         val pageParam = probeVodPageParam(profile)
+        val type = if (series) "series" else "vod"
         suspend fun requestWith(pp: Int): JsonElement = client.request(
             profile.baseUrl,
-            "portal.php?type=vod&action=get_ordered_list",
+            "portal.php?type=$type&action=get_ordered_list",
             "POST",
             tokenFor(profile),
             vodListBody(params, page, pp, pageParam)
@@ -784,11 +888,13 @@ class PortalRepository(
             if (perPage > 100) add(100)
         }.distinct()
 
+        val parser = if (series) ::parseSeriesList else ::parseVodList
+
         var waitedOnce = false
         for (pp in perPageOptions) {
             try {
                 val resp = requestWith(pp)
-                return parseVodList(resp) to parseTotal(resp)
+                return parser(resp) to parseTotal(resp)
             } catch (e: StalkerException) {
                 if (e.isCooldown && !waitedOnce) {
                     waitedOnce = true
@@ -802,13 +908,13 @@ class PortalRepository(
         // Original format (no per_page) — try it even if per_page variants failed.
         try {
             val resp = requestWith(0)
-            return parseVodList(resp) to parseTotal(resp)
+            return parser(resp) to parseTotal(resp)
         } catch (e: StalkerException) {
             if (e.isCooldown) {
                 delay(client.cooldownRemainingMs() + 1000)
                 try {
                     val resp = requestWith(0)
-                    return parseVodList(resp) to parseTotal(resp)
+                    return parser(resp) to parseTotal(resp)
                 } catch (_: StalkerException) {
                     return Pair(emptyList<VodItem>(), 0)
                 }
@@ -849,26 +955,88 @@ class PortalRepository(
         }.getOrNull()
     }
 
+    /**
+     * Loads the seasons of a series. Standard middleware exposes them via
+     * `get_season_list`; modified panels (this one included) return nothing there
+     * and instead list seasons through `type=series&action=get_ordered_list`
+     * with `movie_id=<seriesId>` (each season item carries its episode numbers in
+     * the `series` array). Tries the standard call first, then the fallback.
+     */
     suspend fun loadSeasons(profile: Profile, vodId: Long): List<Season> {
+        val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
+        val standard = runCatching {
+            val resp = client.request(
+                profile.baseUrl,
+                "portal.php?type=vod&action=get_season_list",
+                "POST",
+                tokenFor(profile),
+                mapOf("movie_id" to vodId.toString())
+            )
+            parseSeasons(resp)
+        }.getOrDefault(emptyList())
+        if (standard.isNotEmpty()) return standard
+
+        // Fallback for the separate type=series library.
         val resp = client.request(
             profile.baseUrl,
-            "portal.php?type=vod&action=get_season_list",
+            "portal.php?type=series&action=get_ordered_list",
             "POST",
             tokenFor(profile),
-            mapOf("movie_id" to vodId.toString())
+            mapOf("movie_id" to realId.toString())
         )
-        return parseSeasons(resp)
+        val seasons = parseDataArray(resp).mapNotNull { o ->
+            val rawId = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            val seasonNum = rawId.substringAfter(':').toLongOrNull() ?: 0
+            if (seasonNum <= 0) return@mapNotNull null
+            val name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+                .ifBlank { "Sezon $seasonNum" }
+            val episodeNums = (o["series"] as? JsonArray)
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() }
+                .orEmpty()
+            seriesSeasonsCache[realId] = seriesSeasonsCache[realId].orEmpty() + (seasonNum to episodeNums)
+            Season(id = seasonNum, name = name)
+        }.sortedBy { it.id }
+        return seasons
     }
 
+    /**
+     * Loads the episodes of a season. Standard middleware uses `get_episodes`;
+     * on panels without it, episodes are reconstructed from the season's episode
+     * numbers (cached by [loadSeasons]) and stream via a create_link cmd built
+     * from `{"series_id":..,"season_num":..,"episode_num":..,"type":"series"}`.
+     */
     suspend fun loadEpisodes(profile: Profile, vodId: Long, seasonId: Long): List<Episode> {
-        val resp = client.request(
-            profile.baseUrl,
-            "portal.php?type=vod&action=get_episodes",
-            "POST",
-            tokenFor(profile),
-            mapOf("movie_id" to vodId.toString(), "season_id" to seasonId.toString())
-        )
-        return parseEpisodes(resp)
+        val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
+        val standard = runCatching {
+            val resp = client.request(
+                profile.baseUrl,
+                "portal.php?type=vod&action=get_episodes",
+                "POST",
+                tokenFor(profile),
+                mapOf("movie_id" to vodId.toString(), "season_id" to seasonId.toString())
+            )
+            parseEpisodes(resp)
+        }.getOrDefault(emptyList())
+        if (standard.isNotEmpty()) return standard
+
+        val episodeNums = seriesSeasonsCache[realId]
+            ?.firstOrNull { it.first == seasonId }?.second
+            ?: emptyList()
+        return episodeNums.map { n ->
+            val cmd = seriesEpisodeCmd(realId, seasonId, n)
+            Episode(
+                id = n.toLong(),
+                name = "$n. Bölüm",
+                episodeNumber = n,
+                cmd = cmd
+            )
+        }
+    }
+
+    /** create_link cmd for one series episode (base64 JSON, as the portal expects). */
+    private fun seriesEpisodeCmd(seriesId: Long, seasonNum: Long, episodeNum: Int): String {
+        val payload = """{"series_id":$seriesId,"season_num":$seasonNum,"episode_num":$episodeNum,"type":"series"}"""
+        return Base64.encodeToString(payload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
     }
 
     suspend fun vodStreamUrl(
@@ -882,14 +1050,18 @@ class PortalRepository(
             else -> "0"
         }
 
+        // create_link wants the portal's own id: the real series id for the
+        // separate series library (the namespaced catalog id would be rejected).
+        val apiId = if (item.seriesId > 0) item.seriesId else item.id
+
         val cmdCandidates = buildList {
             if (!episode?.cmd.isNullOrBlank()) add(episode!!.cmd)
             if (item.cmd.isNotBlank()) add(item.cmd)
-            add("/media/${item.id}.mp4")
+            add("/media/$apiId.mp4")
         }
 
         for (cmd in cmdCandidates) {
-            tryCreateLink(profile, cmd, item.id, seriesParam)?.let { return it }
+            tryCreateLink(profile, cmd, apiId, seriesParam)?.let { return it }
         }
 
         episode?.cmd?.takeIf { it.isNotBlank() }?.let {
@@ -901,7 +1073,7 @@ class PortalRepository(
         val server = profile.serverAddress
         if (server.isNotBlank()) {
             val s = if (server.startsWith("http")) server else "http://$server"
-            return fixLocalhost("$s/media/${item.id}.mp4", profile)
+            return fixLocalhost("$s/media/$apiId.mp4", profile)
         }
         throw StalkerException("VOD akış URL'si alınamadı")
     }
@@ -998,6 +1170,46 @@ class PortalRepository(
                 tvGenreTitle = o["tv_genre_title"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 isTvArchive = o["is_tv_archive"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
                 archiveDuration = o["tv_archive_duration"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0
+            )
+        }.filter { it.id > 0 }
+    }
+
+    /**
+     * Parses items from the separate `type=series` library. Series ids come back
+     * as "seriesId:fileId"; the catalog id is namespaced by [SERIES_ID_BASE] so
+     * series can't collide with plain VOD ids, and the real series id is kept in
+     * [VodItem.seriesId] for season/episode/stream calls.
+     */
+    private fun parseSeriesList(el: JsonElement): List<VodItem> {
+        return parseDataArray(el).mapNotNull { o ->
+            val rawId = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            val seriesId = rawId.substringBefore(':').toLongOrNull() ?: 0
+            if (seriesId <= 0) return@mapNotNull null
+            val name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: ""
+            val year = (o["year"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty())
+                .takeIf { it.isNotBlank() }
+                ?.let { if (it.length >= 4 && it.substring(0, 4).all { ch -> ch.isDigit() }) it.take(4) else it }
+                .orEmpty()
+            VodItem(
+                id = SERIES_ID_BASE + seriesId,
+                categoryId = o["category_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
+                    ?: o["cat_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
+                name = name,
+                originalName = o["o_name"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                sname = o["sname"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                poster = o["screenshot_uri"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["pic"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                description = o["description"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                year = year,
+                director = o["director"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                country = o["country"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                rating = o["rating_imdb"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                genres = o["genres_str"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                actors = o["actors"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                isSeries = true,
+                seriesId = seriesId
             )
         }.filter { it.id > 0 }
     }
