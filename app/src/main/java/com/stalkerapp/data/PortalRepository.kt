@@ -297,6 +297,7 @@ class PortalRepository(
      */
     suspend fun fetchAllVod(profile: Profile, perPage: Int = 100000): Pair<List<VodItem>, Int> {
         val out = mutableListOf<VodItem>()
+        val seen = HashSet<Long>()
         var total = 0
         var page = 1
         var guard = 0
@@ -305,7 +306,14 @@ class PortalRepository(
             val (list, t) = fetchVodPage(profile, 0L, page, perPage)
             if (t > 0) total = t
             if (list.isEmpty()) break
-            out += list
+            var added = 0
+            list.forEach { item ->
+                if (seen.add(item.id)) {
+                    out += item
+                    added++
+                }
+            }
+            if (added == 0) break
             if (out.size > 300_000) break
             page++
         }
@@ -315,6 +323,7 @@ class PortalRepository(
     /** Pages a single VOD category fully and returns its items (category stamped). */
     suspend fun fetchVodCategory(profile: Profile, catId: Long, perPage: Int = 5000): List<VodItem> {
         val out = mutableListOf<VodItem>()
+        val seen = HashSet<Long>()
         var page = 1
         var guard = 0
         while (guard < 4000) {
@@ -325,7 +334,14 @@ class PortalRepository(
                 page++
                 continue
             }
-            out += list.map { if (it.categoryId == 0L) it.copy(categoryId = catId) else it }
+            var added = 0
+            list.forEach { item ->
+                if (seen.add(item.id)) {
+                    out += if (item.categoryId == 0L) item.copy(categoryId = catId) else item
+                    added++
+                }
+            }
+            if (added == 0) break
             if (out.size > 300_000) break
             page++
         }

@@ -23,7 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -109,21 +109,8 @@ fun HomeDashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 8.dp)
+            .padding(bottom = 8.dp)
     ) {
-        if (catalog.status == VodCatalogStatus.Syncing) {
-            LinearProgressIndicator(
-                progress = { if (catalog.totalCategories > 0) catalog.doneCategories.toFloat() / catalog.totalCategories else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp)
-            )
-            Text(
-                "VOD kataloğu yükleniyor: ${catalog.loadedCount} içerik",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-        }
-
         if (featured.isNotEmpty()) {
             HeroBanner(
                 items = featured,
@@ -269,6 +256,7 @@ private fun HeroBanner(
     baseUrl: String,
     onOpenVod: (Long, Boolean) -> Unit
 ) {
+    val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp / 3f }
     val pagerState = rememberPagerState(pageCount = { items.size })
 
     LaunchedEffect(pagerState) {
@@ -281,74 +269,69 @@ private fun HeroBanner(
         }
     }
 
-    Card(
+    HorizontalPager(
+        state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .height(340.dp),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize()
-        ) { page ->
-            val item = items[page]
-            val isSeries = item.isSeries || item.seriesRef.isNotBlank()
-            Box(modifier = Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = resolveUrl(item.poster, baseUrl),
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
-                                startY = 0.35f * 340,
-                                endY = 340f
+            .height(heroHeight)
+    ) { page ->
+        val item = items[page]
+        val isSeries = item.isSeries || item.seriesRef.isNotBlank()
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = resolveUrl(item.poster, baseUrl),
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.15f to Color.Transparent,
+                                0.75f to Color.Black.copy(alpha = 0.9f)
                             )
                         )
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomStart)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        item.name,
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSeries) Color(0xFFE50914) else MaterialTheme.colorScheme.primary)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                if (isSeries) "DİZİ" else "FİLM",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                        if (item.year.isNotBlank()) {
-                            Text(item.year, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    Button(
-                        onClick = { onOpenVod(item.id, isSeries) },
-                        modifier = Modifier.width(170.dp)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    item.name,
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSeries) Color(0xFFE50914) else MaterialTheme.colorScheme.primary)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text("Detayları Gör")
+                        Text(
+                            if (isSeries) "DİZİ" else "FİLM",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
+                    if (item.year.isNotBlank()) {
+                        Text(item.year, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Button(
+                    onClick = { onOpenVod(item.id, isSeries) },
+                    modifier = Modifier.width(170.dp)
+                ) {
+                    Text("Detayları Gör")
                 }
             }
         }

@@ -1,31 +1,43 @@
 package com.stalkerapp.ui.home
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.unit.dp
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.rememberMainViewModel
@@ -34,7 +46,8 @@ import com.stalkerapp.ui.live.LiveTvScreen
 import com.stalkerapp.ui.settings.SettingsScreen
 import com.stalkerapp.ui.vod.VodScreen
 
-@OptIn(ExperimentalMaterial3Api::class)
+private data class NavItem(val icon: ImageVector, val label: String, val onClick: (() -> Unit)? = null)
+
 @Composable
 fun HomeScreen(
     onOpenPlayer: () -> Unit,
@@ -48,72 +61,73 @@ fun HomeScreen(
     var tab by remember { mutableIntStateOf(0) }
     val gotoTab: (Int) -> Unit = { tab = it }
 
+    val navItems = listOf(
+        NavItem(Icons.Default.Home, "Ana Sayfa"),
+        NavItem(Icons.Default.LiveTv, "Canlı TV"),
+        NavItem(Icons.Default.Movie, "Filmler"),
+        NavItem(Icons.Default.VideoLibrary, "Diziler"),
+        NavItem(Icons.Default.Star, "Favoriler"),
+        NavItem(Icons.Default.Settings, "Ayarlar"),
+        NavItem(Icons.Default.Search, "Ara", onClick = onOpenSearch)
+    )
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Stalker Player") },
-                actions = {
-                    IconButton(onClick = onOpenSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Ara")
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(30.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.fillMaxWidth().height(62.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        navItems.forEachIndexed { index, item ->
+                            val selected = index == tab && item.onClick == null
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(30.dp))
+                                    .clickable { if (item.onClick != null) item.onClick() else tab = index },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                    modifier = Modifier.padding(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = item.label,
+                                        tint = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(9.dp).size(22.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Ana Sayfa") },
-                    label = null
-                )
-                NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.LiveTv, contentDescription = "Canlı TV") },
-                    label = null
-                )
-                NavigationBarItem(
-                    selected = tab == 2,
-                    onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.Movie, contentDescription = "Filmler") },
-                    label = null
-                )
-                NavigationBarItem(
-                    selected = tab == 3,
-                    onClick = { tab = 3 },
-                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = "Diziler") },
-                    label = null
-                )
-                NavigationBarItem(
-                    selected = tab == 4,
-                    onClick = { tab = 4 },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "Favoriler") },
-                    label = null
-                )
-                NavigationBarItem(
-                    selected = tab == 5,
-                    onClick = { tab = 5 },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "Ayarlar") },
-                    label = null
-                )
-                NavigationBarItem(
-                    selected = false,
-                    onClick = onOpenSearch,
-                    icon = { Icon(Icons.Default.Search, contentDescription = "Ara") },
-                    label = null
-                )
             }
         }
     ) { padding ->
         val contentModifier = Modifier.padding(padding)
         when (tab) {
             0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
-            1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier)
-            2 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = false)
-            3 -> VodScreen(profile, onOpenVod, contentModifier, filterIsSeries = true)
-            4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier)
-            5 -> SettingsScreen(vm, contentModifier) {
+            1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding())
+            2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
+            3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
+            4 -> FavoritesScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
+            5 -> SettingsScreen(vm, contentModifier.statusBarsPadding()) {
                 val p = vm.repository.cachedProfile()
                 profile = p
                 if (p != null) vm.syncVodIfNeeded(p)

@@ -2,6 +2,9 @@ package com.stalkerapp.data
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -55,13 +58,17 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
 
     private suspend fun throttle() {
         val interval = settingsProvider().requestIntervalMs.coerceAtLeast(0)
-        val now = System.currentTimeMillis()
-        val wait = interval - (now - lastRequestAt)
-        if (wait > 0) {
-            withContext(Dispatchers.IO) { Thread.sleep(wait) }
+        throttleMutex.withLock {
+            val now = System.currentTimeMillis()
+            val wait = interval - (now - lastRequestAt)
+            if (wait > 0) {
+                delay(wait)
+            }
+            lastRequestAt = System.currentTimeMillis()
         }
-        lastRequestAt = System.currentTimeMillis()
     }
+
+    private val throttleMutex = Mutex()
 
     /**
      * Makes a Stalker portal request. Unwraps the `js` response envelope that

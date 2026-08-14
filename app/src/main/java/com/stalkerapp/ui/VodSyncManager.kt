@@ -35,6 +35,7 @@ class VodSyncManager(
 
     private var job: kotlinx.coroutines.Job? = null
     private val mutex = Mutex()
+    private val checkpointLock = Mutex()
     private val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
     private var lastCheckpointTs = 0L
 
@@ -78,11 +79,11 @@ class VodSyncManager(
         return if (isSeries == item.isSeries) item else item.copy(isSeries = isSeries)
     }
 
-    private fun checkpoint(portalId: String, all: Map<Long, VodItem>, cats: List<Genre>, doneCatIds: Set<Long>) {
+    private suspend fun checkpoint(portalId: String, all: Map<Long, VodItem>, cats: List<Genre>, doneCatIds: Set<Long>) {
         val now = System.currentTimeMillis()
-        if (now - lastCheckpointTs < 3000 && doneCatIds.isNotEmpty()) return
+        if (now - lastCheckpointTs < 5000 && doneCatIds.isNotEmpty()) return
         lastCheckpointTs = now
-        store.saveVodPartial(portalId, all.values.toList(), cats, doneCatIds.toList())
+        checkpointLock.withLock { store.saveVodPartial(portalId, all.values.toList(), cats, doneCatIds.toList()) }
     }
 
     private suspend fun runSync(profile: Profile, force: Boolean) {
@@ -142,7 +143,7 @@ class VodSyncManager(
 
             // 2) Parallel per-category fetch for any gaps (Tivimate fetches per category).
             if (!singleOk) {
-                val sem = Semaphore(8)
+                val sem = Semaphore(16)
                 coroutineScope {
                     remaining.forEach { cat ->
                         launch {

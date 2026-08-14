@@ -1,10 +1,10 @@
 package com.stalkerapp.ui.search
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,7 +16,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -35,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.StalkerApp
@@ -183,6 +187,32 @@ fun SearchScreen(
 }
 
 @Composable
+private fun DropdownFilterChip(
+    label: String,
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = selected > 0,
+            onClick = { expanded = true },
+            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEachIndexed { i, opt ->
+                DropdownMenuItem(
+                    text = { Text(opt) },
+                    onClick = { onSelect(i); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DiscoverContent(
     catalog: com.stalkerapp.ui.VodCatalogState,
     baseUrl: String,
@@ -218,31 +248,25 @@ private fun DiscoverContent(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 12.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(types) { t ->
-                val idx = types.indexOf(t)
-                FilterChip(
-                    selected = typeFilter == idx,
-                    onClick = { typeFilter = idx },
-                    label = { Text(t) }
+            DropdownFilterChip(
+                label = "Tür: ${types[typeFilter]}",
+                options = types,
+                selected = typeFilter,
+                onSelect = { typeFilter = it }
+            )
+            if (genres.isNotEmpty()) {
+                val genreOptions = listOf(null) + genres.map { it.id }
+                val genreLabels = listOf("Kategori: Tümü") + genres.map { it.title }
+                DropdownFilterChip(
+                    label = genreLabels[genreOptions.indexOf(genreFilter)],
+                    options = genreLabels,
+                    selected = genreOptions.indexOf(genreFilter),
+                    onSelect = { i -> genreFilter = genreOptions[i] }
                 )
-            }
-        }
-        if (genres.isNotEmpty()) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(genres, key = { it.id }) { g ->
-                    FilterChip(
-                        selected = genreFilter == g.id,
-                        onClick = { genreFilter = if (genreFilter == g.id) null else g.id },
-                        label = { Text(g.title) }
-                    )
-                }
             }
         }
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {

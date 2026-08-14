@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -26,7 +27,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -112,18 +112,7 @@ fun VodScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        if (catalog.status == VodCatalogStatus.Syncing) {
-            LinearProgressIndicator(
-                progress = { if (catalog.totalCategories > 0) catalog.doneCategories.toFloat() / catalog.totalCategories else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp)
-            )
-            Text(
-                "VOD kataloğu senkronize ediliyor: ${catalog.doneCategories}/${catalog.totalCategories} kategori · ${catalog.loadedCount} içerik",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-            )
-        } else if (catalog.status == VodCatalogStatus.Error) {
+        if (catalog.status == VodCatalogStatus.Error) {
             Text(
                 "VOD senkron hatası. Yenileme için kategorileri açın.",
                 style = MaterialTheme.typography.labelSmall,
@@ -241,7 +230,7 @@ fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boo
                     }
                 }
             }
-            Column(modifier = Modifier.padding(6.dp)) {
+            Column(modifier = Modifier.padding(6.dp).heightIn(min = 46.dp)) {
                 Text(
                     text = item.name,
                     style = MaterialTheme.typography.bodySmall,
@@ -251,7 +240,9 @@ fun VodPoster(item: VodItem, baseUrl: String, onClick: () -> Unit, isSeries: Boo
                 Text(
                     text = listOf(item.year, item.rating).filter { it.isNotBlank() }.joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
