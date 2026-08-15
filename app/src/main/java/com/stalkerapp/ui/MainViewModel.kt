@@ -206,7 +206,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     fun setActiveSource(kind: String, id: String?) {
         store.setActiveSource(kind, id)
         _sourcesVersion.value++
-        if (kind != "stalker") _homeChannels.value = null
+        if (kind != "stalker") {
+            _homeChannels.value = null
+            // Stalker dışı kaynağa geçişte eski Stalker VOD katalogunu sıfırla.
+            StalkerApp.instance.vodSyncManager.reset()
+        }
     }
 
     fun saveM3uSource(source: M3uSource) {
@@ -468,7 +472,7 @@ data class VodCatalogState(
     }
 
     companion object {
-        val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
+        val seriesKeywords = listOf("dizi", "series", "serial", "diziler", "show", "tv show")
 
         fun of(
             status: VodCatalogStatus = VodCatalogStatus.Idle,

@@ -82,9 +82,9 @@ fun PersonScreen(
     val works = remember(catalog.allItems, name, isDirector) {
         catalog.allItems.filter { item ->
             if (isDirector) {
-                item.director.contains(name, ignoreCase = true)
+                norm(item.director).contains(norm(name))
             } else {
-                item.actors.split(",").any { a -> a.trim().contains(name, ignoreCase = true) }
+                item.actors.split(",").any { a -> norm(a.trim()).contains(norm(name)) }
             }
         }
     }
@@ -203,3 +203,16 @@ private fun initials(name: String): String {
     val second = if (parts.size > 1) parts[1].firstOrNull()?.uppercase() ?: "" else ""
     return first + second
 }
+
+/**
+ * Türkçe karakterleri sadeleştirip küçük harfe çevirir; aksan/yazım farkı
+ * kaynaklı filmografi eşleşmelerini yakalamak için kullanılır.
+ */
+private fun norm(s: String): String =
+    s.lowercase()
+        .replace('ı', 'i')
+        .replace('ş', 's')
+        .replace('ğ', 'g')
+        .replace('ü', 'u')
+        .replace('ö', 'o')
+        .replace('ç', 'c')

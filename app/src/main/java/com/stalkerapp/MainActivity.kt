@@ -26,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.PlayerScreen
+import com.stalkerapp.ui.favorites.FavoritesScreen
 import com.stalkerapp.ui.home.HomeScreen
 import com.stalkerapp.ui.live.EpgGuideScreen
 import com.stalkerapp.ui.login.LoginScreen
@@ -86,9 +87,23 @@ private fun AppNav() {
     }
     NavHost(navController = navController, startDestination = startDestination) {
         composable("onboarding") {
-            OnboardingScreen(onDone = { navController.navigate("home") { popUpTo("onboarding") { inclusive = true } } })
+            OnboardingScreen(onDone = {
+                if (app.store.activePortal() == null) {
+                    navController.navigate("login") { popUpTo("onboarding") { inclusive = true } }
+                } else {
+                    navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
+                }
+            })
         }
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
+        composable("favorites") {
+            FavoritesScreen(
+                profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
+                onOpenPlayer = { navController.navigate("player") },
+                onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
+                modifier = Modifier
+            )
+        }
         composable("home") {
             HomeScreen(
                 onOpenPlayer = { navController.navigate("player") },

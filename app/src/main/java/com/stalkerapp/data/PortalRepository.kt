@@ -68,6 +68,7 @@ class PortalRepository(
     // get_ordered_list&movie_id=<seriesId> items whose `series` array lists the
     // episode numbers. Cache them so loadEpisodes can build playable episodes.
     private val seriesSeasonsCache = mutableMapOf<Long, List<Pair<Long, List<Int>>>>()
+    private val seriesSeasonsListCache = mutableMapOf<Long, List<Season>>()
     private val vodCache = mutableMapOf<String, MutableMap<String, List<VodItem>>>()
     private val vodTotals = mutableMapOf<String, Int>()
     private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
@@ -122,7 +123,13 @@ class PortalRepository(
 
     fun cooldownRemainingSeconds(): Long = client.cooldownRemainingSeconds()
 
-    fun clearCooldown() = client.clearCooldown()
+    fun clearCooldown() {
+        client.clearCooldown()
+        // Cooldown temizlenince sayfalama/probe önbelleğini de sıfırla ki
+        // gerçek parametreler yeniden algılansın.
+        vodPageParam = null
+        vodCategoryParam = null
+    }
 
     /** Lets the sync clear the adaptive rate-limit backoff when it finishes. */
     fun resetAdaptiveInterval() = client.resetAdaptiveInterval()
@@ -177,7 +184,16 @@ class PortalRepository(
         if (resp != null) {
             StalkerClient.extractUrl(resp)?.let { return rewriteLocalhost(it, p) }
         }
-        StalkerClient.parseCmd(ch.cmd)?.let { return rewriteLocalhost(it, p) }
+        // Not: Stalker kanal cmd'i "ffmpeg http://localhost/ch/123_" gibi bir
+        // placeholder olabilir; bu doğrudan oynatılamaz, bu yüzden placeholder'ı
+        // döndürmeyip aşağıdaki sunucu fallback'ine düşüyoruz.
+        StalkerClient.parseCmd(ch.cmd)?.let { u ->
+            if (u.contains("localhost", true) || u.contains("127.0.0.1", true)) {
+                // placeholder — sunucu fallback'ine düş
+            } else {
+                return rewriteLocalhost(u, p)
+            }
+        }
         val server = p.serverAddress
         if (server.isNotBlank()) {
             val s = if (server.startsWith("http")) server else "http://$server"
@@ -187,13 +203,13 @@ class PortalRepository(
     }
 
     private fun rewriteLocalhost(url: String, profile: Profile): String {
-        if (!url.contains("localhost") && !url.contains("127.0.0.1")) return url
+        if (!url.contains("localhost", true) && !url.contains("127.0.0.1", true)) return url
         val host = baseHost(profile.baseUrl)
         if (host.isBlank()) return url
+        // Orijinal şema (http/https) ve port korunur; yalnızca host değişir.
         return url.replace(
-            Regex("https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?", setOf(RegexOption.IGNORE_CASE)),
-            "http://$host"
-        )
+            Regex("(https?)://(localhost|127\\.0\\.0\\.1)(:\\d+)?", setOf(RegexOption.IGNORE_CASE))
+        ) { m -> "${m.groupValues[1]}://$host${m.groupValues.getOrNull(3) ?: ""}" }
     }
 
     private fun baseHost(baseUrl: String): String {
@@ -261,13 +277,16 @@ class PortalRepository(
             val profileObj = profileResp.jsonObject
             val profileError = profileObj["error"]?.asJsonPrimitiveOrNull()?.contentOrNull
                 ?: profileObj["message"]?.asJsonPrimitiveOrNull()?.contentOrNull
-            if (!profileError.isNullOrBlank() && profile.serverAddress.isBlank() && profile.mac.isBlank()) {
+            // Geçerli bir profilde server_info (adres) ya da timezone gelir. Bunlar
+            // boşsa portal gerçekten bir cihaz profili döndürmemiş demektir.
+            val profileEmpty = profile.serverInfo.isEmpty() && profile.timezone.isBlank()
+            if (!profileError.isNullOrBlank() && profileEmpty) {
                 throw StalkerException(
                     "Portal MAC'i kabul etmedi: ${profileError}. Portalda bu MAC'in kayıtlı ve aktif olduğundan emin olun."
                 )
             }
 
-            if (profile.serverAddress.isBlank() && profile.mac.isBlank()) {
+            if (profileEmpty) {
                 throw StalkerException(
                     "Profil alınamadı. Portal adresi doğru mu? Portal, bu MAC ile kayıtlı bir cihaz bekliyor olabilir."
                 )
@@ -375,7 +394,15 @@ class PortalRepository(
         }.getOrNull()
         val offsetHours = store.settings().timezoneOffset
         if (resp != null) {
-            val data = parseDataArray(resp)
+            val data: List<JsonObject> = when (val d = (resp as? JsonObject)?.get("data")) {
+                is JsonArray -> d.mapNotNull { it as? JsonObject }
+                is JsonObject ->
+                    // get_epg_info, data alanını kanal id'sine göre anahtarlar:
+                    // data["<chId>"] = [programlar].
+                    (d[channelId.toString()] as? JsonArray ?: d.values.firstOrNull() as? JsonArray)
+                        ?.mapNotNull { it as? JsonObject } ?: emptyList()
+                else -> emptyList()
+            }
             programs = data.mapNotNull { p ->
                 val o = p.jsonObject
                 val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
@@ -774,7 +801,7 @@ class PortalRepository(
         var maxPages = 2000
         while (guard < maxPages) {
             guard++
-            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(categoryParam to catId.toString()))
+            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(probeVodCategoryParam(profile) to catId.toString()))
             if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
@@ -934,7 +961,9 @@ class PortalRepository(
         // Neither param advanced the list. If the requests succeeded the portal
         // simply ignores paging (dup-streak guards stop the loops); if they
         // failed, leave it uncached so we re-probe after the cooldown clears.
-        if (sawItems) vodPageParam = "page"
+        // Probe başarısız olsa bile sonucu önbelleğe al ki sayfalama döngüsü
+        // her adımda probe'u yeniden tetikleyip cooldown'u uzatmasın.
+        vodPageParam = "page"
         return "page"
     }
 
@@ -1027,7 +1056,7 @@ class PortalRepository(
         var maxPages = 2000
         while (guard < maxPages) {
             guard++
-            val (list, total) = fetchVodPage(profile, page, perPage, mapOf("category" to realCat.toString()), series = true)
+            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(probeVodCategoryParam(profile) to realCat.toString()), series = true)
             if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
@@ -1073,9 +1102,10 @@ class PortalRepository(
         if (page <= 1 && cache[key] != null) return cache[key]!!
 
         val pageParam = probeVodPageParam(profile)
+        val catParam = probeVodCategoryParam(profile)
         val body = buildMap {
             put(pageParam, page.toString())
-            if (categoryId > 0) put("category", categoryId.toString())
+            if (categoryId > 0) put(catParam, categoryId.toString())
             if (search.isNotBlank()) put("search", search.trim())
         }
         val resp = client.request(
@@ -1171,7 +1201,8 @@ class PortalRepository(
         onProgress: (donePages: Int, totalPages: Int, loadedItems: Int) -> Unit = { _, _, _ -> }
     ): List<VodItem> {
         val cats = runCatching { loadVodCategories(profile) }.getOrDefault(emptyList())
-        val seriesCatIds = cats.filter { it.title.contains("dizi", ignoreCase = true) }.map { it.id }.toSet()
+        val seriesKeywords = listOf("dizi", "series", "serial", "diziler", "show", "tv show")
+        val seriesCatIds = cats.filter { c -> seriesKeywords.any { kw -> c.title.contains(kw, ignoreCase = true) } }.map { it.id }.toSet()
         val all = LinkedHashMap<Long, VodItem>()
         var totalPagesEst = 0
         var donePages = 0
@@ -1192,7 +1223,7 @@ class PortalRepository(
                     profile,
                     page,
                     pp,
-                    if (catId != 0L) mapOf("category" to catId.toString()) else emptyMap()
+                    if (catId != 0L) mapOf(probeVodCategoryParam(profile) to catId.toString()) else emptyMap()
                 )
                 if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
                 if (unitTotal == 0 && total > 0) {
@@ -1374,6 +1405,7 @@ class PortalRepository(
      */
     suspend fun loadSeasons(profile: Profile, vodId: Long): List<Season> {
         val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
+        seriesSeasonsListCache[realId]?.let { return it }
         val standard = runCatching {
             val resp = client.request(
                 profile.baseUrl,
@@ -1394,6 +1426,7 @@ class PortalRepository(
             tokenFor(profile),
             mapOf("movie_id" to realId.toString())
         )
+        val collected = mutableListOf<Pair<Long, List<Int>>>()
         val seasons = parseDataArray(resp).mapNotNull { o ->
             val rawId = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             val seasonNum = rawId.substringAfter(':').toLongOrNull() ?: 0
@@ -1403,7 +1436,7 @@ class PortalRepository(
             val episodeNums = (o["series"] as? JsonArray)
                 ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() }
                 .orEmpty()
-            seriesSeasonsCache[realId] = seriesSeasonsCache[realId].orEmpty() + (seasonNum to episodeNums)
+            collected += seasonNum to episodeNums
             Season(
                 id = seasonNum,
                 name = name,
@@ -1413,6 +1446,9 @@ class PortalRepository(
                     ?: o["pic"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }.sortedBy { it.id }
+        // Önbelleği tek seferde güncelle (her çağrıda ağ isteği + yinelenen kayıt olmasın).
+        seriesSeasonsCache[realId] = collected
+        seriesSeasonsListCache[realId] = seasons
         return seasons
     }
 
@@ -1665,7 +1701,8 @@ class PortalRepository(
                 year = o["year"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 director = o["director"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 country = o["country"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                rating = o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                rating = o["rating_imdb"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["rating"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 genres = o["genres"]?.asJsonPrimitiveOrNull()?.contentOrNull
                     ?: o["genres_str"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 actors = o["actors"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
@@ -1745,9 +1782,14 @@ class PortalRepository(
     }
 
     private fun epgToEpoch(t: String, zone: ZoneId?): Long {
-        if (zone == null) return 0
+        val trimmed = t.trim()
+        // Stalker birçok kurulumda start/stop alanlarını doğrudan Unix epoch
+        // (saniye) olarak döndürür; önce onu dene.
+        trimmed.toLongOrNull()?.let { if (it > 0) return it }
+        // Zaman dilimi gelmezse sistem varsayılanını kullan (1970'e düşmeyelim).
+        val z = zone ?: ZoneId.systemDefault()
         return runCatching {
-            LocalDateTime.parse(t, epgFormatter).atZone(zone).toEpochSecond()
+            LocalDateTime.parse(trimmed, epgFormatter).atZone(z).toEpochSecond()
         }.getOrDefault(0)
     }
 

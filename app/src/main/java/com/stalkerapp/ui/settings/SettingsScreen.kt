@@ -97,7 +97,9 @@ import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.GlassChip
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val AVATARS = listOf(
     "😀", "😎", "🦊", "🐼", "🐸", "🐙", "🦁", "🐯",
@@ -329,7 +331,7 @@ fun SettingsScreen(
                         sourceCounts[s.id] = runCatching { M3uParser.parse(s.content, s.id).size }.getOrDefault(0)
                     }
                     xtreamSources.forEach { s ->
-                        sourceCounts[s.id] = runCatching { vm.loadXtreamChannels(s).second.size }.getOrDefault(0)
+                        sourceCounts[s.id] = runCatching { withContext(Dispatchers.IO) { vm.loadXtreamChannels(s) }.second.size }.getOrDefault(0)
                     }
                 }
                 Text(
@@ -1243,7 +1245,7 @@ fun SettingsScreen(
                 )
                 OutlinedTextField(
                     value = pinNew,
-                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) pinNew = it },
+                    onValueChange = { if (it.length == 4 && it.all(Char::isDigit)) pinNew = it },
                     label = { Text("4 haneli PIN") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),

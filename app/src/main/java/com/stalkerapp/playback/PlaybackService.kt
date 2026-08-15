@@ -30,6 +30,8 @@ class PlaybackService : Service() {
         if (PlaybackManager.service === this) {
             PlaybackManager.service = null
         }
+        // Servis yok edilirken oynatıcıyı durdur ve kaynakları serbest bırak.
+        PlaybackManager.stop()
         super.onDestroy()
     }
 }

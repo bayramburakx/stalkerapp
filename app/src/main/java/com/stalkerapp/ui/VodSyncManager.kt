@@ -155,10 +155,10 @@ class VodSyncManager(
                                         val items = repository.fetchSeriesCategory(profile, cat.id, 5000)
                                         items.forEach { all[it.id] = it }
                                         store.saveVodCategoryChunk(portalId, cat.id, items)
-                                        val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
-                                            store.saveVodCatalogDoneCats(portalId, it.toList())
-                                        }
                                         mutex.withLock {
+                                            val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
+                                                store.saveVodCatalogDoneCats(portalId, it.toList())
+                                            }
                                             _progress.value = state(
                                                 doneCategories = doneNow.size,
                                                 loadedCount = all.size,
@@ -239,10 +239,10 @@ class VodSyncManager(
                                     // file) so a process kill mid-sync only loses the
                                     // in-flight category, never the whole library.
                                     store.saveVodCategoryChunk(portalId, cat.id, items)
-                                    val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
-                                        store.saveVodCatalogDoneCats(portalId, it.toList())
-                                    }
                                     mutex.withLock {
+                                        val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
+                                            store.saveVodCatalogDoneCats(portalId, it.toList())
+                                        }
                                         _progress.value = state(
                                             doneCategories = doneNow.size,
                                             loadedCount = all.size,
@@ -308,6 +308,9 @@ class VodSyncManager(
             }
         } finally {
             repository.resetAdaptiveInterval()
+            if (_progress.value.status == VodCatalogStatus.Syncing) {
+                _progress.value = state(status = VodCatalogStatus.Idle)
+            }
         }
     }
 

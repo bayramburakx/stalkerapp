@@ -61,6 +61,7 @@ class VodSyncService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        stopSelf()
         super.onDestroy()
     }
 

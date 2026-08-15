@@ -100,9 +100,9 @@ fun EpgGuideScreen(
             // EPG'yi ilk 60 kanal için çek (her kanal ayrı istek; tamamı çok yavaş olur).
             val map = mutableMapOf<Long, List<EpgProgram>>()
             list.take(60).forEach { ch ->
-                runCatching { vm.repository.loadEpg(profile, ch) }
-                    .getOrNull()
-                    ?.let { map[ch.id] = it }
+                val programs = runCatching { vm.repository.loadEpg(profile, ch) }
+                    .getOrDefault(emptyList())
+                map[ch.id] = programs
             }
             epg = map
         } catch (e: Exception) {

@@ -121,7 +121,8 @@ class TmdbClient(
         val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$seasonNumber?api_key=$apiKey&language=${languageProvider()}"
         val obj = getJson(url)
         val path = (obj?.get("poster_path") as? JsonPrimitive)?.contentOrNull.orEmpty()
-        cache[cacheKey] = path
+        // Ağ hatasıyla (obj == null) boş değer kalıcı olarak önbelleğe alınmasın.
+        if (obj != null) cache[cacheKey] = path
         return path
     }
 
@@ -140,7 +141,8 @@ class TmdbClient(
             name = (obj?.get("name") as? JsonPrimitive)?.contentOrNull.orEmpty(),
             stillPath = (obj?.get("still_path") as? JsonPrimitive)?.contentOrNull.orEmpty()
         )
-        cache[cacheKey] = info
+        // Ağ hatasıyla (obj == null) boş değer kalıcı olarak önbelleğe alınmasın.
+        if (obj != null) cache[cacheKey] = info
         return info
     }
 

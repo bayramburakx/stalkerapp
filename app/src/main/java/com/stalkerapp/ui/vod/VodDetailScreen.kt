@@ -345,7 +345,11 @@ fun VodDetailScreen(
             playing = true
             try {
                 val allEps = episodes.orEmpty()
-                if (!isSeries || allEps.isEmpty()) {
+                if (isSeries && allEps.isEmpty()) {
+                    vm.showMessage("Bu dizi için bölüm bulunamadı")
+                    return@launch
+                }
+                if (!isSeries) {
                     // Film: kayıtlı konumdan devam et (Ayarlar'dan kapatılabilir).
                     val resume = app.store.settings().resumePlayback
                     val prog = app.store.loadVodProgress()[it.id]

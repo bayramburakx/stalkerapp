@@ -28,7 +28,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.TsExtractor
-import androidx.media3.session.MediaSession
 import com.stalkerapp.R
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Episode
@@ -260,6 +259,7 @@ object PlaybackManager {
                 return@launch
             }
             playInternal(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle }, isVod = false)
+            prepareNextChannelForZapping()
         }
     }
 
@@ -274,6 +274,7 @@ object PlaybackManager {
         // böylece oynatıcıda "Sonraki Bölüm" butonu yalnızca gerçek dizilerde görünür.
         VodQueue.item = null
         VodQueue.episodes = emptyList()
+        currentVodId = 0
         playInternal(url, title, artwork, subtitle, isVod = true, startPositionMs = startPositionMs)
     }
 
@@ -396,8 +397,51 @@ object PlaybackManager {
         val nextIndex = ChannelQueue.index + 1
         if (nextIndex >= channels.size) return false
         val profile = ChannelQueue.profile ?: return false
+        // Hazır bekleyen (ön tampon) bir sonraki kanal varsa, referansları takasla
+        // ve anında zapping yap (yeniden akış çekmeye gerek yok).
+        val standby = standbyPlayer
+        if (standby != null) {
+            try {
+                val tmp = activePlayer
+                activePlayer = standby
+                standbyPlayer = null
+                tmp?.stop()
+                attachListener(activePlayer!!)
+                notifyPlayerChanged()
+                ChannelQueue.index = nextIndex
+                updateNotification()
+                prepareNextChannelForZapping()
+                return true
+            } catch (_: Exception) {
+                // Takas başarısızsa normal akışa geri dön.
+                standbyPlayer = null
+            }
+        }
         playChannel(channels, nextIndex, profile)
         return true
+    }
+
+    /**
+     * Canlı TV'de zapping gecikmesini azaltmak için sıradaki kanalı önceden
+     * hazırlar (ön tampon / pre-buffer). Standby ExoPlayer'ı oluşturur ve
+     * bir sonraki kanalın akışını çekip [prepare] eder. Her şey try/catch ile
+     * sarılır; hazırlanamazsa sessizce yok sayılır (normal akış etkilenmez).
+     */
+    private fun prepareNextChannelForZapping() {
+        val next = ChannelQueue.next ?: return
+        scope.launch {
+            try {
+                val url = repository.channelStreamUrl(next, ChannelQueue.profile) ?: return@launch
+                if (url.isBlank()) return@launch
+                if (standbyPlayer != null) return@launch
+                val p = buildPlayer()
+                p.setMediaItem(mediaItem(url, next.name, next.logo, next.tvGenreTitle))
+                p.prepare()
+                standbyPlayer = p
+            } catch (_: Exception) {
+                standbyPlayer = null
+            }
+        }
     }
 
     fun previousChannel(): Boolean {
@@ -431,6 +475,8 @@ object PlaybackManager {
         activePlayer?.stop()
         standbyPlayer?.stop()
         stopService()
+        // Kaynak sızıntısını önlemek için oyuncuları tamamen serbest bırak.
+        release()
     }
 
     fun release() {
@@ -452,7 +498,10 @@ object PlaybackManager {
                 val f = group.mediaTrackGroup.getFormat(i)
                 val lang = f.language ?: "und"
                 val label = f.label?.ifBlank { null } ?: lang
-                result[lang] = label
+                result[lang] = if (lang in result) {
+                    val existing = result[lang]!!
+                    if (existing.contains(label)) existing else "$existing / $label"
+                } else label
             }
         }
         return result.toList()
@@ -564,9 +613,10 @@ object PlaybackManager {
 
         val isPlaying = activePlayer?.playWhenReady == true
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        val smallIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_play)
+            .setSmallIcon(smallIcon)
             .setContentTitle(title.ifBlank { "Stalker Player" })
             .setContentText(subtitle.ifBlank { "Oynatılıyor…" })
             .setOngoing(true)
@@ -611,15 +661,24 @@ object PlaybackManager {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // Başarılı bir yeniden bağlantı sonrası retry sayacını sıfırla.
+                if (isPlaying && p.playbackState == Player.STATE_READY) {
+                    liveRetryCount = 0
+                }
                 notifyStateChanged()
                 updateNotification()
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                // Yalnızca bağlantı/timeout tipi hatalarda (veya IOException nedeniyle)
+                // otomatik yeniden dene; diğer fatal hatalarda doğrudan hata göster.
+                val isConnectionOrTimeout = error.errorCodeName.contains("CONNECTION", ignoreCase = true) ||
+                    error.errorCodeName.contains("TIMEOUT", ignoreCase = true) ||
+                    error.cause is java.io.IOException
                 // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener.
                 // Yeni bir create_link çağrısı taze play_token üretir; en fazla 3
                 // deneme, ardından hata kullanıcıya gösterilir. Ayarlardan kapatılabilir.
-                if (!vodPlayback && liveRetryCount < 3 &&
+                if (!vodPlayback && liveRetryCount < 3 && isConnectionOrTimeout &&
                     store.settings().autoRetryLive && ChannelQueue.channels.isNotEmpty()
                 ) {
                     liveRetryCount++

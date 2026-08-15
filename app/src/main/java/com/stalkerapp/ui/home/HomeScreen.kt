@@ -69,7 +69,7 @@ fun HomeScreen(
     val saveableStateHolder = rememberSaveableStateHolder()
 
     // Kütüphanem alt menüden kaldırıldı: Ayarlar → Kütüphanem üzerinden açılır
-    // (tab 5'e geçiş yapılır; menüde 5 öğe kalır: Ana, Canlı, Film, Dizi, Ayarlar).
+    // (tab 5'e geçiş yapılır; menüde 6 öğe kalır: Ana, Canlı, Film, Dizi, Ayarlar, Ara).
     val navItems = listOf(
         NavItem(Icons.Default.Home, "Ana Sayfa"),
         NavItem(Icons.Default.LiveTv, "Canlı TV"),
@@ -108,7 +108,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     navItems.forEachIndexed { index, item ->
-                        val selected = index == tab && item.onClick == null
+                        val selected = index == tab
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -144,7 +144,10 @@ fun HomeScreen(
         // kadar boşluk ekler. SaveableStateProvider sayesinde sekme değişince
         // ekran durumu (kaydırma konumu, pager sayfası) kaybolmaz.
         val contentModifier = Modifier.padding(top = padding.calculateTopPadding())
-        saveableStateHolder.SaveableStateProvider(tab) {
+        // Portal değişince (farklı id) HomeDashboardScreen'i baştan kur ki Canlı TV
+        // önizleme kanalları yeni portaldan yüklensin (iç LaunchedEffect(Unit) yeniden tetiklenir).
+        val portalKey = profile?.portal?.id ?: "none"
+        saveableStateHolder.SaveableStateProvider("$tab:$portalKey") {
             when (tab) {
                 0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
                 1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding(), onOpenGuide = onOpenGuide)

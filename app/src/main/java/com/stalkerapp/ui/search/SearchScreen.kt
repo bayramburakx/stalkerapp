@@ -77,6 +77,7 @@ fun SearchScreen(
     var allChannels by remember { mutableStateOf<List<Channel>?>(null) }
     var vodResults by remember { mutableStateOf<List<VodItem>?>(null) }
     var loadingVod by remember { mutableStateOf(false) }
+    var vodMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         if (profile != null && allChannels == null) {
@@ -87,10 +88,12 @@ fun SearchScreen(
     LaunchedEffect(query) {
         if (query.isBlank()) {
             vodResults = null
+            vodMessage = null
             return@LaunchedEffect
         }
         delay(300)
         loadingVod = true
+        vodMessage = null
         try {
             val q = query.trim()
             val cat = vm.vodCatalog.value
@@ -101,7 +104,11 @@ fun SearchScreen(
                 }.take(80)
             } else if (profile != null) {
                 runCatching { vm.repository.loadVodList(profile, 0, 1, q) }.getOrDefault(emptyList())
-            } else emptyList()
+            } else {
+                // M3U/Xtream-only (profile=null) kullanıcısında VOD kataloğu yoktur.
+                vodMessage = "Bu kaynakta VOD araması desteklenmiyor"
+                emptyList()
+            }
         } finally {
             loadingVod = false
         }
@@ -190,7 +197,7 @@ fun SearchScreen(
                             val list = liveFiltered
                             val idx = list.indexOfFirst { it.id == ch.id }
                             if (idx >= 0) {
-                                PlaybackManager.playChannel(list, idx, profile ?: return@ChannelRow)
+                                PlaybackManager.playChannel(list, idx, profile)
                                 onOpenPlayer()
                             }
                         }
@@ -214,7 +221,7 @@ fun SearchScreen(
                     }
                 }
             } else if (liveFiltered.isEmpty() && vodList != null && vodList.isEmpty() && !loadingVod) {
-                item { EmptyState("Sonuç bulunamadı") }
+                item { EmptyState(vodMessage ?: "Sonuç bulunamadı") }
             }
         }
     }

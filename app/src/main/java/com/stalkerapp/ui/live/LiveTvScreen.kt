@@ -135,7 +135,7 @@ fun LiveTvScreen(
     // Kanal listesi yüklendiğinde EPG'den "şu an oynayan" programları hazırla.
     LaunchedEffect(channels) {
         val ch = channels ?: return@LaunchedEffect
-        nowPlaying = vm.repository.nowPlayingTitles(ch)
+        nowPlaying = runCatching { vm.repository.nowPlayingTitles(ch) }.getOrDefault(emptyMap())
     }
 
     Column(modifier = modifier.fillMaxSize()) {

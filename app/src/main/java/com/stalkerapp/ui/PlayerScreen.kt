@@ -81,6 +81,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import android.content.BroadcastReceiver
 import android.content.Intent
@@ -147,7 +148,7 @@ fun PlayerScreen(navController: NavHostController) {
     var locked by remember { mutableStateOf(false) }
     var clock by remember { mutableStateOf(nowTime()) }
     var battery by remember { mutableStateOf(100) }
-    var playbackSpeed by remember { mutableStateOf(1f) }
+    var playbackSpeed by remember { mutableStateOf(app.store.settings().playbackSpeed.coerceIn(0.5f, 2f)) }
     var aspectMode by remember { mutableStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var position by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
@@ -230,7 +231,15 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     BackHandler(enabled = true) {
-        exitPlayer()
+        when {
+            showTracks -> showTracks = false
+            showSubs -> showSubs = false
+            showEpg -> showEpg = false
+            showInfo -> showInfo = false
+            showPlayerSettings -> showPlayerSettings = false
+            showChannels -> showChannels = false
+            else -> exitPlayer()
+        }
     }
 
     DisposableEffect(Unit) {
@@ -258,6 +267,17 @@ fun PlayerScreen(navController: NavHostController) {
         }
     }
 
+    // Parlaklık jestiyle değiştirilen ekran parlaklığını çıkışta orijinaline döndür.
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.let { act ->
+                act.window.attributes = act.window.attributes.apply {
+                    screenBrightness = initBrightness
+                }
+            }
+        }
+    }
+
     LaunchedEffect(overlayVisible) {
         if (overlayVisible && !locked) {
             delay(5000)
@@ -281,7 +301,7 @@ fun PlayerScreen(navController: NavHostController) {
                 battery = if (scale > 0) (level * 100 / scale) else level
             }
         }
-        context.registerReceiver(receiver, filter)
+        ContextCompat.registerReceiver(receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
     }
 
@@ -390,8 +410,13 @@ fun PlayerScreen(navController: NavHostController) {
                         val p = PlaybackManager.player ?: return@detectDragGestures
                         val dur = if (p.duration > 0) p.duration else 0L
                         if (gestureMode == null) {
-                            gestureMode = if (!isLive && abs(dragAmount.x) > abs(dragAmount.y)) {
+                            val horizontal = abs(dragAmount.x) > abs(dragAmount.y)
+                            // SÜRE bilinmeyen (dur<=0) VOD'da SEEK moduna girme;
+                            // aksi halde sürükleme çalışmaz.
+                            gestureMode = if (!isLive && horizontal && p.duration > 0) {
                                 GestureMode.SEEK
+                            } else if (!isLive && horizontal) {
+                                if (change.position.x < size.width / 2) GestureMode.BRIGHTNESS else GestureMode.VOLUME
                             } else if (change.position.x < size.width / 2) {
                                 GestureMode.BRIGHTNESS
                             } else {
@@ -931,7 +956,10 @@ fun PlayerScreen(navController: NavHostController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioTracksSheet(onDismiss: () -> Unit, onSelect: (String?) -> Unit) {
-    val tracks = remember { PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO) }
+    var tracks by remember { mutableStateOf(PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO)) }
+    LaunchedEffect(Unit) {
+        tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO)
+    }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text("Ses Dili", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
@@ -965,7 +993,10 @@ fun SubtitleSheet(
     enabled: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
-    val tracks = remember { PlaybackManager.availableTracks(C.TRACK_TYPE_TEXT) }
+    var tracks by remember { mutableStateOf(PlaybackManager.availableTracks(C.TRACK_TYPE_TEXT)) }
+    LaunchedEffect(Unit) {
+        tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_TEXT)
+    }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text("Altyazı", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
