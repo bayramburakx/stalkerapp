@@ -96,7 +96,9 @@ data class VodItem(
 @Serializable
 data class Season(
     val id: Long = 0,
-    val name: String = ""
+    val name: String = "",
+    /** Portal'ın sezon/afiş görseli (yoksa TMDB'den çekilir). */
+    val poster: String = ""
 )
 
 @Serializable
@@ -104,7 +106,9 @@ data class Episode(
     val id: Long = 0,
     val name: String = "",
     @SerialName("episode_number") val episodeNumber: Int = 0,
-    val cmd: String = ""
+    val cmd: String = "",
+    /** Portal'ın bölüm küçük resmi (yoksa TMDB'den çekilir). */
+    val thumb: String = ""
 )
 
 @Serializable
@@ -117,5 +121,7 @@ data class EpgProgram(
     val category: String = "",
     val startTs: Long = 0,
     val stopTs: Long = 0,
-    val isCurrent: Boolean = false
+    val isCurrent: Boolean = false,
+    /** Portal EPG'si yoksa üretilen varsayılan programlar için true. */
+    val isDefault: Boolean = false
 )

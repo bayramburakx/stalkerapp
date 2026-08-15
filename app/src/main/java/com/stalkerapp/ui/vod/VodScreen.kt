@@ -80,8 +80,11 @@ fun VodScreen(
     var query by remember { mutableStateOf("") }
     // Uzun bas → hızlı işlemler sheet'i.
     var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
-    val watchedOverrides by remember { mutableStateOf(app.store.watchedOverrides()) }
-    val vodProgress = remember { app.store.loadVodProgress() }
+    // İzlenme işaretleri anlık güncellenir: watchedVersion her değiştiğinde
+    // Store'dan taze okunur (sheet'te izlendi işaretlenince rozet anında çıkar).
+    val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
+    val watchedOverrides = remember(watchedVersion) { app.store.watchedOverrides() }
+    val vodProgress = remember(watchedVersion) { app.store.loadVodProgress() }
 
     fun isWatched(item: VodItem): Boolean {
         val p = vodProgress[item.id]

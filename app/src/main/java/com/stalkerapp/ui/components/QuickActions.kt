@@ -116,7 +116,7 @@ fun VodQuickActionsSheet(
                 tint = if (watched) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface,
                 label = if (watched) "İzlenmedi İşaretle" else "İzlendi İşaretle"
             ) {
-                watched = vm.store.toggleWatchedOverride(item.id)
+                watched = vm.toggleWatched(item.id)
                 onDismiss()
             }
             QuickActionRow(

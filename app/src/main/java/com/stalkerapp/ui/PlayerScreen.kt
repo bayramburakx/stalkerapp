@@ -692,8 +692,10 @@ fun PlayerScreen(navController: NavHostController) {
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                        // Sonraki Bölüm: dizi oynatılırken sıradaki bölüme geçer.
-                        if (VodQueue.hasNext) {
+                        // Sonraki Bölüm: yalnızca dizilerde gösterilir (filmlerde
+                        // kuyruk boş bırakılır — bayat diz kuyruğu butonu yanlış göstermesin).
+                        val queueIsSeries = VodQueue.item?.isSeries == true || (VodQueue.item?.seriesId ?: 0L) > 0
+                        if (VodQueue.hasNext && queueIsSeries) {
                             Spacer(modifier = Modifier.width(12.dp))
                             IconButton(
                                 onClick = { PlaybackManager.playNextEpisode() },

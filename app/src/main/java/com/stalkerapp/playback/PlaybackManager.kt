@@ -40,6 +40,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 object ChannelQueue {
@@ -126,6 +127,29 @@ object PlaybackManager {
         this.store = store
         this.repository = repository
         createNotificationChannel()
+        // Bölüm %85 izlendiğinde otomatik "izlendi" işareti (ekran arka planda
+        // olsa da, PiP/arka plan oynatmada bile) — 5 sn'de bir kontrol edilir.
+        scope.launch {
+            while (true) {
+                delay(5000)
+                checkAutoWatched()
+            }
+        }
+    }
+
+    /** Bölüm %85+ izlendiyse otomatik "izlendi" işaretler (tekrar tekrar işaretlemez). */
+    private fun checkAutoWatched() {
+        val p = activePlayer ?: return
+        if (!vodPlayback) return
+        val cur = VodQueue.current ?: return
+        val item = VodQueue.item ?: return
+        if (!item.isSeries && item.seriesId <= 0) return
+        val dur = p.duration
+        val pos = p.currentPosition
+        if (dur > 0 && pos >= dur * 0.85) {
+            val key = "${item.id}:${VodQueue.season}:${cur.episodeNumber}"
+            if (!store.isEpisodeWatched(key)) store.markEpisodeWatched(key)
+        }
     }
 
     val player: ExoPlayer?
@@ -216,6 +240,10 @@ object PlaybackManager {
         subtitle: String = "",
         startPositionMs: Long = 0
     ) {
+        // Film oynatımı: önceki bir diziden kalma bölüm kuyruğu temizlenir,
+        // böylece oynatıcıda "Sonraki Bölüm" butonu yalnızca gerçek dizilerde görünür.
+        VodQueue.item = null
+        VodQueue.episodes = emptyList()
         playInternal(url, title, artwork, subtitle, isVod = true, startPositionMs = startPositionMs)
     }
 

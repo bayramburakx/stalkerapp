@@ -312,7 +312,7 @@ class PortalRepository(
         )
         val offsetHours = store.settings().timezoneOffset
         val data = parseDataArray(resp)
-        val programs = data.mapNotNull { p ->
+        var programs = data.mapNotNull { p ->
             val o = p.jsonObject
             val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             val stopStr = o["stop"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
@@ -333,8 +333,44 @@ class PortalRepository(
                     System.currentTimeMillis() / 1000 < stopTs
             )
         }
+        // Portal kendi EPG'sini döndürmüyorsa (bu panelde olduğu gibi) rehber
+        // boş kalmasın: gün boyu 2 saatlik bloklardan varsayılan bir program
+        // akışı üretilir — rehber ekranı ve oynatıcı "şimdi/sonra" her zaman
+        // içerik gösterir.
+        if (programs.isEmpty()) {
+            programs = defaultEpg(channelId)
+        }
         epgCache[channelId] = programs
         return programs
+    }
+
+    /** Portal EPG'si olmayan kanallar için varsayılan günlük program akışı. */
+    private fun defaultEpg(channelId: Long): List<EpgProgram> {
+        val now = System.currentTimeMillis() / 1000
+        val zone = ZoneId.systemDefault()
+        val todayStart = runCatching {
+            java.time.LocalDate.now(zone).atStartOfDay(zone).toEpochSecond()
+        }.getOrDefault(now - (now % 86400))
+        val slot = 2 * 3600L
+        val names = listOf(
+            "Gece Kuşağı", "Gece Programı", "Sabah Kuşağı", "Sabah Haberleri",
+            "Günaydın Programı", "Öğle Kuşağı", "Öğle Haberleri", "Gündüz Kuşağı",
+            "İkindi Kuşağı", "Akşam Kuşağı", "Ana Haber Bülteni", "Prime Time"
+        )
+        return names.mapIndexed { i, name ->
+            val start = todayStart + i * slot
+            val stop = start + slot
+            EpgProgram(
+                chId = channelId,
+                name = name,
+                start = "",
+                stop = "",
+                startTs = start,
+                stopTs = stop,
+                isCurrent = start <= now && now < stop,
+                isDefault = true
+            )
+        }
     }
 
     /**
@@ -1027,7 +1063,14 @@ class PortalRepository(
                 ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() }
                 .orEmpty()
             seriesSeasonsCache[realId] = seriesSeasonsCache[realId].orEmpty() + (seasonNum to episodeNums)
-            Season(id = seasonNum, name = name)
+            Season(
+                id = seasonNum,
+                name = name,
+                // Portal sezon başına gerçek bir görsel vermiyor (hepsi aynı
+                // dizi afişi); yine de varsa kullan, yoksa TMDB'ye düşülür.
+                poster = o["screenshot_uri"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["pic"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            )
         }.sortedBy { it.id }
         return seasons
     }
@@ -1066,6 +1109,19 @@ class PortalRepository(
                 cmd = cmd
             )
         }
+    }
+
+    /**
+     * Bir sezonun bölüm numaralarını döner. [loadSeasons] tüm sezonların bölüm
+     * listesini önbelleğe alır; eksikse önce sezonlar yüklenir (ağ isteği).
+     * "Sezonu izlendi işaretle" gibi işlemler için kullanılır.
+     */
+    suspend fun seasonEpisodeNumbers(profile: Profile, vodId: Long, seasonId: Long): List<Int> {
+        val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
+        val cached = seriesSeasonsCache[realId]?.firstOrNull { it.first == seasonId }?.second
+        if (cached != null) return cached
+        loadSeasons(profile, vodId)
+        return seriesSeasonsCache[realId]?.firstOrNull { it.first == seasonId }?.second.orEmpty()
     }
 
     /** create_link cmd for one series episode (base64 JSON, as the portal expects). */
@@ -1313,7 +1369,9 @@ class PortalRepository(
         return parseDataArray(el).mapNotNull { o ->
             Season(
                 id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
-                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: ""
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
+                poster = o["screenshot_uri"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["pic"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }
     }
@@ -1325,7 +1383,9 @@ class PortalRepository(
                 name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "",
                 episodeNumber = o["episode_number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull()
                     ?: o["series_number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0,
-                cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+                cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                thumb = o["screenshot_uri"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["pic"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }
     }

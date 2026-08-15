@@ -119,8 +119,10 @@ fun HomeDashboardScreen(
 
     // Uzun bas → hızlı işlemler sheet'i + izlenme işaretleri.
     var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
-    val watchedOverrides by remember { mutableStateOf(app.store.watchedOverrides()) }
-    val vodProgressMap = remember { app.store.loadVodProgress() }
+    // İzlenme işaretleri anlık: watchedVersion değişince Store'dan taze okunur.
+    val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
+    val watchedOverrides = remember(watchedVersion) { app.store.watchedOverrides() }
+    val vodProgressMap = remember(watchedVersion) { app.store.loadVodProgress() }
     fun isWatched(item: VodItem): Boolean {
         val p = vodProgressMap[item.id]
         return item.id in watchedOverrides ||

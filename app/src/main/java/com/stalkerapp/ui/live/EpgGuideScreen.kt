@@ -230,9 +230,14 @@ fun EpgGuideScreen(
                                     )
                                 }
                                 Text(
-                                    if (programs.isEmpty()) "EPG yok" else "EPG",
+                                    when {
+                                        programs.isEmpty() -> "EPG yok"
+                                        programs.first().isDefault -> "Varsayılan"
+                                        else -> "EPG"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (programs.isEmpty()) Color.White.copy(alpha = 0.4f)
+                                    color = if (programs.isEmpty() || programs.firstOrNull()?.isDefault == true)
+                                        Color.White.copy(alpha = 0.4f)
                                     else MaterialTheme.colorScheme.primary
                                 )
                             }

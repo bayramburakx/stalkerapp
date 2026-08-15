@@ -53,6 +53,21 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     private val _homeChannels = MutableStateFlow<List<Channel>?>(null)
     val homeChannels: StateFlow<List<Channel>?> = _homeChannels
 
+    // İzlenme işaretleri (override + bölüm) her değişimde arttırılır; ekranlar
+    // bu sürümü dinleyip Store'dan taze okur, böylece rozetler anlık güncellenir.
+    private val _watchedVersion = MutableStateFlow(0)
+    val watchedVersion: StateFlow<Int> = _watchedVersion
+
+    fun toggleWatched(id: Long): Boolean {
+        val added = store.toggleWatchedOverride(id)
+        _watchedVersion.value++
+        return added
+    }
+
+    fun bumpWatched() {
+        _watchedVersion.value++
+    }
+
     suspend fun loadHomeChannels(profile: Profile) {
         if (_homeChannels.value == null) {
             _homeChannels.value =
@@ -180,6 +195,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
 enum class VodCatalogStatus { Idle, Syncing, Ready, Error }
 
+/**
+ * Katalog durumu. `byId` ve `seriesCategoryIds` yapım sırasında bir kez
+ * önceden hesaplanır: 80k+ öğeli bir katalogda bunları her erişimde yeniden
+ * üretmek (associateBy / kategori taraması) ana iş parçacığını kilitler ve
+ * sayfa/sekme geçişlerinde donmaya yol açar.
+ */
 data class VodCatalogState(
     val status: VodCatalogStatus = VodCatalogStatus.Idle,
     val doneCategories: Int = 0,
@@ -188,12 +209,42 @@ data class VodCatalogState(
     val allItems: List<VodItem> = emptyList(),
     val categories: List<Genre> = emptyList(),
     val portalTotal: Int = 0,
-    val lastSync: Long = 0
+    val lastSync: Long = 0,
+    val byId: Map<Long, VodItem> = emptyMap(),
+    val seriesCategoryIds: Set<Long> = emptySet()
 ) {
-    val byId: Map<Long, VodItem> get() = allItems.associateBy { it.id }
     val isSeriesItem: (VodItem) -> Boolean = { item ->
         item.isSeries || item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() ||
-            categories.any { c -> c.id == item.categoryId && c.title.let { t -> t.contains("dizi", ignoreCase = true) || t.contains("series", ignoreCase = true) || t.contains("serial", ignoreCase = true) } }
+            item.categoryId in seriesCategoryIds
+    }
+
+    companion object {
+        val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
+
+        fun of(
+            status: VodCatalogStatus = VodCatalogStatus.Idle,
+            doneCategories: Int = 0,
+            totalCategories: Int = 0,
+            loadedCount: Int = 0,
+            allItems: List<VodItem> = emptyList(),
+            categories: List<Genre> = emptyList(),
+            portalTotal: Int = 0,
+            lastSync: Long = 0
+        ): VodCatalogState = VodCatalogState(
+            status = status,
+            doneCategories = doneCategories,
+            totalCategories = totalCategories,
+            loadedCount = loadedCount,
+            allItems = allItems,
+            categories = categories,
+            portalTotal = portalTotal,
+            lastSync = lastSync,
+            byId = allItems.associateBy { it.id },
+            seriesCategoryIds = categories
+                .filter { c -> seriesKeywords.any { kw -> c.title.contains(kw, ignoreCase = true) } }
+                .map { it.id }
+                .toSet()
+        )
     }
 }
 

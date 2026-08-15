@@ -2,11 +2,14 @@ package com.stalkerapp.ui.vod
 
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,13 +40,9 @@ import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +83,7 @@ import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VodDetailScreen(
     vodId: Long,
@@ -106,21 +106,17 @@ fun VodDetailScreen(
     var loadingEpisodes by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf(false) }
-    // İzlenme işaretleri + devam sheet'i
-    var showResumeSheet by remember { mutableStateOf(false) }
-    var pendingEpisode by remember { mutableStateOf<Episode?>(null) }
+    // İzlenme işaretleri anlık güncellenir (basınca Store'dan taze okunur).
     var watchedEps by remember { mutableStateOf(app.store.watchedEpisodes()) }
+    // Tüm bölümleri izlenen sezonlar (sezon rozeti için).
+    var fullyWatchedSeasons by remember { mutableStateOf<Set<Long>>(emptySet()) }
     // TMDB zenginleştirme (oyuncu fotoğrafları + fragman). Anahtar yoksa boş kalır.
     var tmdbCast by remember { mutableStateOf<List<TmdbPerson>>(emptyList()) }
     var trailerKey by remember { mutableStateOf("") }
+    // Sezon posterleri + bölüm küçük resimleri (portal önce, yoksa TMDB).
+    var seasonPosters by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var episodeThumbs by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     val context = LocalContext.current
-
-    // Oynatıcıdan dönünce (bölüm izlendi işaretlendi, ilerleme kaydedildi)
-    // rozetler ve devam konumları tazelenir.
-    LifecycleResumeEffect(Unit) {
-        watchedEps = app.store.watchedEpisodes()
-        onPauseOrDispose { }
-    }
 
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
 
@@ -131,6 +127,53 @@ fun VodDetailScreen(
             val enr = app.tmdb.enrich(i.tmdbId, i.isSeries || isSeriesHint, key)
             tmdbCast = enr.cast
             trailerKey = enr.trailerKey
+        }
+    }
+
+    // Sezon posterleri: TMDB'de gerçek sezon posteri varsa o, yoksa portalın
+    // sezon görseli (varsa), o da yoksa dizi afişi kart üzerinde gösterilir.
+    LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint, seasons) {
+        val i = item ?: return@LaunchedEffect
+        if (seasons.isEmpty() || !(i.isSeries || isSeriesHint)) return@LaunchedEffect
+        val key = app.store.settings().tmdbApiKey
+        val withKey = key.isNotBlank() && i.tmdbId > 0
+        val map = mutableMapOf<Long, String>()
+        seasons.forEach { s ->
+            val num = s.id.toInt().coerceAtLeast(1)
+            if (withKey) {
+                val p = runCatching { app.tmdb.seasonPoster(i.tmdbId, num, key) }.getOrDefault("")
+                if (p.isNotBlank()) {
+                    map[s.id] = TmdbClient.photoUrl(p, large = true)
+                    return@forEach
+                }
+            }
+            if (s.poster.isNotBlank()) map[s.id] = resolveUrl(s.poster, profile?.baseUrl.orEmpty())
+        }
+        seasonPosters = map
+    }
+
+    // Bölüm küçük resimleri: seçili sezonun bölümleri için portal görseli önce,
+    // yoksa TMDB'den still çekilir (bölüm bölüm eklenir, anında görünür).
+    LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint, selectedSeason, episodes) {
+        val i = item ?: return@LaunchedEffect
+        val eps = episodes.orEmpty()
+        if (eps.isEmpty() || !(i.isSeries || isSeriesHint)) return@LaunchedEffect
+        val key = app.store.settings().tmdbApiKey
+        val withKey = key.isNotBlank() && i.tmdbId > 0
+        val seasonNum = selectedSeason?.toInt()?.coerceAtLeast(1) ?: 1
+        var thumbs = emptyMap<Long, String>()
+        eps.forEach { e ->
+            val url = when {
+                e.thumb.isNotBlank() -> resolveUrl(e.thumb, profile?.baseUrl.orEmpty())
+                withKey -> runCatching { app.tmdb.episodeStill(i.tmdbId, seasonNum, e.episodeNumber.coerceAtLeast(1), key) }
+                    .getOrDefault("")
+                    .let { p -> if (p.isNotBlank()) TmdbClient.photoUrl(p, large = true) else "" }
+                else -> ""
+            }
+            if (url.isNotBlank()) {
+                thumbs = thumbs + (e.id to url)
+                episodeThumbs = thumbs
+            }
         }
     }
 
@@ -177,22 +220,6 @@ fun VodDetailScreen(
             error = e.message
         } finally {
             loading = false
-        }
-    }
-
-    LaunchedEffect(selectedSeason) {
-        val it = item ?: return@LaunchedEffect
-        val sid = selectedSeason ?: return@LaunchedEffect
-            if (!it.isSeries && !isSeriesHint) return@LaunchedEffect
-        val p = profile ?: return@LaunchedEffect
-        loadingEpisodes = true
-        episodes = null
-        try {
-            episodes = vm.repository.loadEpisodes(p, it.id, sid)
-        } catch (e: Exception) {
-            error = e.message
-        } finally {
-            loadingEpisodes = false
         }
     }
 
@@ -243,68 +270,77 @@ fun VodDetailScreen(
         return allEps.firstOrNull { episodeKey(it, seasonNum) !in seen } ?: allEps.first()
     }
 
+    /** Seçili sezonun tüm bölümleri izlendiyse sezon rozetini günceller. */
+    fun refreshSeasonWatched(seasonId: Long) {
+        val eps = episodes.orEmpty()
+        val prefix = "${it.id}:$seasonId:"
+        val allWatched = eps.isNotEmpty() && eps.all { e -> "$prefix${e.episodeNumber}" in watchedEps }
+        fullyWatchedSeasons =
+            if (allWatched) fullyWatchedSeasons + seasonId else fullyWatchedSeasons - seasonId
+    }
+
+    fun toggleEpisodeWatched(ep: Episode, seasonNum: Long) {
+        val key = episodeKey(ep, seasonNum)
+        if (key in watchedEps) app.store.clearEpisodeWatched(key) else app.store.markEpisodeWatched(key)
+        watchedEps = app.store.watchedEpisodes()
+        vm.bumpWatched()
+        refreshSeasonWatched(seasonNum)
+    }
+
+    /** Bir sezonun tüm bölümlerini izlendi/izlenmedi işaretler (uzun basma). */
+    fun toggleSeasonWatched(seasonId: Long) {
+        val p = profile ?: return
+        scope.launch {
+            val nums = runCatching { vm.repository.seasonEpisodeNumbers(p, it.id, seasonId) }
+                .getOrDefault(emptyList())
+            if (nums.isEmpty()) return@launch
+            val prefix = "${it.id}:$seasonId:"
+            val allWatched = nums.all { n -> "$prefix$n" in watchedEps }
+            nums.forEach { n ->
+                val key = "$prefix$n"
+                if (allWatched) app.store.clearEpisodeWatched(key) else app.store.markEpisodeWatched(key)
+            }
+            watchedEps = app.store.watchedEpisodes()
+            vm.bumpWatched()
+            fullyWatchedSeasons = if (!allWatched) fullyWatchedSeasons + seasonId else fullyWatchedSeasons - seasonId
+        }
+    }
+
+    /** Kaldığı yerden devam: kayıtlı konum varsa direkt oradan başlar (sormaz). */
     fun play(episode: Episode? = null) {
         val p = profile ?: return
         scope.launch {
             playing = true
             try {
                 val allEps = episodes.orEmpty()
-                if (!isSeries || allEps.isEmpty()) {
-                    // Film: doğrudan oynat.
-                    val url = vm.repository.vodStreamUrl(it, p, null)
-                    PlaybackManager.currentVodId = it.id
-                    PlaybackManager.play(url, it.name, it.poster)
-                } else {
-                    // Dizi: seçili bölüm ya da izlenmemiş ilk bölüm; kuyruk binge
-                    // modu / "sonraki bölüm" için doldurulur.
-                    val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
-                    val target = episode ?: firstEpisodeToPlay(allEps, seasonNum)
-                    val idx = allEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
-                    PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx)
-                }
-                onOpenPlayer()
-            } catch (e: Exception) {
-                error = e.message
-            } finally {
-                playing = false
-            }
-        }
-    }
-
-    fun progressFor(episode: Episode?): com.stalkerapp.data.VodProgress? {
-        return if (episode != null) {
-            app.store.episodeProgress()[episodeKey(episode, selectedSeason ?: 0)]
-        } else {
-            app.store.loadVodProgress()[it.id]
-        }
-    }
-
-    fun resumePlay(episode: Episode?, positionMs: Long) {
-        val p = profile ?: return
-        scope.launch {
-            playing = true
-            try {
-                if (!isSeries || episodes.orEmpty().isEmpty() || episode != null) {
+                if (!isSeries || allEps.isEmpty() || episode != null) {
+                    // Film ya da tek bölüm: kayıtlı konumdan devam et.
+                    val prog = if (episode != null) {
+                        app.store.episodeProgress()[episodeKey(episode, selectedSeason ?: 0)]
+                    } else {
+                        app.store.loadVodProgress()[it.id]
+                    }
+                    val startMs = if (prog != null && prog.durationMs > 0 &&
+                        prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
+                    ) prog.positionMs else 0L
                     val url = vm.repository.vodStreamUrl(it, p, episode)
                     PlaybackManager.currentVodId = it.id
-                    PlaybackManager.play(url, it.name, it.poster, startPositionMs = positionMs)
+                    PlaybackManager.play(url, it.name, it.poster, startPositionMs = startMs)
                 } else {
-                    // Dizide "Oynat"a basınca izlenmemiş ilk bölümden devam edilir;
-                    // bölüm seviyesinde ilerleme varsa o bölüm kaldığı yerden başlar.
-                    val allEps = episodes.orEmpty()
+                    // Dizi: ilerlemesi olan bölüm varsa oradan, yoksa izlenmemiş
+                    // ilk bölümden başla (kaldığı yerden sorusuz devam).
                     val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
                     val withProgress = allEps.firstOrNull { ep ->
                         val pr = app.store.episodeProgress()[episodeKey(ep, seasonNum)]
-                        pr != null && pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
+                        pr != null && pr.durationMs > 0 &&
+                            pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
                     }
-                    if (withProgress != null) {
-                        val pr = app.store.episodeProgress()[episodeKey(withProgress, seasonNum)]
-                        val idx = allEps.indexOfFirst { it.id == withProgress.id }.coerceAtLeast(0)
-                        PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = pr?.positionMs ?: 0)
-                    } else {
-                        play(null)
-                        return@launch
-                    }
+                    val target = withProgress ?: firstEpisodeToPlay(allEps, seasonNum)
+                    val idx = allEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
+                    val pr = if (withProgress != null) {
+                        app.store.episodeProgress()[episodeKey(withProgress, seasonNum)]
+                    } else null
+                    PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = pr?.positionMs ?: 0)
                 }
                 onOpenPlayer()
             } catch (e: Exception) {
@@ -315,15 +351,31 @@ fun VodDetailScreen(
         }
     }
 
-    fun onPlayPressed(episode: Episode? = null) {
-        val prog = progressFor(episode)
-        val resume = prog != null && prog.durationMs > 0 &&
-            prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
-        if (resume) {
-            pendingEpisode = episode
-            showResumeSheet = true
-        } else {
-            play(episode)
+    fun onPlayPressed(episode: Episode? = null) = play(episode)
+
+    // Oynatıcıdan dönünce (bölüm %85 izlendi / binge sonrası) rozetler tazelenir.
+    LifecycleResumeEffect(Unit) {
+        watchedEps = app.store.watchedEpisodes()
+        val sid = selectedSeason
+        if (sid != null) refreshSeasonWatched(sid)
+        onPauseOrDispose { }
+    }
+
+    // Sezon seçilince o sezonun bölümlerini yükler ve sezon rozetini tazeler.
+    LaunchedEffect(selectedSeason) {
+        val it = item ?: return@LaunchedEffect
+        val sid = selectedSeason ?: return@LaunchedEffect
+        if (!it.isSeries && !isSeriesHint) return@LaunchedEffect
+        val p = profile ?: return@LaunchedEffect
+        loadingEpisodes = true
+        episodes = null
+        try {
+            episodes = vm.repository.loadEpisodes(p, it.id, sid)
+            refreshSeasonWatched(sid)
+        } catch (e: Exception) {
+            error = e.message
+        } finally {
+            loadingEpisodes = false
         }
     }
 
@@ -599,7 +651,7 @@ fun VodDetailScreen(
                 }
             }
 
-            // ---------- Dizi: sezon kutuları + S1B1 bölüm kartları ----------
+            // ---------- Dizi: sezon posterleri + S1B1 bölüm kartları ----------
             if (isSeries) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
@@ -615,23 +667,76 @@ fun VodDetailScreen(
                         ) {
                             items(seasons, key = { it.id }) { s ->
                                 val sel = selectedSeason == s.id
-                                val shape = RoundedCornerShape(12.dp)
-                                Box(
+                                val fullyWatched = s.id in fullyWatchedSeasons
+                                val poster = seasonPosters[s.id].orEmpty()
+                                Column(
                                     modifier = Modifier
-                                        .clip(shape)
-                                        .background(
-                                            if (sel) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        .width(96.dp)
+                                        .combinedClickable(
+                                            onClick = { selectedSeason = s.id },
+                                            onLongClick = { toggleSeasonWatched(s.id) }
                                         )
-                                        .border(1.dp, if (sel) Color.Transparent else MaterialTheme.colorScheme.outline, shape)
-                                        .clickable { selectedSeason = s.id }
-                                        .padding(horizontal = 20.dp, vertical = 12.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(2f / 3f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            .then(
+                                                if (sel) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                                                else Modifier
+                                            )
+                                    ) {
+                                        if (poster.isNotBlank()) {
+                                            AsyncImage(
+                                                model = poster,
+                                                contentDescription = seasonLabel(s),
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    seasonLabel(s),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    textAlign = TextAlign.Center,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        if (fullyWatched) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(6.dp)
+                                                    .size(18.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF2E7D32)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = "Sezon izlendi",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
                                     Text(
                                         seasonLabel(s),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -656,56 +761,85 @@ fun VodDetailScreen(
                                 items(episodes.orEmpty(), key = { it.id }) { ep ->
                                     val seasonNum = selectedSeason ?: 0
                                     val watched = episodeKey(ep, seasonNum) in watchedEps
+                                    val thumb = episodeThumbs[ep.id].orEmpty()
                                     Box(
                                         modifier = Modifier
-                                            .width(112.dp)
+                                            .width(132.dp)
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(
                                                 if (watched) MaterialTheme.colorScheme.primaryContainer
                                                 else MaterialTheme.colorScheme.surfaceVariant
                                             )
-                                            .clickable { onPlayPressed(ep) }
-                                            .padding(vertical = 16.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text(
-                                                "S${seasonNum}B${ep.episodeNumber}",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurface
+                                            .combinedClickable(
+                                                onClick = { onPlayPressed(ep) },
+                                                onLongClick = { toggleEpisodeWatched(ep, seasonNum) }
                                             )
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            // Bölüm küçük resmi (varsa) + S#B# rozeti.
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(16f / 9f)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(Color.Black)
+                                            ) {
+                                                if (thumb.isNotBlank()) {
+                                                    AsyncImage(
+                                                        model = thumb,
+                                                        contentDescription = "S${seasonNum}B${ep.episodeNumber}",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomStart)
+                                                        .padding(6.dp)
+                                                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        "S${seasonNum}B${ep.episodeNumber}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                                // İzlenme rozeti + anlık işaretleme butonu.
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(6.dp)
+                                                        .size(22.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (watched) Color(0xFF2E7D32)
+                                                            else Color.Black.copy(alpha = 0.55f)
+                                                        )
+                                                        .clickable { toggleEpisodeWatched(ep, seasonNum) },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = if (watched) "İzlenmedi yap" else "İzlendi işaretle",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                }
+                                            }
                                             if (ep.name.isNotBlank()) {
                                                 Spacer(Modifier.height(4.dp))
                                                 Text(
                                                     ep.name,
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    textAlign = TextAlign.Center,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.padding(horizontal = 8.dp)
                                                 )
-                                            }
-                                        }
-                                        if (watched) {
-                                            // İzlenme işareti: yeşil onay rozeti.
-                                            Box(
-                                                modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(6.dp)
-                                                    .size(18.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFF2E7D32)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Check,
-                                                    contentDescription = "İzlendi",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
+                                            } else {
+                                                Spacer(Modifier.height(8.dp))
                                             }
                                         }
                                     }
@@ -770,98 +904,19 @@ fun VodDetailScreen(
             }
         }
     }
-
-    // ---------- Devam sheet'i: "kaldığın yerden devam et / baştan izle" ----------
-    if (showResumeSheet) {
-        val prog = progressFor(pendingEpisode)
-        val seasonNum = selectedSeason ?: 0
-        val label = pendingEpisode?.let { "S${seasonNum}B${it.episodeNumber}" }
-        ResumeSheet(
-            title = it.name,
-            label = label,
-            positionMs = prog?.positionMs ?: 0,
-            durationMs = prog?.durationMs ?: 0,
-            onResume = {
-                showResumeSheet = false
-                resumePlay(pendingEpisode, prog?.positionMs ?: 0)
-            },
-            onRestart = {
-                showResumeSheet = false
-                play(pendingEpisode)
-            },
-            onDismiss = { showResumeSheet = false }
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ResumeSheet(
-    title: String,
-    label: String?,
-    positionMs: Long,
-    durationMs: Long,
-    onResume: () -> Unit,
-    onRestart: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val pct = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-            LinearProgressIndicator(
-                progress = { pct },
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-            )
-            Text(
-                "Kaldığın yer: ${(pct * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-            Spacer(Modifier.height(18.dp))
-            Button(
-                onClick = onResume,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (label != null) "Devam Et ($label)" else "Kaldığın Yerden Devam Et",
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onRestart,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Baştan İzle")
-            }
-        }
-    }
 }
 
 /**
  * Fragman oynatıcı: önce YouTube küçük resmi + oynat butonu gösterir; dokununca
- * gömülü WebView oynatıcıya geçer (YouTube embed). Gömülü oynatıcı ağır
- * olduğundan talep üzerine yüklenir.
+ * gömülü WebView oynatıcıya geçer. Beyaz ekran sorununu önlemek için DOM
+ * depolama, WebChromeClient (HTML5 video) ve JS etkinleştirilir; ayrıca gömülü
+ * oynatıcı açılmazsa YouTube uygulamasında açma kısayolu sunulur.
  */
 @Composable
 private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
     var playing by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     Box(
         modifier = modifier
             .aspectRatio(16f / 9f)
@@ -897,18 +952,83 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                     )
                 }
             }
-        } else {
+        } else if (!failed) {
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
                         settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
+                        settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
                         webViewClient = WebViewClient()
-                        loadUrl("https://www.youtube.com/embed/$key?autoplay=1&playsinline=1&rel=0")
+                        // HTML5 video oynatımı için WebChromeClient şarttır;
+                        // olmadan YouTube embed beyaz ekran bırakır.
+                        webChromeClient = WebChromeClient()
+                        loadUrl("https://www.youtube-nocookie.com/embed/$key?autoplay=1&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3")
                     }
                 },
                 modifier = Modifier.fillMaxSize()
             )
+            // Gömülü oynatıcı çalışmazsa (beyaz ekran) kaçış yolu: YouTube'da aç.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable {
+                        failed = true
+                        runCatching {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.youtube.com/watch?v=$key")
+                            )
+                            context.startActivity(intent)
+                        }
+                    }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    "YouTube'da aç",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White
+                )
+            }
+        } else {
+            // Oynatıcı hata verdi: YouTube uygulamasında yeniden dene.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable {
+                        runCatching {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.youtube.com/watch?v=$key")
+                            )
+                            context.startActivity(intent)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.SmartDisplay,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Gömülü oynatıcı açılamadı — YouTube'da açmak için dokun",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            }
         }
     }
 }

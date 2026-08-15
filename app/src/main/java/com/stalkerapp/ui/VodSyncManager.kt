@@ -61,7 +61,7 @@ class VodSyncManager(
     fun publishCached(profile: Profile) {
         val portalId = profile.portal?.id ?: return
         val cached = store.loadVodCatalog(portalId) ?: return
-        _progress.value = VodCatalogState(
+        _progress.value = VodCatalogState.of(
             status = VodCatalogStatus.Ready,
             doneCategories = cached.second.size,
             totalCategories = cached.second.size,
@@ -109,7 +109,7 @@ class VodSyncManager(
             store.clearVodCatalog(portalId)
         }
 
-        _progress.value = _progress.value.copy(
+        _progress.value = state(
             status = VodCatalogStatus.Syncing,
             categories = cats,
             allItems = baseItems,
@@ -159,7 +159,7 @@ class VodSyncManager(
                                             store.saveVodCatalogDoneCats(portalId, it.toList())
                                         }
                                         mutex.withLock {
-                                            _progress.value = _progress.value.copy(
+                                            _progress.value = state(
                                                 doneCategories = doneNow.size,
                                                 loadedCount = all.size,
                                                 allItems = all.values.toList(),
@@ -202,7 +202,7 @@ class VodSyncManager(
                     singleOk = items.size >= 5000 &&
                         if (allTotal > 0) items.size >= allTotal * 0.95
                         else items.size >= 10000
-                    _progress.value = _progress.value.copy(
+                    _progress.value = state(
                         loadedCount = all.size,
                         doneCategories = cats.size,
                         totalCategories = cats.size,
@@ -243,7 +243,7 @@ class VodSyncManager(
                                         store.saveVodCatalogDoneCats(portalId, it.toList())
                                     }
                                     mutex.withLock {
-                                        _progress.value = _progress.value.copy(
+                                        _progress.value = state(
                                             doneCategories = doneNow.size,
                                             loadedCount = all.size,
                                             allItems = all.values.toList(),
@@ -273,7 +273,7 @@ class VodSyncManager(
                                     val items = repository.fetchVodSearch(profile, token, 5000)
                                     items.forEach { all[it.id] = stamp(it, seriesCatIds) }
                                     mutex.withLock {
-                                        _progress.value = _progress.value.copy(
+                                        _progress.value = state(
                                             loadedCount = all.size,
                                             allItems = all.values.toList(),
                                             portalTotal = portalTotal
@@ -292,7 +292,7 @@ class VodSyncManager(
             store.saveVodCatalog(portalId, all.values.toList(), cats)
             store.clearVodCatalogDoneCats(portalId)
             cats = store.loadVodCatalog(portalId)?.second ?: cats
-            _progress.value = _progress.value.copy(
+            _progress.value = state(
                 status = VodCatalogStatus.Ready,
                 doneCategories = cats.size,
                 totalCategories = cats.size,
@@ -304,10 +304,34 @@ class VodSyncManager(
             )
         } catch (e: Exception) {
             if (_progress.value.status != VodCatalogStatus.Ready) {
-                _progress.value = _progress.value.copy(status = VodCatalogStatus.Error)
+                _progress.value = state(status = VodCatalogStatus.Error)
             }
         } finally {
             repository.resetAdaptiveInterval()
         }
     }
+
+    /**
+     * Kataloğun yeni bir sürümünü yayınlar; `byId` ve `seriesCategoryIds`
+     * önceden hesaplanır (eski `copy` çağrıları bunları bayat bırakırdı).
+     */
+    private fun state(
+        status: VodCatalogStatus = _progress.value.status,
+        doneCategories: Int = _progress.value.doneCategories,
+        totalCategories: Int = _progress.value.totalCategories,
+        loadedCount: Int = _progress.value.loadedCount,
+        allItems: List<VodItem> = _progress.value.allItems,
+        categories: List<Genre> = _progress.value.categories,
+        portalTotal: Int = _progress.value.portalTotal,
+        lastSync: Long = _progress.value.lastSync
+    ): VodCatalogState = VodCatalogState.of(
+        status = status,
+        doneCategories = doneCategories,
+        totalCategories = totalCategories,
+        loadedCount = loadedCount,
+        allItems = allItems,
+        categories = categories,
+        portalTotal = portalTotal,
+        lastSync = lastSync
+    )
 }
