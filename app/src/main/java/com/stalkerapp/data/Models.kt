@@ -22,7 +22,13 @@ data class Settings(
     /** Bölüm bitince sıradaki bölüm otomatik oynatılsın mı (binge mod). */
     val bingeMode: Boolean = false,
     /** TMDB API anahtarı (oyuncu fotoğrafları + fragman için). Boşsa özellik kapalıdır. */
-    val tmdbApiKey: String = ""
+    val tmdbApiKey: String = "",
+    /**
+     * Harici EPG (XMLTV) URL'si. Portalın kendi EPG'si yoksa buradan çekilir
+     * (kanallar `xmltv_id` ile eşleştirilir). Ör: sağlayıcının EPG linki ya da
+     * kendi barındırdığın bir XMLTV dosyası (ör. iptv-org/epg çıktısı).
+     */
+    val epgUrl: String = ""
 )
 
 @Serializable
@@ -63,7 +69,9 @@ data class Channel(
     @SerialName("tv_genre_id") val tvGenreId: Long = 0,
     @SerialName("tv_genre_title") val tvGenreTitle: String = "",
     @SerialName("is_tv_archive") val isTvArchive: Boolean = false,
-    @SerialName("tv_archive_duration") val archiveDuration: Int = 0
+    @SerialName("tv_archive_duration") val archiveDuration: Int = 0,
+    /** Harici XMLTV EPG eşleştirmesi için kanal kimliği (ör. "TRT1.tr"). */
+    @SerialName("xmltv_id") val xmltvId: String = ""
 )
 
 @Serializable

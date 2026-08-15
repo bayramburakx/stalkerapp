@@ -66,6 +66,7 @@ fun SettingsScreen(
     var editing by remember { mutableStateOf<Portal?>(null) }
     var showSwitch by remember { mutableStateOf(false) }
     var tmdbKey by remember(settings.tmdbApiKey) { mutableStateOf(settings.tmdbApiKey) }
+    var epgUrl by remember(settings.epgUrl) { mutableStateOf(settings.epgUrl) }
     var updateDialog by remember { mutableStateOf<UpdateInfo?>(null) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
@@ -170,25 +171,29 @@ fun SettingsScreen(
             ) {
                 Text("EPG", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "EPG kaynağı: ${profile?.baseUrl ?: "—"}",
+                    "Portal kendi EPG'sini vermiyorsa harici bir XMLTV linki kullanılabilir. " +
+                        "Kanal eşleşmesi portalın sağladığı xmltv_id ile yapılır. " +
+                        "(Ör: sağlayıcının EPG linki veya iptv-org/epg gibi bir kaynaktan aldığın .xml/.xml.gz dosyası)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = showEpgTimes, onCheckedChange = { showEpgTimes = it })
-                    Text("EPG saatlerini yerel saate göre göster", modifier = Modifier.padding(start = 8.dp))
-                }
+                OutlinedTextField(
+                    value = epgUrl,
+                    onValueChange = { epgUrl = it },
+                    label = { Text("Harici EPG (XMLTV) URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            scope.launch {
-                                vm.repository.clearEpgCache()
-                                vm.showMessage("EPG önbelleği güncellendi")
-                            }
+                            vm.saveSettings(settings.copy(epgUrl = epgUrl.trim()))
+                            vm.repository.clearEpgCache()
+                            vm.showMessage("EPG kaynağı kaydedildi — rehber bir sonraki açılışta yüklenir")
                         },
-                        enabled = profile != null
+                        enabled = epgUrl.trim().isNotEmpty()
                     ) {
-                        Text("EPG'yi Güncelle")
+                        Text("Kaydet")
                     }
                     OutlinedButton(
                         onClick = {

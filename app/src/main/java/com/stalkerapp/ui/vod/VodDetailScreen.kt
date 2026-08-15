@@ -790,7 +790,7 @@ fun VodDetailScreen(
                                         .ifBlank { "Bölüm ${ep.episodeNumber}" }
                                     Box(
                                         modifier = Modifier
-                                            .width(176.dp)
+                                            .width(196.dp)
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(
                                                 if (watched) MaterialTheme.colorScheme.primaryContainer
@@ -1016,7 +1016,6 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
             loading = false
             if (url.isNullOrBlank()) {
                 failed = true
-                openInYoutube()
             } else {
                 streamUrl = url
             }
@@ -1051,11 +1050,10 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                 }
             }
             failed -> {
-                // Akış alınamadı: YouTube uygulamasında aç.
+                // Akış sunucuları geçici kapalı olabilir: otomatik YouTube'a
+                // düşmek yerine tekrar dene + YouTube'da aç seçenekleri sunulur.
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable { openInYoutube() },
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1065,14 +1063,31 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                             tint = Color.White,
                             modifier = Modifier.size(40.dp)
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            "Fragman akışı alınamadı — YouTube'da açmak için dokun",
+                            "Fragman akışı alınamadı",
                             color = Color.White,
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = { failed = false; startTrailer() },
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Tekrar Dene", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = { openInYoutube() },
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Text("YouTube'da Aç", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
             }

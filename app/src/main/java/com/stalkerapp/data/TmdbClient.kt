@@ -48,6 +48,15 @@ class TmdbClient(private val keyProvider: () -> String) {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    // Fragman akışı dış sunuculardan (Piped) çekilir: bu sunucular yavaş veya
+    // geçici kapalı olabildiği için kısa zaman aşımıyla ayrı bir istemci kullanılır
+    // — böylece kullanıcı uzun süre bekleyip YouTube'a düşmez.
+    private val streamHttp = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .build()
+
     private val cache = mutableMapOf<String, Any>()
 
     fun hasKey(): Boolean = keyProvider().isNotBlank()
@@ -144,14 +153,16 @@ class TmdbClient(private val keyProvider: () -> String) {
     suspend fun youtubeStreamUrl(videoId: String): String? {
         if (videoId.isBlank()) return null
         val instances = listOf(
-            "https://pipedapi.kavin.rocks",
             "https://api.piped.private.coffee",
             "https://pipedapi.adminforge.de",
             "https://piped-api.lunar.icu",
-            "https://pipedapi.drgns.space"
+            "https://pipedapi.drgns.space",
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.leptons.xyz",
+            "https://pipedapi.ducks.party"
         )
         for (inst in instances) {
-            val obj = runCatching { getJson("$inst/streams/$videoId") }.getOrNull() ?: continue
+            val obj = runCatching { getStreamJson("$inst/streams/$videoId") }.getOrNull() ?: continue
             val streams = obj["videoStreams"] as? JsonArray ?: continue
             // En yüksek çözünürlükteki akışı seç (videoOnly olmayan tercih edilir).
             val picked = streams.mapNotNull { it as? JsonObject }
@@ -164,6 +175,21 @@ class TmdbClient(private val keyProvider: () -> String) {
             (picked?.get("url") as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { return it }
         }
         return null
+    }
+
+    /** Dış sunucu isteği: kısa zaman aşımı, JSON yanıtı beklenmezse null. */
+    private suspend fun getStreamJson(url: String): JsonObject? = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url(url)
+                .header("User-Agent", "Mozilla/5.0")
+                .build()
+            streamHttp.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                val text = r.body?.string().orEmpty()
+                if (text.isBlank()) return@use null
+                json.parseToJsonElement(text).jsonObject
+            }
+        }.getOrNull()
     }
 
     private fun extractTrailer(videos: JsonElement?): String {

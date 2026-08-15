@@ -1,22 +1,32 @@
 package com.stalkerapp.data
 
 import android.util.Base64
+import android.util.Xml
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.xmlpull.v1.XmlPullParser
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
 
 fun JsonElement?.asJsonPrimitiveOrNull(): JsonPrimitive? = this as? JsonPrimitive
 
@@ -60,6 +70,16 @@ class PortalRepository(
     private val vodTotals = mutableMapOf<String, Int>()
     private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
     private val epgCache = mutableMapOf<Long, List<EpgProgram>>()
+    // Harici (XMLTV) EPG: xmltv_id -> programlar. 6 saatte bir yeniden indirilir.
+    private val externalEpgMutex = Mutex()
+    private var externalEpg: Map<String, List<EpgProgram>> = emptyMap()
+    private var externalEpgUrl = ""
+    private var externalEpgAt = 0L
+    private val externalHttp = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .build()
     // Which query parameter filters VOD lists by category on this portal
     // ("category" by default; some portals use "genre" or need the category
     // number). Discovered by [probeVodCategoryParam].
@@ -292,7 +312,8 @@ class PortalRepository(
         return result
     }
 
-    suspend fun loadEpg(profile: Profile, channelId: Long, channelName: String = ""): List<EpgProgram> {
+    suspend fun loadEpg(profile: Profile, channel: Channel): List<EpgProgram> {
+        val channelId = channel.id
         epgCache[channelId]?.let { return it }
         val zone = portalZone(profile)
         val now = System.currentTimeMillis() / 1000
@@ -333,15 +354,147 @@ class PortalRepository(
                     System.currentTimeMillis() / 1000 < stopTs
             )
         }
-        // Portal kendi EPG'sini döndürmüyorsa (bu panelde olduğu gibi) rehber
-        // boş kalmasın: gün boyu 2 saatlik bloklardan varsayılan bir program
-        // akışı üretilir — rehber ekranı ve oynatıcı "şimdi/sonra" her zaman
-        // içerik gösterir.
+        // Sıra: portalın kendi EPG'si → harici XMLTV (Ayarlar'da URL varsa) →
+        // varsayılan (kanalın adı). Böylece rehber hiçbir zaman boş kalmaz.
         if (programs.isEmpty()) {
-            programs = defaultEpg(profile, channelId, channelName)
+            programs = externalEpgFor(profile, channel)
+        }
+        if (programs.isEmpty()) {
+            programs = defaultEpg(profile, channel)
         }
         epgCache[channelId] = programs
         return programs
+    }
+
+    /**
+     * Ayarlardaki harici XMLTV URL'sinden kanalın programlarını döner.
+     * Kanal `xmltv_id` ile eşleştirilir. Dosya 6 saatte bir yeniden indirilir
+     * (ilk istekte). URL boşsa ya da kanal eşleşmezse boş döner.
+     */
+    private suspend fun externalEpgFor(profile: Profile, channel: Channel): List<EpgProgram> {
+        val url = store.settings().epgUrl.trim()
+        if (url.isBlank()) return emptyList()
+        val xmltvId = channel.xmltvId.ifBlank {
+            // Kanal önbellekte değilse (örn. ana sayfadan doğrudan oynatılan
+            // favori kanal) kanal listesinden bul.
+            channelsCache[profile.portal?.id]?.values?.asSequence()
+                ?.flatten()?.firstOrNull { it.id == channel.id }?.xmltvId.orEmpty()
+        }
+        if (xmltvId.isBlank()) return emptyList()
+        ensureExternalEpg(url)
+        return externalEpg[xmltvId].orEmpty()
+    }
+
+    /** Harici EPG'yi gerekirse (ilk kez / 6 saat geçti / URL değişti) indirip ayrıştırır. */
+    private suspend fun ensureExternalEpg(url: String) {
+        val stale = externalEpgUrl != url ||
+            System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
+            externalEpg.isEmpty()
+        if (!stale) return
+        externalEpgMutex.withLock {
+            val staleAgain = externalEpgUrl != url ||
+                System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
+                externalEpg.isEmpty()
+            if (!staleAgain) return@withLock
+            externalEpg = downloadAndParseXmltv(url)
+            externalEpgUrl = url
+            externalEpgAt = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * XMLTV dosyasını akış olarak indirip ayrıştırır (gzip destekli). Büyük
+     * dosyalarda tüm içerik belleğe alınmaz — XmlPullParser ile satır satır okunur.
+     */
+    private suspend fun downloadAndParseXmltv(url: String): Map<String, List<EpgProgram>> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val req = Request.Builder().url(url)
+                    .header("User-Agent", "StalkerPlayer/1.0")
+                    .build()
+                externalHttp.newCall(req).execute().use { r ->
+                    if (!r.isSuccessful) return@use emptyMap()
+                    val raw = r.body?.byteStream() ?: return@use emptyMap()
+                    val input = if (url.contains(".gz", ignoreCase = true)) {
+                        GZIPInputStream(raw)
+                    } else raw
+                    parseXmltv(input)
+                }
+            }.getOrDefault(emptyMap())
+        }
+    }
+
+    private fun parseXmltv(input: java.io.InputStream): Map<String, List<EpgProgram>> {
+        val parser = Xml.newPullParser()
+        parser.setInput(input, "UTF-8")
+        val out = mutableMapOf<String, MutableList<EpgProgram>>()
+        var chId = ""
+        var startRaw = ""
+        var stopRaw = ""
+        var title = StringBuilder()
+        var desc = StringBuilder()
+        var inTitle = false
+        var inDesc = false
+        val now = System.currentTimeMillis() / 1000
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> when (parser.name) {
+                    "programme" -> {
+                        chId = parser.getAttributeValue(null, "channel") ?: ""
+                        startRaw = parser.getAttributeValue(null, "start") ?: ""
+                        stopRaw = parser.getAttributeValue(null, "stop") ?: ""
+                        title = StringBuilder()
+                        desc = StringBuilder()
+                    }
+                    "title" -> inTitle = true
+                    "desc", "sub-title" -> inDesc = true
+                }
+                XmlPullParser.TEXT -> {
+                    if (inTitle) title.append(parser.text)
+                    if (inDesc) desc.append(parser.text)
+                }
+                XmlPullParser.END_TAG -> when (parser.name) {
+                    "title" -> inTitle = false
+                    "desc", "sub-title" -> inDesc = false
+                    "programme" -> {
+                        if (chId.isNotBlank() && startRaw.isNotBlank()) {
+                            val startTs = xmltvTimeToEpoch(startRaw)
+                            val stopTs = xmltvTimeToEpoch(stopRaw)
+                            if (startTs > 0) {
+                                val list = out.getOrPut(chId) { mutableListOf() }
+                                list += EpgProgram(
+                                    chId = 0,
+                                    name = title.toString().trim().ifBlank { "—" },
+                                    start = startRaw,
+                                    stop = stopRaw,
+                                    desc = desc.toString().trim(),
+                                    startTs = startTs,
+                                    stopTs = stopTs,
+                                    isCurrent = startTs <= now && now < stopTs
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        input.close()
+        return out.mapValues { (_, v) -> v.sortedBy { it.startTs } }
+    }
+
+    /** XMLTV zamanı ("20260815183000 +0200") -> epoch saniye. Zaman dilimi yoksa UTC varsayılır. */
+    private fun xmltvTimeToEpoch(raw: String): Long {
+        val t = raw.trim()
+        if (t.length < 14) return 0
+        val zonePart = t.substring(14).trim().ifBlank { "+0000" }
+        return runCatching {
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss Z")
+                .parse(t.take(14) + " " + zonePart)
+                .let { java.time.ZonedDateTime.from(it) }
+                .toEpochSecond()
+        }.getOrDefault(0)
     }
 
     /**
@@ -350,19 +503,19 @@ class PortalRepository(
      * adı tek program olarak gösterilir — rehber boş kalmaz ama yalan bir
      * program listesi de sunulmaz (şu an oynayan = kanalın yayını).
      */
-    private fun defaultEpg(profile: Profile, channelId: Long, channelName: String = ""): List<EpgProgram> {
+    private fun defaultEpg(profile: Profile, channel: Channel): List<EpgProgram> {
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis() / 1000
         val todayStart = runCatching {
             java.time.LocalDate.now(zone).atStartOfDay(zone).toEpochSecond()
         }.getOrDefault(now - (now % 86400))
-        val name = channelName.ifBlank {
+        val name = channel.name.ifBlank {
             channelsCache[profile.portal?.id]?.values?.asSequence()
-                ?.flatten()?.firstOrNull { it.id == channelId }?.name.orEmpty()
+                ?.flatten()?.firstOrNull { it.id == channel.id }?.name.orEmpty()
         }.ifBlank { "Yayın" }
         return listOf(
             EpgProgram(
-                chId = channelId,
+                chId = channel.id,
                 name = name,
                 start = "",
                 stop = "",
@@ -787,16 +940,19 @@ class PortalRepository(
         vodTotal = 0
     }
 
-    /** Clears the EPG cache so programs are re-fetched from the portal on next view. */
+    /** Clears the EPG cache so programs are re-fetched (portal + harici XMLTV) on next view. */
     fun clearEpgCache() {
         epgCache.clear()
+        externalEpg = emptyMap()
+        externalEpgUrl = ""
+        externalEpgAt = 0L
     }
 
-    /** Force refresh EPG for the given channel ids (clears and re-fetches in background). */
-    suspend fun refreshEpg(profile: Profile, channelIds: List<Long>) {
+    /** Force refresh EPG for the given channels (clears and re-fetches in background). */
+    suspend fun refreshEpg(profile: Profile, channels: List<Channel>) {
         epgCache.clear()
-        channelIds.take(40).forEach { id ->
-            runCatching { loadEpg(profile, id) }
+        channels.take(40).forEach { ch ->
+            runCatching { loadEpg(profile, ch) }
         }
     }
 
@@ -1261,7 +1417,8 @@ class PortalRepository(
                 tvGenreId = o["tv_genre_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
                 tvGenreTitle = o["tv_genre_title"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 isTvArchive = o["is_tv_archive"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
-                archiveDuration = o["tv_archive_duration"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0
+                archiveDuration = o["tv_archive_duration"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0,
+                xmltvId = o["xmltv_id"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             )
         }.filter { it.id > 0 }
     }
