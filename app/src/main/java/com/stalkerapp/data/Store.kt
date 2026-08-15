@@ -135,6 +135,79 @@ class Store(private val context: Context) {
         prefs.edit().putString(KEY_SETTINGS, json.encodeToString(Settings.serializer(), settings)).apply()
     }
 
+    // ---------- Kullanıcı profili ----------
+
+    fun userProfile(): UserProfile = runCatching {
+        json.decodeFromString(UserProfile.serializer(), prefs.getString(KEY_USER_PROFILE, "").orEmpty())
+    }.getOrDefault(UserProfile())
+
+    fun saveUserProfile(profile: UserProfile) {
+        prefs.edit().putString(KEY_USER_PROFILE, json.encodeToString(UserProfile.serializer(), profile)).apply()
+    }
+
+    // ---------- Sonra izle (Kütüphanem) ----------
+
+    fun watchLater(): List<VodItem> = runCatching {
+        json.decodeFromString(ListSerializer(VodItem.serializer()), prefs.getString(KEY_WATCH_LATER, "[]").orEmpty())
+    }.getOrDefault(emptyList())
+
+    fun isWatchLater(id: Long): Boolean = watchLater().any { it.id == id }
+
+    fun toggleWatchLater(vod: VodItem): Boolean {
+        val list = watchLater().toMutableList()
+        val idx = list.indexOfFirst { it.id == vod.id }
+        val added = if (idx >= 0) {
+            list.removeAt(idx); false
+        } else {
+            list.add(0, vod); true
+        }
+        prefs.edit().putString(KEY_WATCH_LATER, json.encodeToString(ListSerializer(VodItem.serializer()), list)).apply()
+        return added
+    }
+
+    // ---------- Özel listeler (Kütüphanem) ----------
+
+    fun userLists(): List<UserList> = runCatching {
+        json.decodeFromString(ListSerializer(UserList.serializer()), prefs.getString(KEY_USER_LISTS, "[]").orEmpty())
+    }.getOrDefault(emptyList())
+
+    fun saveUserLists(list: List<UserList>) {
+        prefs.edit().putString(KEY_USER_LISTS, json.encodeToString(ListSerializer(UserList.serializer()), list)).apply()
+    }
+
+    fun addUserList(name: String): UserList {
+        val list = userLists().toMutableList()
+        val newList = UserList(
+            id = "ul_" + System.currentTimeMillis().toString() + name.hashCode().toString().takeLast(4),
+            name = name
+        )
+        list.add(newList)
+        saveUserLists(list)
+        return newList
+    }
+
+    fun deleteUserList(id: String) {
+        saveUserLists(userLists().filterNot { it.id == id })
+    }
+
+    fun toggleInUserList(listId: String, vod: VodItem): Boolean {
+        val lists = userLists().toMutableList()
+        val idx = lists.indexOfFirst { it.id == listId }
+        if (idx < 0) return false
+        val items = lists[idx].itemIds.toMutableList()
+        val added = if (vod.id in items) {
+            items.remove(vod.id); false
+        } else {
+            items.add(vod.id); true
+        }
+        lists[idx] = lists[idx].copy(itemIds = items)
+        saveUserLists(lists)
+        return added
+    }
+
+    fun isInUserList(listId: String, itemId: Long): Boolean =
+        userLists().firstOrNull { it.id == listId }?.itemIds?.contains(itemId) == true
+
     private fun favoritesKey(): String = prefs.getString(KEY_FAVORITES, "[]").orEmpty()
 
     fun favorites(): Set<String> = runCatching {
@@ -378,7 +451,7 @@ class Store(private val context: Context) {
 
     fun saveEpisodeProgress(key: String, positionMs: Long, durationMs: Long) {
         val map = episodeProgress().toMutableMap()
-        map[key] = VodProgress(positionMs, durationMs)
+        map[key] = VodProgress(positionMs, durationMs, System.currentTimeMillis())
         prefs.edit().putString(
             KEY_EPISODE_PROGRESS,
             json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
@@ -397,7 +470,7 @@ class Store(private val context: Context) {
 
     fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
         val map = loadVodProgress().toMutableMap()
-        map[id] = VodProgress(positionMs, durationMs)
+        map[id] = VodProgress(positionMs, durationMs, System.currentTimeMillis())
         prefs.edit().putString(
             KEY_VOD_PROGRESS,
             json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), map)
@@ -443,6 +516,9 @@ class Store(private val context: Context) {
         private const val KEY_XTREAM_SOURCES = "xtream_sources"
         private const val KEY_ACTIVE_SOURCE_KIND = "active_source_kind"
         private const val KEY_ACTIVE_SOURCE_ID = "active_source_id"
+        private const val KEY_USER_PROFILE = "user_profile"
+        private const val KEY_WATCH_LATER = "watch_later"
+        private const val KEY_USER_LISTS = "user_lists"
     }
 }
 
@@ -455,4 +531,4 @@ data class CatalogMetaFile(
 )
 
 @kotlinx.serialization.Serializable
-data class VodProgress(val positionMs: Long, val durationMs: Long)
+data class VodProgress(val positionMs: Long, val durationMs: Long, val lastUpdated: Long = 0)

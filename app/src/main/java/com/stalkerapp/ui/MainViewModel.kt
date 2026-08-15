@@ -18,6 +18,8 @@ import com.stalkerapp.data.PortalStatus
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Settings
 import com.stalkerapp.data.Store
+import com.stalkerapp.data.UserList
+import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
@@ -79,20 +81,80 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         }
     }
 
+    // ---------- Kullanıcı profili ----------
+
+    private val _userProfile = MutableStateFlow(store.userProfile())
+    val userProfile: StateFlow<UserProfile> = _userProfile
+
+    fun saveUserProfile(profile: UserProfile) {
+        store.saveUserProfile(profile)
+        _userProfile.value = profile
+    }
+
+    // ---------- Sonra izle / özel listeler (Kütüphanem) ----------
+
+    private val _watchLater = MutableStateFlow(store.watchLater())
+    val watchLater: StateFlow<List<VodItem>> = _watchLater
+
+    private val _userLists = MutableStateFlow(store.userLists())
+    val userLists: StateFlow<List<UserList>> = _userLists
+
+    fun toggleWatchLater(vod: VodItem): Boolean {
+        val added = store.toggleWatchLater(vod)
+        _watchLater.value = store.watchLater()
+        return added
+    }
+
+    fun addUserList(name: String) {
+        store.addUserList(name)
+        _userLists.value = store.userLists()
+    }
+
+    fun deleteUserList(id: String) {
+        store.deleteUserList(id)
+        _userLists.value = store.userLists()
+    }
+
+    fun toggleInUserList(listId: String, vod: VodItem) {
+        store.toggleInUserList(listId, vod)
+        _userLists.value = store.userLists()
+    }
+
     // ---------- M3U / Xtream kaynakları ----------
     // Oturum içinde bir kez yüklenip önbellekte tutulur (sekmeler arası geçişte
     // tekrar indirme olmaz).
     private val m3uCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
     private val xtreamCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
 
+    // Kaynak listeleri/anahtarları değişince ayarlar ekranının yeniden okuması
+    // için sürüm sayaçı (kompozisyon içinde doğrudan prefs okumak donmalara yol
+    // açıyordu; ekranlar bu sürümü dinleyip `remember` içinde taze okur).
+    private val _sourcesVersion = MutableStateFlow(0)
+    val sourcesVersion: StateFlow<Int> = _sourcesVersion
+
     fun m3uSources(): List<M3uSource> = store.m3uSources()
     fun xtreamSources(): List<XtreamSource> = store.xtreamSources()
+    fun portals(): List<Portal> = store.portals()
+    fun activePortalId(): String? = store.activePortalId()
 
     fun activeSourceKind(): String = store.activeSourceKind()
     fun activeSourceId(): String? = store.activeSourceId()
 
+    /** Verilen kaynak türü Ayarlar'daki anahtarıyla kapalıysa null döner. */
+    fun enabledSourceKind(): String? {
+        val s = store.settings()
+        return when {
+            activeSourceKind() == "m3u" && s.m3uEnabled -> "m3u"
+            activeSourceKind() == "xtream" && s.xtreamEnabled -> "xtream"
+            activeSourceKind() == "stalker" && s.stalkerEnabled -> "stalker"
+            activeSourceKind() != "stalker" && s.stalkerEnabled -> "stalker"
+            else -> null
+        }
+    }
+
     fun setActiveSource(kind: String, id: String?) {
         store.setActiveSource(kind, id)
+        _sourcesVersion.value++
         if (kind != "stalker") _homeChannels.value = null
     }
 
@@ -102,6 +164,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (idx >= 0) list[idx] = source else list.add(source)
         store.saveM3uSources(list)
         m3uCache.remove(source.id)
+        _sourcesVersion.value++
     }
 
     fun deleteM3uSource(id: String) {
@@ -110,6 +173,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (store.activeSourceKind() == "m3u" && store.activeSourceId() == id) {
             store.setActiveSource("stalker", null)
         }
+        _sourcesVersion.value++
     }
 
     fun saveXtreamSource(source: XtreamSource) {
@@ -118,6 +182,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (idx >= 0) list[idx] = source else list.add(source)
         store.saveXtreamSources(list)
         xtreamCache.remove(source.id)
+        _sourcesVersion.value++
     }
 
     fun deleteXtreamSource(id: String) {
@@ -126,6 +191,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (store.activeSourceKind() == "xtream" && store.activeSourceId() == id) {
             store.setActiveSource("stalker", null)
         }
+        _sourcesVersion.value++
     }
 
     /** M3U kaynağının kanallarını yükler (gerekirse indirir + çözer). */
@@ -162,7 +228,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     /** Aktif kaynağın kanallarını yükler (Stalker profil veya m3u/xtream). */
     suspend fun loadChannelsForActiveSource(profile: Profile?): Pair<List<Genre>, List<Channel>>? {
-        val kind = store.activeSourceKind()
+        val kind = enabledSourceKind() ?: return null
         val id = store.activeSourceId()
         return when (kind) {
             "m3u" -> store.m3uSources().firstOrNull { it.id == id }?.let { loadM3uChannels(it) }

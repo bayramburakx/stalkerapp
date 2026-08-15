@@ -347,7 +347,7 @@ fun PlayerScreen(navController: NavHostController) {
                 detectTapGestures(
                     onTap = { if (!locked) overlayVisible = !overlayVisible },
                     onDoubleTap = { offset ->
-                        if (!locked && !isLive) {
+                        if (!locked && !isLive && settings.gesturesEnabled) {
                             when {
                                 offset.x < size.width / 3 -> PlaybackManager.seekBack(10_000L)
                                 offset.x > size.width * 2 / 3 -> PlaybackManager.seekForward(10_000L)
@@ -357,7 +357,8 @@ fun PlayerScreen(navController: NavHostController) {
                     }
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(settings.gesturesEnabled) {
+                if (!settings.gesturesEnabled) return@pointerInput
                 detectDragGestures(
                     onDragStart = {
                         gestureMode = null

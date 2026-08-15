@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,7 +58,10 @@ fun VodQuickActionsSheet(
     onDismiss: () -> Unit
 ) {
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
+    val watchLater by vm.watchLater.collectAsStateWithLifecycle()
     val isFav = remember(favVods, item) { favVods.any { it.id == item.id } }
+    val isWatchLater = remember(watchLater, item) { watchLater.any { it.id == item.id } }
+    var showLists by remember { mutableStateOf(false) }
     val progress = vm.store.loadVodProgress()[item.id]
     val watchedByProgress = progress != null && progress.durationMs > 0 &&
         progress.positionMs >= progress.durationMs * 0.95
@@ -112,12 +117,57 @@ fun VodQuickActionsSheet(
                 onDismiss()
             }
             QuickActionRow(
+                icon = Icons.Default.Schedule,
+                tint = MaterialTheme.colorScheme.onSurface,
+                label = if (isWatchLater) "Sonra İzle'den Çıkar" else "Sonra İzle'ye Ekle"
+            ) {
+                vm.toggleWatchLater(item)
+                onDismiss()
+            }
+            QuickActionRow(
                 icon = Icons.Default.CheckCircle,
                 tint = if (watched) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface,
                 label = if (watched) "İzlenmedi İşaretle" else "İzlendi İşaretle"
             ) {
                 watched = vm.toggleWatched(item.id)
                 onDismiss()
+            }
+            QuickActionRow(
+                icon = Icons.Default.List,
+                tint = MaterialTheme.colorScheme.onSurface,
+                label = if (showLists) "Listeleri Gizle" else "Listeye Ekle"
+            ) {
+                showLists = !showLists
+            }
+            if (showLists) {
+                val userLists = vm.userLists.value
+                if (userLists.isEmpty()) {
+                    Text(
+                        "Henüz liste yok. Ayarlar → Kütüphanem bölümünden liste oluşturabilirsin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp)
+                    )
+                } else {
+                    userLists.forEach { l ->
+                        val inList = l.itemIds.contains(item.id)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    vm.toggleInUserList(l.id, item)
+                                }
+                                .padding(horizontal = 36.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "${if (inList) "☑ " else "☐ "}${l.name}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
             }
             QuickActionRow(
                 icon = Icons.Default.Info,

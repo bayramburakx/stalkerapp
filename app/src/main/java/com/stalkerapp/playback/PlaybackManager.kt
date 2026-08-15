@@ -191,16 +191,40 @@ object PlaybackManager {
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
 
+        val st = store.settings()
+        val renderers = DefaultRenderersFactory(appContext)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+            // "hardware" sıkı modda HW başarısızsa yazılıma düşmez; auto/yazılımda
+            // HW çökmesini önlemek için yazılım çözücüye geri düşülür (beyaz/kara ekran).
+            .setEnableDecoderFallback(st.decoder != "hardware")
+
         return ExoPlayer.Builder(appContext)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
-            .setRenderersFactory(
-                DefaultRenderersFactory(appContext)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-            )
+            .setRenderersFactory(renderers)
             .build()
             .apply {
                 playWhenReady = true
+                // Varsayılan kalite (Ayarlar → Oynatıcı): çözünürlük üst sınırı olarak uygulanır.
+                val maxRes = when (st.defaultQuality) {
+                    "1080p" -> 1920 to 1080
+                    "720p" -> 1280 to 720
+                    "480p" -> 854 to 480
+                    else -> null
+                }
+                if (maxRes != null) {
+                    trackSelectionParameters = trackSelectionParameters
+                        .buildUpon()
+                        .setMaxVideoSize(maxRes.first, maxRes.second)
+                        .build()
+                }
+                // Altyazılar ayardan kapalıysa metin parçaları baştan devre dışı.
+                if (!st.subtitlesEnabled) {
+                    trackSelectionParameters = trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                        .build()
+                }
             }
     }
 
@@ -462,6 +486,8 @@ object PlaybackManager {
 
     fun enterPip(activity: Activity?) {
         if (activity == null) return
+        // PiP ayardan kapatılmışsa devreye girmez (Ayarlar → Oynatıcı).
+        if (!store.settings().pipEnabled) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity.isInPictureInPictureMode.not()) {
             runCatching {
                 activity.enterPictureInPictureMode(

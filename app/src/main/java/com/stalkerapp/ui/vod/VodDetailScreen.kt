@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Button
@@ -256,6 +257,7 @@ fun VodDetailScreen(
     val heroHeight = with(LocalConfiguration.current) { screenHeightDp.dp / 2f }
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val isFavorite = remember(favVods, it) { favVods.any { f -> f.id == it.id } }
+    val watchLater by vm.watchLater.collectAsStateWithLifecycle()
     val yearText = it.year.take(4).takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
     val genre = it.genres.trim().ifBlank {
         catalog.categories.firstOrNull { c -> c.id == it.categoryId }?.title.orEmpty()
@@ -512,6 +514,23 @@ fun VodDetailScreen(
                                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = "Favori",
                                     tint = if (isFavorite) Color(0xFFFF5252) else Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            // Sonra İzle: Oynat'ın sağında, yuvarlak içinde saat simgesi.
+                            val inWatchLater = remember(watchLater, it) { watchLater.any { w -> w.id == it.id } }
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.20f))
+                                    .clickable { vm.toggleWatchLater(it) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (inWatchLater) Icons.Default.Schedule else Icons.Default.Schedule,
+                                    contentDescription = "Sonra İzle",
+                                    tint = if (inWatchLater) Color(0xFF64B5F6) else Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }

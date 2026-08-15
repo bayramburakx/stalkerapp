@@ -23,11 +23,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -43,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,16 +64,22 @@ fun VodScreen(
     modifier: Modifier = Modifier,
     filterIsSeries: Boolean? = null
 ) {
-    if (profile == null) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Portal bağlı değil")
-        }
-        return
-    }
-
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+
+    if (profile == null) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal ekleyebilirsin.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(24.dp)
+            )
+        }
+        return
+    }
 
     var selectedCategory by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
@@ -96,9 +101,20 @@ fun VodScreen(
         vm.syncVodIfNeeded(profile)
     }
 
-    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries) {
+    // +18 ve kullanıcının gizlediği kategoriler listelerden filtrelenir.
+    val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
+    val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
+    fun keepItem(item: VodItem): Boolean {
+        val title = catTitles[item.categoryId]
+        val hidden = settings.hiddenCategories.contains(title.orEmpty())
+        val adult = title != null && adultRegex.containsMatchIn(title)
+        return !hidden && (settings.adultContentEnabled || !adult)
+    }
+
+    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, settings.adultContentEnabled, settings.hiddenCategories) {
         val q = query.trim()
         catalog.allItems
+            .filter { keepItem(it) }
             .let { list ->
                 when (filterIsSeries) {
                     true -> list.filter { catalog.isSeriesItem(it) }
@@ -120,11 +136,13 @@ fun VodScreen(
     val seriesCatIds = remember(catalog) {
         catalog.allItems.filter { catalog.isSeriesItem(it) }.map { it.categoryId }.toSet()
     }
+    val hiddenTitles = remember(settings.hiddenCategories) { settings.hiddenCategories.toSet() }
     val shownCats = when (filterIsSeries) {
         true -> catList.filter { it.id in seriesCatIds }
         false -> catList.filter { it.id !in seriesCatIds }
         else -> catList
-    }
+    }.filter { it.title !in hiddenTitles }
+        .filter { settings.adultContentEnabled || !Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE).containsMatchIn(it.title) }
 
     Column(modifier = modifier.fillMaxSize()) {
         if (catalog.status == VodCatalogStatus.Error) {
@@ -150,17 +168,6 @@ fun VodScreen(
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(
-                onClick = { vm.syncVodCatalog(profile, force = true) },
-                enabled = catalog.status != VodCatalogStatus.Syncing
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Kataloğu yenile",
-                    tint = if (catalog.status == VodCatalogStatus.Syncing) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    else MaterialTheme.colorScheme.primary
-                )
-            }
         }
 
         if (shownCats.isNotEmpty()) {

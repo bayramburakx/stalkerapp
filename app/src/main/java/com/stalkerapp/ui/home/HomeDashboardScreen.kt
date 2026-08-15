@@ -81,18 +81,36 @@ fun HomeDashboardScreen(
     onGotoTab: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (profile == null) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Portal bağlı değil")
-        }
-        return
-    }
-
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
+
+    // Henüz hiçbir kaynak eklenmemişse ana sayfa yerine yönlendirme gösterilir.
+    val sourceKind = vm.enabledSourceKind()
+    if (profile == null && sourceKind == null) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                Text(
+                    "Henüz bir kaynak eklemedin",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi " +
+                        "veya Xtream Codes ekleyerek izlemeye başlayabilirsin.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        return
+    }
 
     // Kanallar ViewModel'de önbelleklenir: sekmeler arası geçişte ağ isteği
     // tekrarlanmaz, bu da menü geçişlerindeki takılmayı azaltır.
@@ -100,10 +118,12 @@ fun HomeDashboardScreen(
     var loadingChannels by remember { mutableStateOf(homeChannels == null) }
 
     LaunchedEffect(Unit) {
-        vm.syncVodIfNeeded(profile)
-        if (homeChannels == null) {
-            loadingChannels = true
-            vm.loadHomeChannels(profile)
+        profile?.let {
+            vm.syncVodIfNeeded(it)
+            if (homeChannels == null) {
+                loadingChannels = true
+                vm.loadHomeChannels(it)
+            }
         }
         loadingChannels = false
     }
@@ -129,9 +149,39 @@ fun HomeDashboardScreen(
             (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
     }
 
-    val movies = remember(catalog) { catalog.allItems.filter { !catalog.isSeriesItem(it) }.take(20) }
-    val series = remember(catalog) { catalog.allItems.filter { catalog.isSeriesItem(it) }.take(20) }
-    val featured = remember(catalog) { (series.take(6) + movies.take(6)).shuffled() }
+    // Kullanıcının gizlediği kategoriler + +18 filtresi (Kütüphane & İçerik ayarları).
+    val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
+    val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
+    fun keepItem(item: VodItem): Boolean {
+        val title = catTitles[item.categoryId]
+        val hidden = settings.hiddenCategories.contains(title.orEmpty())
+        val adult = title != null && adultRegex.containsMatchIn(title)
+        return !hidden && (settings.adultContentEnabled || !adult)
+    }
+
+    val movies = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
+        catalog.allItems.filter { !catalog.isSeriesItem(it) && keepItem(it) }.take(20)
+    }
+    val series = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
+        catalog.allItems.filter { catalog.isSeriesItem(it) && keepItem(it) }.take(20)
+    }
+    val featured = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
+        (series.take(6) + movies.take(6)).shuffled()
+    }
+
+    // Ana sayfa düzeni: poster genişliği (Ayarlar → Kütüphane & İçerik → Ana Sayfa Düzeni).
+    val posterWidth = when (settings.homeLayout) {
+        "compact" -> 104
+        "list" -> 168
+        else -> 130
+    }
+
+    // Bölüm sırası (Ayarlar'dan değiştirilebilir).
+    val sectionOrder = remember(settings.homeSectionOrder) {
+        val known = listOf("continue", "movies", "series", "favchannels", "live", "favvods")
+        val custom = settings.homeSectionOrder.filter { it in known }
+        custom + known.filter { it !in custom }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -141,13 +191,10 @@ fun HomeDashboardScreen(
             .verticalScroll(scrollState)
     ) {
         if (featured.isNotEmpty()) {
-            val catTitle = remember(catalog) {
-                catalog.categories.associate { it.id to it.title }
-            }
             HeroBanner(
                 items = featured,
-                baseUrl = profile.baseUrl,
-                catTitle = { id -> catTitle[id].orEmpty() },
+                baseUrl = profile?.baseUrl.orEmpty(),
+                catTitle = { id -> catTitles[id].orEmpty() },
                 onOpenVod = onOpenVod,
                 scrollState = scrollState
             )
@@ -155,136 +202,135 @@ fun HomeDashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        if (continueWatching.isNotEmpty()) {
-            Section(title = "İzlemeye Devam", onSeeAll = null) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(continueWatching, key = { it.first.id }) { (item, prog) ->
-                        ContinueWatchingCard(
-                            item = item,
-                            baseUrl = profile.baseUrl,
-                            positionMs = prog.positionMs,
-                            durationMs = prog.durationMs,
-                            onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
-                        )
-                    }
-                }
-            }
-        }
-
-        Section(title = "Popüler Filmler", onSeeAll = { onGotoTab(2) }) {
-            if (movies.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
-                EmptyState("Film bulunamadı")
-            } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(movies, key = { it.id }) { item ->
-                        VodPoster(
-                            item = item,
-                            baseUrl = profile.baseUrl,
-                            isSeries = false,
-                            posterWidth = 130,
-                            watched = isWatched(item),
-                            onLongPress = { quickActionItem = item },
-                            onClick = { onOpenVod(item.id, false) }
-                        )
-                    }
-                }
-            }
-        }
-
-        Section(title = "Popüler Diziler", onSeeAll = { onGotoTab(3) }) {
-            if (series.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
-                EmptyState("Dizi bulunamadı")
-            } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(series, key = { it.id }) { item ->
-                        VodPoster(
-                            item = item,
-                            baseUrl = profile.baseUrl,
-                            isSeries = true,
-                            posterWidth = 130,
-                            watched = isWatched(item),
-                            onLongPress = { quickActionItem = item },
-                            onClick = { onOpenVod(item.id, true) }
-                        )
-                    }
-                }
-            }
-        }
-
-        Section(title = "Favori Kanallar", onSeeAll = { onGotoTab(1) }) {
-            if (favChannels.isEmpty()) {
-                Text("Henüz favori kanal yok", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(favChannels.take(20), key = { it.id }) { ch ->
-                        ChannelCard(
-                            channel = ch,
-                            baseUrl = profile.baseUrl,
-                            onClick = {
-                                runCatching {
-                                    PlaybackManager.playChannel(listOf(ch), 0, profile)
-                                    onOpenPlayer()
-                                }
+        sectionOrder.forEach { key ->
+            when (key) {
+                "continue" -> if (continueWatching.isNotEmpty()) {
+                    Section(title = "İzlemeye Devam", onSeeAll = null) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(continueWatching, key = { it.first.id }) { (item, prog) ->
+                                ContinueWatchingCard(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    positionMs = prog.positionMs,
+                                    durationMs = prog.durationMs,
+                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                )
                             }
-                        )
+                        }
                     }
                 }
-            }
-        }
-
-        Section(title = "Canlı TV", onSeeAll = { onGotoTab(1) }) {
-            when {
-                loadingChannels -> LoadingBox()
-                homeChannels.isNullOrEmpty() -> EmptyState("Kanal bulunamadı")
-                else -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(homeChannels.orEmpty(), key = { it.id }) { ch ->
-                        ChannelCard(
-                            channel = ch,
-                            baseUrl = profile.baseUrl,
-                            onClick = {
-                                runCatching {
-                                    PlaybackManager.playChannel(listOf(ch), 0, profile)
-                                    onOpenPlayer()
-                                }
+                "movies" -> Section(title = "Popüler Filmler", onSeeAll = { onGotoTab(2) }) {
+                    if (movies.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
+                        EmptyState("Film bulunamadı")
+                    } else {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(movies, key = { it.id }) { item ->
+                                VodPoster(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = false,
+                                    posterWidth = posterWidth,
+                                    watched = isWatched(item),
+                                    onLongPress = { quickActionItem = item },
+                                    onClick = { onOpenVod(item.id, false) }
+                                )
                             }
-                        )
+                        }
                     }
                 }
-            }
-        }
-
-        if (favVods.isNotEmpty()) {
-            Section(title = "Favori Filmler & Diziler", onSeeAll = { onGotoTab(4) }) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(favVods.take(20), key = { it.id }) { item ->
-                        VodPoster(
-                            item = item,
-                            baseUrl = profile.baseUrl,
-                            isSeries = catalog.isSeriesItem(item),
-                            posterWidth = 130,
-                            watched = isWatched(item),
-                            onLongPress = { quickActionItem = item },
-                            onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
-                        )
+                "series" -> Section(title = "Popüler Diziler", onSeeAll = { onGotoTab(3) }) {
+                    if (series.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
+                        EmptyState("Dizi bulunamadı")
+                    } else {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(series, key = { it.id }) { item ->
+                                VodPoster(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = true,
+                                    posterWidth = posterWidth,
+                                    watched = isWatched(item),
+                                    onLongPress = { quickActionItem = item },
+                                    onClick = { onOpenVod(item.id, true) }
+                                )
+                            }
+                        }
+                    }
+                }
+                "favchannels" -> Section(title = "Favori Kanallar", onSeeAll = { onGotoTab(1) }) {
+                    if (favChannels.isEmpty()) {
+                        Text("Henüz favori kanal yok", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(favChannels.take(20), key = { it.id }) { ch ->
+                                ChannelCard(
+                                    channel = ch,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    onClick = {
+                                        runCatching {
+                                            PlaybackManager.playChannel(listOf(ch), 0, profile)
+                                            onOpenPlayer()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                "live" -> Section(title = "Canlı TV", onSeeAll = { onGotoTab(1) }) {
+                    when {
+                        loadingChannels -> LoadingBox()
+                        homeChannels.isNullOrEmpty() -> EmptyState("Kanal bulunamadı")
+                        else -> LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(homeChannels.orEmpty(), key = { it.id }) { ch ->
+                                ChannelCard(
+                                    channel = ch,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    onClick = {
+                                        runCatching {
+                                            PlaybackManager.playChannel(listOf(ch), 0, profile)
+                                            onOpenPlayer()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                "favvods" -> if (favVods.isNotEmpty()) {
+                    Section(title = "Favori Filmler & Diziler", onSeeAll = { onGotoTab(4) }) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(favVods.take(20), key = { it.id }) { item ->
+                                VodPoster(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = catalog.isSeriesItem(item),
+                                    posterWidth = posterWidth,
+                                    watched = isWatched(item),
+                                    onLongPress = { quickActionItem = item },
+                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                )
+                            }
+                        }
                     }
                 }
             }

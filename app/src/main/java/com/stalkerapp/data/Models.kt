@@ -14,6 +14,21 @@ data class Portal(
 )
 
 @Serializable
+data class UserProfile(
+    val name: String = "",
+    /** Profil avatarı olarak gösterilen emoji (ör. "😀"). */
+    val avatar: String = "😀"
+)
+
+/** Kullanıcının oluşturduğu özel liste (Kütüphanem). */
+@Serializable
+data class UserList(
+    val id: String = "",
+    val name: String = "",
+    val itemIds: List<Long> = emptyList()
+)
+
+@Serializable
 data class Settings(
     val timezoneOffset: Int = 0,
     val requestIntervalMs: Long = 100,
@@ -28,7 +43,37 @@ data class Settings(
      * (kanallar `xmltv_id` ile eşleştirilir). Ör: sağlayıcının EPG linki ya da
      * kendi barındırdığın bir XMLTV dosyası (ör. iptv-org/epg çıktısı).
      */
-    val epgUrl: String = ""
+    val epgUrl: String = "",
+
+    // ---------- Kaynak anahtarları (Playlist & Kaynaklar) ----------
+    /** Stalker portal kaynağı etkin mi? */
+    val stalkerEnabled: Boolean = true,
+    /** M3U kaynakları etkin mi? */
+    val m3uEnabled: Boolean = true,
+    /** Xtream kaynakları etkin mi? */
+    val xtreamEnabled: Boolean = true,
+
+    // ---------- İçerik (Kütüphane & İçerik) ----------
+    /** +18 içerikler gösterilsin mi? */
+    val adultContentEnabled: Boolean = false,
+    /** Kullanıcının gizlediği kategori başlıkları (VOD listelerinde ve ana sayfada filtrelenir). */
+    val hiddenCategories: List<String> = emptyList(),
+    /** Ana sayfa düzeni: "rows" (varsayılan), "compact", "list". */
+    val homeLayout: String = "rows",
+    /** Ana sayfa bölüm sırası (HomeDashboardScreen bölüm adları). */
+    val homeSectionOrder: List<String> = emptyList(),
+
+    // ---------- Oynatıcı ----------
+    /** Varsayılan video kalitesi ("auto", "2160p", "1080p", "720p", "480p"). */
+    val defaultQuality: String = "auto",
+    /** Bildirim/oynatıcıda PiP (picture-in-picture) etkin mi? */
+    val pipEnabled: Boolean = true,
+    /** Oynatıcıda kaydırma jestleri (parlaklık/ses/ileri geri) etkin mi? */
+    val gesturesEnabled: Boolean = true,
+    /** Altyazılar gösterilsin mi? */
+    val subtitlesEnabled: Boolean = true,
+    /** Çözücü: "auto", "hardware", "software". */
+    val decoder: String = "auto"
 )
 
 @Serializable

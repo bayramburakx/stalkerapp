@@ -79,19 +79,14 @@ private fun NotificationPermission() {
 private fun AppNav() {
     val app = LocalContext.current.applicationContext as StalkerApp
     val navController = rememberNavController()
-    // Başlangıç ekranı: ilk açılışta onboarding; kayıtlı profil varsa doğrudan
-    // Ana Sayfa (otomatik giriş, login ekranı atlanır); yoksa login.
+    // Başlangıç ekranı: ilk açılışta profil oluşturma (onboarding); sonrasında
+    // doğrudan Ana Sayfa — kaynaklar Ayarlar → Playlist & Kaynaklar'dan eklenir.
     val startDestination = remember {
-        when {
-            !app.store.isOnboardingDone() -> "onboarding"
-            app.store.activePortal() != null &&
-                app.store.loadProfile(app.store.activePortalId().orEmpty()) != null -> "home"
-            else -> "login"
-        }
+        if (!app.store.isOnboardingDone()) "onboarding" else "home"
     }
     NavHost(navController = navController, startDestination = startDestination) {
         composable("onboarding") {
-            OnboardingScreen(onDone = { navController.navigate("login") { popUpTo("onboarding") { inclusive = true } } })
+            OnboardingScreen(onDone = { navController.navigate("home") { popUpTo("onboarding") { inclusive = true } } })
         }
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
         composable("home") {
