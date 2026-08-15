@@ -42,6 +42,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -116,6 +117,8 @@ fun VodDetailScreen(
     var playing by remember { mutableStateOf(false) }
     // İzlenme işaretleri anlık güncellenir (basınca Store'dan taze okunur).
     var watchedEps by remember { mutableStateOf(app.store.watchedEpisodes()) }
+    // Bölüm izleme ilerlemeleri (dizi detayında bölüm kartında progress bar için).
+    var episodeProg by remember { mutableStateOf(app.store.episodeProgress()) }
     // Tüm bölümleri izlenen sezonlar (sezon rozeti için).
     var fullyWatchedSeasons by remember { mutableStateOf<Set<Long>>(emptySet()) }
     // TMDB zenginleştirme (oyuncu fotoğrafları + fragman). Anahtar yoksa boş kalır.
@@ -291,6 +294,10 @@ fun VodDetailScreen(
         return allEps.firstOrNull { episodeKey(it, seasonNum) !in seen } ?: allEps.first()
     }
 
+    fun refreshEpisodeProgress() {
+        episodeProg = app.store.episodeProgress()
+    }
+
     /** Seçili sezonun tüm bölümleri izlendiyse sezon rozetini günceller. */
     fun refreshSeasonWatched(seasonId: Long) {
         val eps = episodes.orEmpty()
@@ -381,6 +388,7 @@ fun VodDetailScreen(
     // Oynatıcıdan dönünce (bölüm %85 izlendi / binge sonrası) rozetler tazelenir.
     LifecycleResumeEffect(Unit) {
         watchedEps = app.store.watchedEpisodes()
+        refreshEpisodeProgress()
         val sid = selectedSeason
         if (sid != null) refreshSeasonWatched(sid)
         onPauseOrDispose { }
@@ -863,6 +871,21 @@ fun VodDetailScreen(
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                                             )
+                                            // Bölüm yarıda bırakıldıysa progress bar (kartın altında).
+                                            val prog = episodeProg[episodeKey(ep, seasonNum)]
+                                            if (prog != null && prog.durationMs > 0 &&
+                                                prog.positionMs > 0 && prog.positionMs < prog.durationMs * 0.95
+                                            ) {
+                                                LinearProgressIndicator(
+                                                    progress = { (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f) },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(4.dp)
+                                                        .padding(horizontal = 10.dp)
+                                                        .padding(top = 2.dp),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                             Spacer(Modifier.height(6.dp))
                                         }
                                     }

@@ -314,6 +314,10 @@ class VodSyncManager(
     /**
      * Kataloğun yeni bir sürümünü yayınlar; `byId` ve `seriesCategoryIds`
      * önceden hesaplanır (eski `copy` çağrıları bunları bayat bırakırdı).
+     * Senkron SIRASINDA (Syncing) her kategori bitişinde 80k+ öğenin yeniden
+     * associateBy edilmesi ana iş parçacığını kilitler ve telefonu ısıtır —
+     * bu yüzden Syncing yayınlarında mevcut byId korunur; byId yalnızca
+     * Ready/İlk yayında bir kez kurulur.
      */
     private fun state(
         status: VodCatalogStatus = _progress.value.status,
@@ -324,14 +328,31 @@ class VodSyncManager(
         categories: List<Genre> = _progress.value.categories,
         portalTotal: Int = _progress.value.portalTotal,
         lastSync: Long = _progress.value.lastSync
-    ): VodCatalogState = VodCatalogState.of(
-        status = status,
-        doneCategories = doneCategories,
-        totalCategories = totalCategories,
-        loadedCount = loadedCount,
-        allItems = allItems,
-        categories = categories,
-        portalTotal = portalTotal,
-        lastSync = lastSync
-    )
+    ): VodCatalogState {
+        val prev = _progress.value
+        // Syncing yayınlarında byId/seriesCategoryIds yeniden hesaplanmaz;
+        // son hazır kataloğun haritası kullanılır (yarım liste için de faydalı).
+        if (status == VodCatalogStatus.Syncing && prev.byId.isNotEmpty()) {
+            return prev.copy(
+                status = status,
+                doneCategories = doneCategories,
+                totalCategories = totalCategories,
+                loadedCount = loadedCount,
+                allItems = allItems,
+                categories = categories,
+                portalTotal = portalTotal,
+                lastSync = lastSync
+            )
+        }
+        return VodCatalogState.of(
+            status = status,
+            doneCategories = doneCategories,
+            totalCategories = totalCategories,
+            loadedCount = loadedCount,
+            allItems = allItems,
+            categories = categories,
+            portalTotal = portalTotal,
+            lastSync = lastSync
+        )
+    }
 }

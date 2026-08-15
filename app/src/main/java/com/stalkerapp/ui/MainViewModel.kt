@@ -74,6 +74,16 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _watchedVersion.value++
     }
 
+    /** Medyanın izleme ilerlemesini siler (film progress + dizi bölüm progress). */
+    fun removeProgress(itemId: Long) {
+        store.clearVodProgress(itemId)
+        // Dizi ise bu dizinin tüm bölüm ilerlemelerini de temizle.
+        store.episodeProgress().keys.filter { it.startsWith("$itemId:") }.forEach { key ->
+            store.clearEpisodeProgress(key)
+        }
+        _watchedVersion.value++
+    }
+
     suspend fun loadHomeChannels(profile: Profile) {
         if (_homeChannels.value == null) {
             _homeChannels.value =

@@ -1,9 +1,11 @@
 package com.stalkerapp.ui.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -254,7 +256,8 @@ fun HomeDashboardScreen(
                                     baseUrl = profile?.baseUrl.orEmpty(),
                                     positionMs = prog.positionMs,
                                     durationMs = prog.durationMs,
-                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) },
+                                    onLongPress = { quickActionItem = item }
                                 )
                             }
                         }
@@ -592,17 +595,25 @@ private fun ChannelCard(channel: Channel, baseUrl: String, onClick: () -> Unit) 
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ContinueWatchingCard(
     item: VodItem,
     baseUrl: String,
     positionMs: Long,
     durationMs: Long,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
             .width(130.dp)
-            .clickable(onClick = onClick)
+            .then(
+                if (onLongPress != null) {
+                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress)
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            )
     ) {
         Box(
             modifier = Modifier

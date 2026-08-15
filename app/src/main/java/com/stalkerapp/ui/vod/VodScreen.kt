@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -85,6 +87,10 @@ fun VodScreen(
     var query by remember { mutableStateOf("") }
     // Uzun bas → hızlı işlemler sheet'i.
     var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
+    // Lazy yükleme: tüm katalog yerine başlangıçta sınırlı sayıda poster gösterilir;
+    // aşağı scroll ettikçe kalanı yüklenir (donma/kasma için — Samsung S25FE).
+    var visibleCount by remember { mutableStateOf(90) }
+    val pageStep = 120
     // İzlenme işaretleri anlık güncellenir: watchedVersion her değiştiğinde
     // Store'dan taze okunur (sheet'te izlendi işaretlenince rozet anında çıkar).
     val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
@@ -99,6 +105,11 @@ fun VodScreen(
 
     LaunchedEffect(profile) {
         vm.syncVodIfNeeded(profile)
+    }
+
+    // Kategori/arama değişince paging baştan başlar.
+    LaunchedEffect(selectedCategory, query, filterIsSeries) {
+        visibleCount = 90
     }
 
     // +18 ve kullanıcının gizlediği kategoriler listelerden filtrelenir.
@@ -226,6 +237,7 @@ fun VodScreen(
                 EmptyState("VOD içeriği bulunamadı")
             filtered.isEmpty() -> EmptyState("İçerik bulunamadı")
             else -> {
+                val pageItems = filtered.take(visibleCount)
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son
@@ -235,7 +247,7 @@ fun VodScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filtered, key = { it.id }) { item ->
+                    items(pageItems, key = { it.id }) { item ->
                         val isSeries = filterIsSeries == true || catalog.isSeriesItem(item)
                         VodPoster(
                             item = item,
@@ -245,6 +257,20 @@ fun VodScreen(
                             onLongPress = { quickActionItem = item },
                             onClick = { onOpenVod(item.id, isSeries) }
                         )
+                    }
+                    // Liste sonuna gelindiğinde bir sonraki sayfayı yükle.
+                    if (visibleCount < filtered.size) {
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            LaunchedEffect(Unit) { visibleCount += pageStep }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            }
+                        }
                     }
                 }
             }
