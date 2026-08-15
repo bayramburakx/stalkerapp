@@ -88,11 +88,9 @@ private fun AppNav() {
     NavHost(navController = navController, startDestination = startDestination) {
         composable("onboarding") {
             OnboardingScreen(onDone = {
-                if (app.store.activePortal() == null) {
-                    navController.navigate("login") { popUpTo("onboarding") { inclusive = true } }
-                } else {
-                    navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
-                }
+                // İlk açılışta kullanıcıyı doğrudan login'e zorlama; uygulama normal
+                // açılsın, portalı isterse Ayarlar → Playlist & Kaynaklar'dan ekler.
+                navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
             })
         }
         composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }

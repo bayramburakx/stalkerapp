@@ -277,18 +277,12 @@ class PortalRepository(
             val profileObj = profileResp.jsonObject
             val profileError = profileObj["error"]?.asJsonPrimitiveOrNull()?.contentOrNull
                 ?: profileObj["message"]?.asJsonPrimitiveOrNull()?.contentOrNull
-            // Geçerli bir profilde server_info (adres) ya da timezone gelir. Bunlar
-            // boşsa portal gerçekten bir cihaz profili döndürmemiş demektir.
-            val profileEmpty = profile.serverInfo.isEmpty() && profile.timezone.isBlank()
-            if (!profileError.isNullOrBlank() && profileEmpty) {
+            // Yalnızca sunucu açıkça hata döndürürse reddet. Bazı portallar
+            // server_info / timezone döndürmez ama oturum yine de geçerlidir;
+            // bu yüzden boş alanlar tek başına hata nedeni olmamalı.
+            if (!profileError.isNullOrBlank()) {
                 throw StalkerException(
                     "Portal MAC'i kabul etmedi: ${profileError}. Portalda bu MAC'in kayıtlı ve aktif olduğundan emin olun."
-                )
-            }
-
-            if (profileEmpty) {
-                throw StalkerException(
-                    "Profil alınamadı. Portal adresi doğru mu? Portal, bu MAC ile kayıtlı bir cihaz bekliyor olabilir."
                 )
             }
 
