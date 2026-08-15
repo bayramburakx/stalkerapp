@@ -150,28 +150,19 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
         val payload = root?.get("js") ?: root
 
         val errNode = (root as? JsonObject)?.get("error") ?: (payload as? JsonObject)?.get("error")
-        val errMsg = (errNode as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-        val hasError = errMsg != null
-        // Yalnızca gerçek rate-limit durumlarında (429/403/451) ya da engelleme
-        // anlamına gelen hata mesajlarında global cooldown tetikle. Sıradan bir
-        // hata (örn. bir kanalın EPG'si yok) uygulamanın tamamını kilitlemesin.
-        val blocked = errMsg?.let { m ->
-            val l = m.lowercase()
-            l.contains("block") || l.contains("limit") || l.contains("cooldown") ||
-                l.contains("too many") || l.contains("locked") || l.contains("ban") ||
-                l.contains("temporarily") || l.contains("access denied") || l.contains("forbidden")
-        } ?: false
+        val hasError = (errNode as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
 
-        if (respCode == 429 || respCode == 403 || respCode == 451 || blocked) {
+        // Sunucu `error` alanı döndürdüğünde de (örn. rate-limit, geçici
+        // portal hatası) global cooldown tetikle ve tekrar dene. Bu sayede
+        // büyük VOD senkronizasyonları portalı bastırmaz; cooldown sonrası
+        // sayfalar doğru şekilde çekilir. (Daha önce yalnızca 429/403/451'e
+        // sınırlanması VOD kataloğunun eksik gelmesine yol açıyordu.)
+        if (respCode == 429 || respCode == 403 || respCode == 451 || hasError) {
             triggerCooldown()
             throw StalkerException(
                 "Sunucu istekleri engelledi (cooldown). ${settingsProvider().cooldownMs / 1000} sn bekleniyor.",
                 isCooldown = true
             )
-        }
-
-        if (hasError) {
-            throw StalkerException(errMsg ?: "Sunucu hatası (HTTP $respCode)")
         }
 
         if (respCode !in 200..299) {
