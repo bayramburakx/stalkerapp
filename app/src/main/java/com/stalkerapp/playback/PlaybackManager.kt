@@ -435,7 +435,7 @@ object PlaybackManager {
                 if (url.isBlank()) return@launch
                 if (standbyPlayer != null) return@launch
                 val p = buildPlayer()
-                p.setMediaItem(mediaItem(url, next.name, next.logo, next.tvGenreTitle))
+                p.setMediaItem(mediaItem(url, next.name, next.logo))
                 p.prepare()
                 standbyPlayer = p
             } catch (_: Exception) {

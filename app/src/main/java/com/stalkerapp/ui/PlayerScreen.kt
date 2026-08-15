@@ -301,7 +301,7 @@ fun PlayerScreen(navController: NavHostController) {
                 battery = if (scale > 0) (level * 100 / scale) else level
             }
         }
-        ContextCompat.registerReceiver(receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
     }
 
