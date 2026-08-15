@@ -5,14 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,6 +37,7 @@ import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 
@@ -133,6 +135,8 @@ fun LibraryScreen(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
+        // Başlık ile filtre çipleri arasında nefes payı.
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Filtre çipleri (arama ekranındaki gibi).
         LazyRow(
@@ -140,17 +144,17 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(LibFilter.entries.toList()) { f ->
-                FilterChip(
+                GlassChip(
                     selected = filter == f && activeListId == null,
                     onClick = { filter = f; activeListId = null },
-                    label = { Text(f.label) }
+                    label = f.label
                 )
             }
             items(userLists) { l ->
-                FilterChip(
+                GlassChip(
                     selected = activeListId == l.id,
                     onClick = { activeListId = l.id; filter = LibFilter.ALL },
-                    label = { Text("📁 ${l.name}") }
+                    label = "📁 ${l.name}"
                 )
             }
         }
@@ -312,7 +316,7 @@ fun LibraryScreen(
 private fun SectionHeader(title: String) {
     Text(
         title,
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
     )

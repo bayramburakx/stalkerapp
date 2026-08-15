@@ -1,5 +1,8 @@
 package com.stalkerapp.ui.search
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,12 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -21,14 +26,14 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +55,7 @@ import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
+import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 import kotlinx.coroutines.delay
@@ -111,14 +117,42 @@ fun SearchScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = { Text("Film, dizi, kanal ara…") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // Anasayfa dili: cam arama çubuğu.
+                    val searchShape = RoundedCornerShape(50)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(searchShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), searchShape)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { inner ->
+                                if (query.isBlank()) {
+                                    Text(
+                                        "Film, dizi, kanal ara…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                inner()
+                            }
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -142,7 +176,7 @@ fun SearchScreen(
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (liveFiltered.isNotEmpty()) {
                 item {
-                    Text("Kanallar (${liveFiltered.size})", style = MaterialTheme.typography.titleMedium,
+                    Text("Kanallar (${liveFiltered.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 items(liveFiltered, key = { it.id }) { ch ->
@@ -167,7 +201,7 @@ fun SearchScreen(
                 item { LoadingBox() }
             } else if (vodList != null && vodList.isNotEmpty()) {
                 item {
-                    Text("Film & Dizi (${vodList.size})", style = MaterialTheme.typography.titleMedium,
+                    Text("Film & Dizi (${vodList.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 item {
@@ -195,12 +229,43 @@ private fun DropdownFilterChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        FilterChip(
-            selected = selected > 0,
-            onClick = { expanded = true },
-            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }
-        )
+        // Anasayfa dili: cam pill filtre + açılır ok.
+        val pillShape = RoundedCornerShape(50)
+        Row(
+            modifier = Modifier
+                .clip(pillShape)
+                .background(
+                    if (selected > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
+                )
+                .border(
+                    1.dp,
+                    if (selected > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                    pillShape
+                )
+                .clickable { expanded = true }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected > 0) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected > 0) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Icon(
+                Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                tint = if (selected > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEachIndexed { i, opt ->
                 DropdownMenuItem(
@@ -245,7 +310,8 @@ private fun DiscoverContent(
     Column(modifier = modifier.fillMaxSize()) {
         Text(
             "Keşfet",
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         Row(

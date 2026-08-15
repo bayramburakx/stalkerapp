@@ -1,6 +1,7 @@
 package com.stalkerapp.ui.live
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,12 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +52,7 @@ import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
@@ -147,14 +147,42 @@ fun EpgGuideScreen(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = { Text("Kanal ara…") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
+                // Anasayfa dili: cam arama çubuğu.
+                val searchShape = RoundedCornerShape(50)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(searchShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), searchShape)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { inner ->
+                            if (query.isBlank()) {
+                                Text(
+                                    "Kanal ara…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            inner()
+                        }
+                    )
+                }
             }
 
             val genreList = genres.orEmpty()
@@ -164,17 +192,17 @@ fun EpgGuideScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {
-                        FilterChip(
+                        GlassChip(
                             selected = selectedGenre == 0L,
                             onClick = { selectedGenre = 0L },
-                            label = { Text("Tümü") }
+                            label = "Tümü"
                         )
                     }
                     items(genreList) { g ->
-                        FilterChip(
+                        GlassChip(
                             selected = selectedGenre == g.id,
                             onClick = { selectedGenre = g.id },
-                            label = { Text(g.title) }
+                            label = g.title
                         )
                     }
                 }

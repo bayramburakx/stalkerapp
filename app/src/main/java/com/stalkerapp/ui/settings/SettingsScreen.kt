@@ -3,6 +3,7 @@ package com.stalkerapp.ui.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +46,6 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +84,7 @@ import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.GlassChip
 import kotlinx.coroutines.launch
 
 private val AVATARS = listOf(
@@ -370,14 +371,14 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                // ---- Ana sayfa düzeni ----
+                // ---- Ana sayfa düzeni (anasayfa dili: cam pill seçenekler) ----
                 Text("Ana Sayfa Düzeni", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("rows" to "Kartlar", "compact" to "Kompakt", "list" to "Liste").forEach { (key, label) ->
-                        FilterChip(
+                        GlassChip(
                             selected = settings.homeLayout == key,
                             onClick = { vm.saveSettings(settings.copy(homeLayout = key)) },
-                            label = { Text(label) }
+                            label = label
                         )
                     }
                 }
@@ -610,10 +611,10 @@ fun SettingsScreen(
                 Text("Varsayılan Video Kalitesi", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("auto" to "Otomatik", "1080p" to "1080p", "720p" to "720p", "480p" to "480p").forEach { (key, label) ->
-                        FilterChip(
+                        GlassChip(
                             selected = settings.defaultQuality == key,
                             onClick = { vm.saveSettings(settings.copy(defaultQuality = key)) },
-                            label = { Text(label) }
+                            label = label
                         )
                     }
                 }
@@ -621,10 +622,10 @@ fun SettingsScreen(
                 Text("Çözücü (Decoder)", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("auto" to "Otomatik", "hardware" to "Donanım", "software" to "Yazılım").forEach { (key, label) ->
-                        FilterChip(
+                        GlassChip(
                             selected = settings.decoder == key,
                             onClick = { vm.saveSettings(settings.copy(decoder = key)) },
-                            label = { Text(label) }
+                            label = label
                         )
                     }
                 }
@@ -914,7 +915,7 @@ private fun ToggleRow(
     }
 }
 
-/** Ana ekranla aynı dil: mavi vurgu çubuğu + kalın başlık (SectionTitle ile uyumlu). */
+/** Ana ekranla aynı dil: ikonlu cam kutu + kalın büyük başlık. */
 @Composable
 private fun SectionHeader(icon: ImageVector, title: String) {
     Row(
@@ -923,19 +924,17 @@ private fun SectionHeader(icon: ImageVector, title: String) {
     ) {
         Box(
             modifier = Modifier
-                .size(width = 4.dp, height = 18.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.primary)
-        )
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
-        )
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        }
         Text(
             title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
     }

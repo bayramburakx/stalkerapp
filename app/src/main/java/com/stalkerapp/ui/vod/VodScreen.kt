@@ -24,11 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +51,7 @@ import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.VodQuickActionsSheet
 import com.stalkerapp.ui.components.resolveUrl
@@ -154,20 +154,48 @@ fun VodScreen(
             )
         }
 
+        // Anasayfa dili: cam arama çubuğu (yarı saydam, yuvarlak, ince çerçeve).
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Film / dizi ara…") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
+            val searchShape = RoundedCornerShape(50)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(searchShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), searchShape)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { inner ->
+                        if (query.isBlank()) {
+                            Text(
+                                "Film / dizi ara…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        inner()
+                    }
+                )
+            }
         }
 
         if (shownCats.isNotEmpty()) {
@@ -176,17 +204,17 @@ fun VodScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    FilterChip(
+                    GlassChip(
                         selected = selectedCategory == 0L && query.isBlank(),
                         onClick = { selectedCategory = 0L },
-                        label = { Text("Tümü") }
+                        label = "Tümü"
                     )
                 }
                 items(shownCats) { c ->
-                    FilterChip(
+                    GlassChip(
                         selected = selectedCategory == c.id,
                         onClick = { selectedCategory = c.id },
-                        label = { Text(c.title) }
+                        label = c.title
                     )
                 }
             }

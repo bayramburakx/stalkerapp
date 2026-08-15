@@ -20,13 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +49,7 @@ import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.playback.PlaybackManager
 import kotlinx.coroutines.launch
@@ -168,22 +168,51 @@ fun LiveTvScreen(
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Kanal ara…") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
+            // Anasayfa dili: cam arama çubuğu.
+            val searchShape = RoundedCornerShape(50)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(searchShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), searchShape)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { inner ->
+                        if (query.isBlank()) {
+                            Text(
+                                "Kanal ara…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        inner()
+                    }
+                )
+            }
             Spacer(Modifier.width(8.dp))
-            // EPG Rehberi kısayolu.
+            // EPG Rehberi kısayolu (cam pill).
             IconButton(
                 onClick = onOpenGuide,
                 modifier = Modifier
                     .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), RoundedCornerShape(50))
             ) {
                 Icon(
                     Icons.Default.CalendarMonth,
@@ -200,17 +229,17 @@ fun LiveTvScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    FilterChip(
+                    GlassChip(
                         selected = selectedGenre == 0L,
                         onClick = { selectedGenre = 0L },
-                        label = { Text("Tümü") }
+                        label = "Tümü"
                     )
                 }
                 items(genreList.filter { it.id != 0L }, key = { it.id }) { g ->
-                    FilterChip(
+                    GlassChip(
                         selected = selectedGenre == g.id,
                         onClick = { selectedGenre = g.id },
-                        label = { Text(g.title) }
+                        label = g.title
                     )
                 }
             }
