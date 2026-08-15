@@ -986,7 +986,7 @@ fun EpgSheet(
 
     LaunchedEffect(channel.id) {
         try {
-            programs = vm.repository.loadEpg(profile, channel.id)
+            programs = vm.repository.loadEpg(profile, channel.id, channel.name)
         } catch (e: Exception) {
             error = e.message
         }

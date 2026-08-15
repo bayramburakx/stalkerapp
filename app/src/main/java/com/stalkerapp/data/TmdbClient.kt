@@ -23,6 +23,12 @@ data class TmdbPerson(
     val character: String = ""
 )
 
+/** TMDB'den alınan tek bölüm bilgisi (gerçek ad + küçük resim). */
+data class TmdbEpisodeInfo(
+    val name: String = "",
+    val stillPath: String = ""
+)
+
 /** Bir film/dizi için TMDB zenginleştirmesi: puan + fragman + oyuncu fotoğrafları. */
 data class TmdbEnrichment(
     val rating: Double = 0.0,
@@ -91,16 +97,23 @@ class TmdbClient(private val keyProvider: () -> String) {
         return path
     }
 
-    /** Bir bölümün küçük resmini (still) TMDB'den döner; boşsa görsel yok demektir. */
-    suspend fun episodeStill(tmdbId: Long, seasonNumber: Int, episodeNumber: Int, apiKey: String): String {
+    /**
+     * Bir bölümün TMDB bilgisi: gerçek bölüm adı + küçük resim (still). Tek
+     * API çağrısı ile ikisi birden alınır (portaldaki bölümlerde ad yoktur;
+     * anahtar girilince buradan gelir). Sonuç oturum boyunca önbelleklenir.
+     */
+    suspend fun episodeInfo(tmdbId: Long, seasonNumber: Int, episodeNumber: Int, apiKey: String): TmdbEpisodeInfo {
         val cacheKey = "tv:$tmdbId:s$seasonNumber:e$episodeNumber"
-        cache[cacheKey]?.let { return it as String }
-        if (tmdbId <= 0 || apiKey.isBlank()) return ""
+        cache[cacheKey]?.let { return it as TmdbEpisodeInfo }
+        if (tmdbId <= 0 || apiKey.isBlank()) return TmdbEpisodeInfo()
         val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$seasonNumber/episode/$episodeNumber?api_key=$apiKey&language=tr-TR"
         val obj = getJson(url)
-        val path = (obj?.get("still_path") as? JsonPrimitive)?.contentOrNull.orEmpty()
-        cache[cacheKey] = path
-        return path
+        val info = TmdbEpisodeInfo(
+            name = (obj?.get("name") as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            stillPath = (obj?.get("still_path") as? JsonPrimitive)?.contentOrNull.orEmpty()
+        )
+        cache[cacheKey] = info
+        return info
     }
 
     /** İsme göre kişi ara; fotoğraf yolu + TMDB kişi id'si döner. */

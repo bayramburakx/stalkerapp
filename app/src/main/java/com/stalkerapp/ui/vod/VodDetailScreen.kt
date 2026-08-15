@@ -40,9 +40,12 @@ import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +75,7 @@ import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Episode
 import com.stalkerapp.data.Season
 import com.stalkerapp.data.TmdbClient
+import com.stalkerapp.data.TmdbEpisodeInfo
 import com.stalkerapp.data.TmdbPerson
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
@@ -83,7 +87,7 @@ import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun VodDetailScreen(
     vodId: Long,
@@ -116,6 +120,10 @@ fun VodDetailScreen(
     // Sezon posterleri + bölüm küçük resimleri (portal önce, yoksa TMDB).
     var seasonPosters by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var episodeThumbs by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    // TMDB'den gelen gerçek bölüm adları (portaldaki bölümlerde ad yoktur).
+    var episodeNames by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    // Sezon üstüne uzun basınca "izlendi işaretle?" onayı sorulur.
+    var seasonConfirm by remember { mutableStateOf<Season?>(null) }
     val context = LocalContext.current
 
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
@@ -152,8 +160,8 @@ fun VodDetailScreen(
         seasonPosters = map
     }
 
-    // Bölüm küçük resimleri: seçili sezonun bölümleri için portal görseli önce,
-    // yoksa TMDB'den still çekilir (bölüm bölüm eklenir, anında görünür).
+    // Bölüm küçük resimleri + gerçek adları: portal görseli önce, yoksa TMDB'den
+    // still + bölüm adı çekilir (bölüm bölüm eklenir, anında görünür).
     LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint, selectedSeason, episodes) {
         val i = item ?: return@LaunchedEffect
         val eps = episodes.orEmpty()
@@ -162,17 +170,25 @@ fun VodDetailScreen(
         val withKey = key.isNotBlank() && i.tmdbId > 0
         val seasonNum = selectedSeason?.toInt()?.coerceAtLeast(1) ?: 1
         var thumbs = emptyMap<Long, String>()
+        var names = emptyMap<Long, String>()
         eps.forEach { e ->
+            val info = if (withKey) {
+                runCatching { app.tmdb.episodeInfo(i.tmdbId, seasonNum, e.episodeNumber.coerceAtLeast(1), key) }
+                    .getOrDefault(TmdbEpisodeInfo())
+            } else TmdbEpisodeInfo()
             val url = when {
                 e.thumb.isNotBlank() -> resolveUrl(e.thumb, profile?.baseUrl.orEmpty())
-                withKey -> runCatching { app.tmdb.episodeStill(i.tmdbId, seasonNum, e.episodeNumber.coerceAtLeast(1), key) }
-                    .getOrDefault("")
-                    .let { p -> if (p.isNotBlank()) TmdbClient.photoUrl(p, large = true) else "" }
+                info.stillPath.isNotBlank() -> TmdbClient.photoUrl(info.stillPath, large = true)
                 else -> ""
             }
             if (url.isNotBlank()) {
                 thumbs = thumbs + (e.id to url)
                 episodeThumbs = thumbs
+            }
+            val nm = e.name.ifBlank { info.name }
+            if (nm.isNotBlank()) {
+                names = names + (e.id to nm)
+                episodeNames = names
             }
         }
     }
@@ -674,7 +690,8 @@ fun VodDetailScreen(
                                         .width(96.dp)
                                         .combinedClickable(
                                             onClick = { selectedSeason = s.id },
-                                            onLongClick = { toggleSeasonWatched(s.id) }
+                                            // Uzun basma: izlendi işaretlemeden önce onay sorulur.
+                                            onLongClick = { seasonConfirm = s }
                                         )
                                 ) {
                                     Box(
@@ -762,10 +779,15 @@ fun VodDetailScreen(
                                     val seasonNum = selectedSeason ?: 0
                                     val watched = episodeKey(ep, seasonNum) in watchedEps
                                     val thumb = episodeThumbs[ep.id].orEmpty()
+                                    // Bölüm adı: portal adı varsa o, TMDB'den gelirse o,
+                                    // yoksa "Bölüm N" (kutu her zaman ad gösterir).
+                                    val name = episodeNames[ep.id].orEmpty()
+                                        .ifBlank { ep.name }
+                                        .ifBlank { "Bölüm ${ep.episodeNumber}" }
                                     Box(
                                         modifier = Modifier
-                                            .width(132.dp)
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .width(156.dp)
+                                            .clip(RoundedCornerShape(14.dp))
                                             .background(
                                                 if (watched) MaterialTheme.colorScheme.primaryContainer
                                                 else MaterialTheme.colorScheme.surfaceVariant
@@ -781,7 +803,7 @@ fun VodDetailScreen(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .aspectRatio(16f / 9f)
-                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clip(RoundedCornerShape(14.dp))
                                                     .background(Color.Black)
                                             ) {
                                                 if (thumb.isNotBlank()) {
@@ -811,7 +833,7 @@ fun VodDetailScreen(
                                                     modifier = Modifier
                                                         .align(Alignment.TopEnd)
                                                         .padding(6.dp)
-                                                        .size(22.dp)
+                                                        .size(24.dp)
                                                         .clip(CircleShape)
                                                         .background(
                                                             if (watched) Color(0xFF2E7D32)
@@ -824,23 +846,22 @@ fun VodDetailScreen(
                                                         Icons.Default.Check,
                                                         contentDescription = if (watched) "İzlenmedi yap" else "İzlendi işaretle",
                                                         tint = Color.White,
-                                                        modifier = Modifier.size(14.dp)
+                                                        modifier = Modifier.size(15.dp)
                                                     )
                                                 }
                                             }
-                                            if (ep.name.isNotBlank()) {
-                                                Spacer(Modifier.height(4.dp))
-                                                Text(
-                                                    ep.name,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(horizontal = 8.dp)
-                                                )
-                                            } else {
-                                                Spacer(Modifier.height(8.dp))
-                                            }
+                                            // Bölüm adı kartın İÇİNDE (küçük resmin altında).
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                name,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                                            )
+                                            Spacer(Modifier.height(6.dp))
                                         }
                                     }
                                 }
@@ -904,14 +925,66 @@ fun VodDetailScreen(
             }
         }
     }
+
+    // Sezon onay sheet'i: uzun basınca izlendi işaretlemeden önce sorar.
+    // Sezon zaten işaretliyse "geri al" seçeneği sunar (tekrar uzun bas → geri al).
+    if (seasonConfirm != null) {
+        val s = seasonConfirm!!
+        val alreadyWatched = s.id in fullyWatchedSeasons
+        ModalBottomSheet(onDismissRequest = { seasonConfirm = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
+            ) {
+                Text(
+                    seasonLabel(s),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (alreadyWatched) "Tüm bölümleri izlenmedi olarak işaretle?"
+                    else "Tüm bölümleri izlendi olarak işaretle?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = {
+                        toggleSeasonWatched(s.id)
+                        seasonConfirm = null
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (alreadyWatched) "İzlenmedi İşaretle" else "İzlendi İşaretle",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { seasonConfirm = null },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("İptal")
+                }
+            }
+        }
+    }
 }
 
 /**
  * Fragman oynatıcı: önce YouTube küçük resmi + oynat butonu gösterir; dokununca
- * gömülü WebView oynatıcıya geçer. Beyaz ekran sorununu önlemek için DOM
- * depolama, WebChromeClient (HTML5 video) ve JS etkinleştirilir; ayrıca gömülü
- * oynatıcı açılmazsa YouTube uygulamasında açma kısayolu sunulur.
+ * gömülü WebView oynatıcıya geçer. Beyaz ekran sorununu önlemek için embed
+ * (iframe) yerine mobil YouTube sayfası yüklenir + WebChromeClient + DOM
+ * depolama etkinleştirilir; hata olursa YouTube uygulamasında açma kısayolu sunulur.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
     var playing by remember { mutableStateOf(false) }
@@ -962,11 +1035,23 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                         settings.javaScriptCanOpenWindowsAutomatically = true
                         settings.loadWithOverviewMode = true
                         settings.useWideViewPort = true
-                        webViewClient = WebViewClient()
-                        // HTML5 video oynatımı için WebChromeClient şarttır;
-                        // olmadan YouTube embed beyaz ekran bırakır.
+                        settings.allowFileAccess = true
+                        // HTML5 video oynatımı için WebChromeClient şarttır.
                         webChromeClient = WebChromeClient()
-                        loadUrl("https://www.youtube-nocookie.com/embed/$key?autoplay=1&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3")
+                        webViewClient = object : WebViewClient() {
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: android.webkit.WebResourceRequest?,
+                                error: android.webkit.WebResourceError?
+                            ) {
+                                // Yalnızca ana sayfa hatası oynatmayı durdurur;
+                                // alt kaynak (reklam vb.) hataları yok sayılır.
+                                if (request?.isForMainFrame == true) failed = true
+                            }
+                        }
+                        // iframe embed'i Android WebView'da sıklıkla beyaz ekran
+                        // bırakır; mobil YouTube sayfası HTML5 oynatıcıyı açar.
+                        loadUrl("https://m.youtube.com/watch?v=$key&autoplay=1&playsinline=1&rel=0")
                     }
                 },
                 modifier = Modifier.fillMaxSize()

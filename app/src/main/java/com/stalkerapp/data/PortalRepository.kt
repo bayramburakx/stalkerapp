@@ -292,7 +292,7 @@ class PortalRepository(
         return result
     }
 
-    suspend fun loadEpg(profile: Profile, channelId: Long): List<EpgProgram> {
+    suspend fun loadEpg(profile: Profile, channelId: Long, channelName: String = ""): List<EpgProgram> {
         epgCache[channelId]?.let { return it }
         val zone = portalZone(profile)
         val now = System.currentTimeMillis() / 1000
@@ -338,39 +338,40 @@ class PortalRepository(
         // akışı üretilir — rehber ekranı ve oynatıcı "şimdi/sonra" her zaman
         // içerik gösterir.
         if (programs.isEmpty()) {
-            programs = defaultEpg(channelId)
+            programs = defaultEpg(profile, channelId, channelName)
         }
         epgCache[channelId] = programs
         return programs
     }
 
-    /** Portal EPG'si olmayan kanallar için varsayılan günlük program akışı. */
-    private fun defaultEpg(channelId: Long): List<EpgProgram> {
-        val now = System.currentTimeMillis() / 1000
+    /**
+     * Portal EPG'si olmayan kanallar için varsayılan program. Gerçek dışı
+     * program adları üretmek yerine ("Günaydın Programı" gibi) kanalın kendi
+     * adı tek program olarak gösterilir — rehber boş kalmaz ama yalan bir
+     * program listesi de sunulmaz (şu an oynayan = kanalın yayını).
+     */
+    private fun defaultEpg(profile: Profile, channelId: Long, channelName: String = ""): List<EpgProgram> {
         val zone = ZoneId.systemDefault()
+        val now = System.currentTimeMillis() / 1000
         val todayStart = runCatching {
             java.time.LocalDate.now(zone).atStartOfDay(zone).toEpochSecond()
         }.getOrDefault(now - (now % 86400))
-        val slot = 2 * 3600L
-        val names = listOf(
-            "Gece Kuşağı", "Gece Programı", "Sabah Kuşağı", "Sabah Haberleri",
-            "Günaydın Programı", "Öğle Kuşağı", "Öğle Haberleri", "Gündüz Kuşağı",
-            "İkindi Kuşağı", "Akşam Kuşağı", "Ana Haber Bülteni", "Prime Time"
-        )
-        return names.mapIndexed { i, name ->
-            val start = todayStart + i * slot
-            val stop = start + slot
+        val name = channelName.ifBlank {
+            channelsCache[profile.portal?.id]?.values?.asSequence()
+                ?.flatten()?.firstOrNull { it.id == channelId }?.name.orEmpty()
+        }.ifBlank { "Yayın" }
+        return listOf(
             EpgProgram(
                 chId = channelId,
                 name = name,
                 start = "",
                 stop = "",
-                startTs = start,
-                stopTs = stop,
-                isCurrent = start <= now && now < stop,
+                startTs = todayStart,
+                stopTs = todayStart + 86400,
+                isCurrent = true,
                 isDefault = true
             )
-        }
+        )
     }
 
     /**

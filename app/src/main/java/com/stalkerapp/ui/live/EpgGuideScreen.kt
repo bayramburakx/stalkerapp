@@ -100,7 +100,7 @@ fun EpgGuideScreen(
             // EPG'yi ilk 60 kanal için çek (her kanal ayrı istek; tamamı çok yavaş olur).
             val map = mutableMapOf<Long, List<EpgProgram>>()
             list.take(60).forEach { ch ->
-                runCatching { vm.repository.loadEpg(profile, ch.id) }
+                runCatching { vm.repository.loadEpg(profile, ch.id, ch.name) }
                     .getOrNull()
                     ?.let { map[ch.id] = it }
             }
@@ -247,27 +247,33 @@ fun EpgGuideScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF1E3A8A).copy(alpha = 0.55f))
+                                        .background(
+                                            if (now.isDefault) Color.White.copy(alpha = 0.08f)
+                                            else Color(0xFF1E3A8A).copy(alpha = 0.55f)
+                                        )
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        "${vm.repository.formatEpoch(now.startTs)} — ${vm.repository.formatEpoch(now.stopTs)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF8AB4F8),
-                                        modifier = Modifier.width(96.dp)
-                                    )
+                                    // Kanalın altında şu an oynanan program adı.
                                     Text(
                                         "● ${now.name}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Color.White,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                    if (!now.isDefault) {
+                                        Text(
+                                            "${vm.repository.formatEpoch(now.startTs)} — ${vm.repository.formatEpoch(now.stopTs)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF8AB4F8)
+                                        )
+                                    }
                                 }
                             }
-                            if (next != null) {
+                            if (next != null && !next.isDefault) {
                                 Spacer(Modifier.height(4.dp))
                                 Row(
                                     modifier = Modifier.padding(horizontal = 10.dp),
