@@ -72,7 +72,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.BuildConfig
@@ -85,7 +84,6 @@ import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
-import com.stalkerapp.ui.components.AppCard
 import kotlinx.coroutines.launch
 
 private val AVATARS = listOf(
@@ -179,12 +177,8 @@ fun SettingsScreen(
         Text("Ayarlar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
         // ================= PLAYLIST & KAYNAKLAR =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                SectionHeader(Icons.Default.Tv, "Playlist & Kaynaklar")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.Tv, "Playlist & Kaynaklar")
                 Text(
                     "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını buradan yönetirsin. " +
                         "Kapatılan kaynak türü Canlı TV ve kütüphanede kullanılmaz.",
@@ -313,16 +307,11 @@ fun SettingsScreen(
                         Text("Xtream Ekle")
                     }
                 }
-            }
         }
 
         // ================= KÜTÜPHANE & İÇERİK =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                SectionHeader(Icons.Default.VideoLibrary, "Kütüphane & İçerik")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.VideoLibrary, "Kütüphane & İçerik")
 
                 ToggleRow(
                     icon = Icons.Default.Lock,
@@ -528,16 +517,11 @@ fun SettingsScreen(
                     ) { Text("Şimdi Senkronize Et") }
                     OutlinedButton(onClick = { vm.resetVodCatalog() }) { Text("Kataloğu Sıfırla") }
                 }
-            }
         }
 
         // ================= KÜTÜPHANEM =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SectionHeader(Icons.Default.Star, "Kütüphanem")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.Star, "Kütüphanem")
                 Text(
                     "Sonra izle, izlediklerin, favorilerin ve özel listelerin alt menüdeki Kütüphanem sekmesinde.",
                     style = MaterialTheme.typography.bodySmall,
@@ -585,16 +569,11 @@ fun SettingsScreen(
                         enabled = newListName.trim().isNotBlank()
                     ) { Text("Oluştur") }
                 }
-            }
         }
 
         // ================= OYNATICI =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                SectionHeader(Icons.Default.VolumeUp, "Oynatıcı")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.VolumeUp, "Oynatıcı")
 
                 ToggleRow(
                     icon = Icons.Default.PlayArrow,
@@ -707,16 +686,11 @@ fun SettingsScreen(
                     steps = 23
                 )
                 Text("Ofset: ${timezoneOffset.toInt()} saat", style = MaterialTheme.typography.bodyLarge)
-            }
         }
 
         // ================= ENTEGRASYONLAR =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SectionHeader(Icons.Default.Link, "Entegrasyonlar")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.Link, "Entegrasyonlar")
                 Text(
                     "TMDB (themoviedb.org) anahtarı: oyuncu fotoğrafları, fragman ve gerçek bölüm adları. " +
                         "Boşsa özellikler kapalıdır.",
@@ -738,16 +712,11 @@ fun SettingsScreen(
                     enabled = tmdbKey.trim().isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Kaydet") }
-            }
         }
 
         // ================= HESAP =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SectionHeader(Icons.Default.Person, "Hesap")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.Person, "Hesap")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -777,19 +746,13 @@ fun SettingsScreen(
                     }
                     OutlinedButton(
                         onClick = { showSwitch = true },
-                        enabled = portals.isNotEmpty()
-                    ) { Text("Profil Değiştir") }
+                        enabled = portals.isNotEmpty()                    ) { Text("Profil Değiştir") }
                 }
-            }
         }
 
         // ================= GİZLİLİK =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SectionHeader(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik")
                 Text(
                     "Tüm verilerin (portallar, izleme geçmişi, listeler) yalnızca bu cihazda saklanır. " +
                         "Hiçbir veri uygulama dışına gönderilmez.",
@@ -800,16 +763,11 @@ fun SettingsScreen(
                     onClick = { showPrivacy = true },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Gizlilik Anlaşması'nı Oku") }
-            }
         }
 
         // ================= HAKKINDA & DESTEK =================
-        AppCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SectionHeader(Icons.Default.Info, "Hakkında & Destek")
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(Icons.Default.Info, "Hakkında & Destek")
                 Text("Stalker Player v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Stalker portal, M3U ve Xtream Codes destekli IPTV oynatıcı.",
@@ -829,7 +787,6 @@ fun SettingsScreen(
                 if (updateMessage != null) {
                     Text(updateMessage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
-            }
         }
 
         // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor.
@@ -956,19 +913,54 @@ private fun ToggleRow(
     }
 }
 
+/** Ana ekranla aynı dil: mavi vurgu çubuğu + kalın başlık (SectionTitle ile uyumlu). */
 @Composable
 private fun SectionHeader(icon: ImageVector, title: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
-                .clipToRounded(10.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        }
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                .size(width = 4.dp, height = 18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/** Uygulama kart diliyle uyumlu ayar kartı: yumuşak köşe + ince çerçeve. */
+@Composable
+private fun SettingsCard(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    androidx.compose.material3.Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) { content() }
     }
 }
 
@@ -1051,8 +1043,6 @@ private fun SliderSetting(
         Text(valueText, style = MaterialTheme.typography.bodyLarge)
     }
 }
-
-private fun Modifier.clipToRounded(radius: Dp) = this.clip(RoundedCornerShape(radius))
 
 @Composable
 private fun ProfileEditDialog(

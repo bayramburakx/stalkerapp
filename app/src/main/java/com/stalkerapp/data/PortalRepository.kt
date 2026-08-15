@@ -127,8 +127,13 @@ class PortalRepository(
     suspend fun channelStreamUrl(ch: Channel, profile: Profile?): String {
         // M3U / Xtream kanallarında `cmd` zaten doğrudan oynatılabilir bir URL'dir
         // (Stalker create_link gerekmez). Önce o kontrol edilir.
+        // DİKKAT: Stalker kanallarının cmd'i de http ile başlar ama localhost
+        // placeholder'ıdır ("ffmpeg http://localhost/ch/123_"); bunlar asla
+        // doğrudan oynatılamaz — create_link şarttır, aksi halde Source Error.
         StalkerClient.parseCmd(ch.cmd)?.let { u ->
-            if (u.startsWith("http://") || u.startsWith("https://")) return u
+            val isDirect = u.startsWith("http://") || u.startsWith("https://")
+            val isStalkerPlaceholder = u.contains("localhost") || u.contains("127.0.0.1")
+            if (isDirect && !isStalkerPlaceholder) return u
         }
         val p = profile ?: throw StalkerException("Kanal akış URL'si alınamadı (profil yok)")
         val base = p.baseUrl

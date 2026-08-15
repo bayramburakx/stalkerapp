@@ -31,8 +31,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.VodItem
+import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
@@ -72,6 +74,9 @@ fun LibraryScreen(
     val vodProgress = remember(watchedVersion) { app.store.loadVodProgress() }
     val episodeProgress = remember(watchedVersion) { app.store.episodeProgress() }
     val watchedEps = remember(watchedVersion) { app.store.watchedEpisodes() }
+
+    // Favori canlı TV kanalları (tam Channel nesnesi olarak saklanır).
+    val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
 
     // Katalog hazırsa id -> öğe haritası (listelerdeki öğeleri zenginleştirmek için).
     val byId = remember(catalog.allItems) {
@@ -152,7 +157,7 @@ fun LibraryScreen(
 
         val hasAny = continueItems.isNotEmpty() || watchedItems.isNotEmpty() ||
             watchLaterResolved.isNotEmpty() || favResolved.isNotEmpty() ||
-            listItems.isNotEmpty() || catalog.allItems.isNotEmpty()
+            listItems.isNotEmpty() || favChannels.isNotEmpty() || catalog.allItems.isNotEmpty()
 
         if (!hasAny) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -172,6 +177,26 @@ fun LibraryScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             when {
+                // Favori kanallar her filtrenin üstünde sabit gösterilir
+                // (Kütüphanem'de canlı TV favorileri de görünmeli).
+                favChannels.isNotEmpty() && activeList == null && filter == LibFilter.ALL -> {
+                    item { SectionHeader("Favori Kanallar") }
+                    item {
+                        favChannels.forEach { ch ->
+                            ChannelRow(
+                                channel = ch,
+                                baseUrl = profile?.baseUrl.orEmpty(),
+                                isFavorite = true,
+                                onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                                onClick = { c ->
+                                    PlaybackManager.playChannel(favChannels, favChannels.indexOfFirst { it.id == c.id }.coerceAtLeast(0), profile)
+                                    onOpenPlayer()
+                                }
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                }
                 activeList != null -> {
                     item { SectionHeader("📁 ${activeList.name}") }
                     item {
@@ -251,11 +276,31 @@ fun LibraryScreen(
                     }
                 }
                 filter == LibFilter.FAVORITES -> {
-                    if (favResolved.isEmpty()) {
+                    if (favResolved.isEmpty() && favChannels.isEmpty()) {
                         item { EmptyHint("Favori içerik yok") }
                     } else {
-                        item { SectionHeader("Favoriler") }
-                        item { PosterRow(favResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
+                        if (favResolved.isNotEmpty()) {
+                            item { SectionHeader("Favori Filmler & Diziler") }
+                            item { PosterRow(favResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
+                        }
+                        if (favChannels.isNotEmpty()) {
+                            item { SectionHeader("Favori Kanallar") }
+                            item {
+                                favChannels.forEach { ch ->
+                                    ChannelRow(
+                                        channel = ch,
+                                        baseUrl = profile?.baseUrl.orEmpty(),
+                                        isFavorite = true,
+                                        onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                                        onClick = { c ->
+                                            PlaybackManager.playChannel(favChannels, favChannels.indexOfFirst { it.id == c.id }.coerceAtLeast(0), profile)
+                                            onOpenPlayer()
+                                        }
+                                    )
+                                    HorizontalDivider()
+                                }
+                            }
+                        }
                     }
                 }
             }
