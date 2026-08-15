@@ -114,6 +114,9 @@ class PortalRepository(
     @Volatile private var vodPageParam: String? = null
     @Volatile private var vodPageSize: Int = 0
     @Volatile private var vodTotal: Int = 0
+    // Timestamp of the last failed page-param probe; gates re-probing so a
+    // portal under cooldown doesn't trigger a probe storm on every page call.
+    @Volatile private var vodPageProbeAt = 0L
 
     private fun vodKey(categoryId: Long, search: String): String =
         "$categoryId|${search.trim().lowercase()}"
@@ -129,6 +132,7 @@ class PortalRepository(
         // gerçek parametreler yeniden algılansın.
         vodPageParam = null
         vodCategoryParam = null
+        vodPageProbeAt = 0L
     }
 
     /** Lets the sync clear the adaptive rate-limit backoff when it finishes. */
@@ -920,44 +924,77 @@ class PortalRepository(
      */
     suspend fun probeVodPageParam(profile: Profile): String {
         vodPageParam?.let { return it }
-        suspend fun probe(param: String, pageVal: Int, perPage: Int): List<Long> = runCatching {
-            val resp = client.request(
-                profile.baseUrl,
-                "portal.php?type=vod&action=get_ordered_list",
-                "POST",
-                tokenFor(profile),
-                vodListBody(emptyMap(), pageVal, perPage, param)
-            )
-            val items = parseVodList(resp)
-            if (pageVal == 1 && param == "page") {
-                // Keep the largest observed page size: the per_page=5000 probe
-                // shows the real page size on portals that honor it, and the
-                // portal's cap (e.g. 14) on portals that ignore it.
-                if (items.size > vodPageSize) vodPageSize = items.size
-                if (vodTotal == 0) vodTotal = parseTotal(resp)
+        // A failed probe is re-attempted after a short delay, but not on every
+        // page call (that would hammer a rate-limited portal with probes).
+        val now = System.currentTimeMillis()
+        if (vodPageProbeAt != 0L && now - vodPageProbeAt < 30_000) return "page"
+        vodPageProbeAt = now
+
+        suspend fun requestIds(pageVal: Int, perPage: Int, param: String): List<Long> {
+            // Wait out any active cooldown so the probe requests actually
+            // succeed — a probe fired mid-cooldown used to silently default to
+            // "page" and lock in broken pagination for the whole sync.
+            var remaining = client.cooldownRemainingMs()
+            if (remaining > 0) delay(remaining + 500)
+            return try {
+                val resp = client.request(
+                    profile.baseUrl,
+                    "portal.php?type=vod&action=get_ordered_list",
+                    "POST",
+                    tokenFor(profile),
+                    vodListBody(emptyMap(), pageVal, perPage, param)
+                )
+                val items = parseVodList(resp)
+                if (pageVal == 1 && param == "page") {
+                    // Keep the largest observed page size: the per_page=5000 probe
+                    // shows the real page size on portals that honor it, and the
+                    // portal's cap (e.g. 14) on portals that ignore it.
+                    if (items.size > vodPageSize) vodPageSize = items.size
+                    if (vodTotal == 0) vodTotal = parseTotal(resp)
+                }
+                items.map { it.id }
+            } catch (e: StalkerException) {
+                if (e.isCooldown) {
+                    delay(client.cooldownRemainingMs() + 1000)
+                    try {
+                        client.request(
+                            profile.baseUrl,
+                            "portal.php?type=vod&action=get_ordered_list",
+                            "POST",
+                            tokenFor(profile),
+                            vodListBody(emptyMap(), pageVal, perPage, param)
+                        ).let { parseVodList(it).map { i -> i.id } }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
             }
-            items.map { it.id }
-        }.getOrDefault(emptyList())
+        }
+
         var sawItems = false
         for (param in listOf("page", "p")) {
-            val p1 = probe(param, 1, 5000)
-            val p2 = probe(param, 2, 5000)
+            val p1 = requestIds(1, 5000, param)
+            val p2 = requestIds(2, 5000, param)
             if (p1.isNotEmpty()) sawItems = true
+            // A param is the pagination key only if page 2 returns DIFFERENT
+            // items than page 1 (this portal ignores "page" entirely and pages
+            // via "p", so only the "p" comparison advances).
             if (p1.isNotEmpty() && p1 != p2) {
                 vodPageParam = param
                 return param
             }
+            delay(150)
         }
         // The per_page=5000 probes may have failed even though the portal is
         // fine (some reject large per_page values); re-measure the page size
         // with the original format so [vodPageSize] is still meaningful.
-        if (vodPageSize == 0) probe("page", 1, 0)
-        // Neither param advanced the list. If the requests succeeded the portal
-        // simply ignores paging (dup-streak guards stop the loops); if they
-        // failed, leave it uncached so we re-probe after the cooldown clears.
-        // Probe başarısız olsa bile sonucu önbelleğe al ki sayfalama döngüsü
-        // her adımda probe'u yeniden tetikleyip cooldown'u uzatmasın.
-        vodPageParam = "page"
+        if (vodPageSize == 0) requestIds(1, 0, "page")
+        // Cache the default only when the probes actually returned items. If
+        // they failed (e.g. during a cooldown), leave it uncached so a later
+        // call re-probes — the 30s gate above keeps that from becoming a storm.
+        if (sawItems) vodPageParam = "page"
         return "page"
     }
 
@@ -1143,6 +1180,7 @@ class PortalRepository(
         vodPageParam = null
         vodPageSize = 0
         vodTotal = 0
+        vodPageProbeAt = 0L
     }
 
     /** Clears the EPG cache so programs are re-fetched (portal + harici XMLTV) on next view. */
