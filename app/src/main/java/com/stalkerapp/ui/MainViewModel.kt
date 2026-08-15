@@ -194,6 +194,37 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _sourcesVersion.value++
     }
 
+    // ---------- Kaynak testi (Playlist & Kaynaklar) ----------
+
+    /** Stalker portal bağlantısını dener; başarılıysa null, hata mesajı varsa döner. */
+    suspend fun testPortal(portal: Portal): String? {
+        return runCatching { repository.connect(portal) }
+            .fold(
+                onSuccess = { null },
+                onFailure = { it.message ?: it::class.simpleName ?: "Bilinmeyen hata" }
+            )
+    }
+
+    /** M3U URL'sini indirmeyi dener; içerik alınamazsa hata döner. */
+    suspend fun testM3u(source: M3uSource): String? {
+        if (source.url.isBlank()) return "URL boş"
+        val content = M3uParser.fetch(source.url)
+        if (content == null) return "İndirilemedi (URL geçersiz veya erişilemiyor)"
+        val count = M3uParser.parse(content, source.id).size
+        if (count == 0) return "Kanal bulunamadı (geçerli M3U değil?)"
+        saveM3uSource(source.copy(content = content))
+        return null
+    }
+
+    /** Xtream sunucusunu doğrular; başarılıysa null, hata döner. */
+    suspend fun testXtream(source: XtreamSource): String? {
+        return runCatching { XtreamClient().validate(source) }
+            .fold(
+                onSuccess = { ok -> if (ok) null else "Kullanıcı adı/şifre geçersiz" },
+                onFailure = { it.message ?: it::class.simpleName ?: "Bilinmeyen hata" }
+            )
+    }
+
     /** M3U kaynağının kanallarını yükler (gerekirse indirir + çözer). */
     suspend fun loadM3uChannels(source: M3uSource): Pair<List<Genre>, List<Channel>> {
         m3uCache[source.id]?.let { return it }

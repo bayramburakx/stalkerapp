@@ -328,45 +328,57 @@ class PortalRepository(
 
     suspend fun loadEpg(profile: Profile, channel: Channel): List<EpgProgram> {
         val channelId = channel.id
-        epgCache[channelId]?.let { return it }
+        // Önbellekte GERÇEK program varsa (varsayılan değil) dön. Varsayılan
+        // programlar (kanalın adı) önbelleğe alınmaz — EPG URL'si sonradan
+        // eklenmiş olabileceği için bir sonraki açılışta harici EPG tekrar denenir.
+        epgCache[channelId]?.let { cached ->
+            if (cached.none { it.isDefault }) return cached
+        }
         val zone = portalZone(profile)
         val now = System.currentTimeMillis() / 1000
         val from = now - 3 * 3600
         val to = now + 24 * 3600
-        val resp = client.request(
-            profile.baseUrl,
-            "portal.php?type=itv&action=get_epg_info",
-            "POST",
-            tokenFor(profile),
-            mapOf(
-                "ch_id" to channelId.toString(),
-                "period" to "240",
-                "from" to from.toString(),
-                "to" to to.toString()
+        var programs = emptyList<EpgProgram>()
+        // Portalın kendi EPG'si. Başarısız olursa (cooldown / portal hatası)
+        // exception fırlatmaz — harici EPG'ye ve varsayılana düşülür.
+        val resp = runCatching {
+            client.request(
+                profile.baseUrl,
+                "portal.php?type=itv&action=get_epg_info",
+                "POST",
+                tokenFor(profile),
+                mapOf(
+                    "ch_id" to channelId.toString(),
+                    "period" to "240",
+                    "from" to from.toString(),
+                    "to" to to.toString()
+                )
             )
-        )
+        }.getOrNull()
         val offsetHours = store.settings().timezoneOffset
-        val data = parseDataArray(resp)
-        var programs = data.mapNotNull { p ->
-            val o = p.jsonObject
-            val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
-            val stopStr = o["stop"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
-            if (startStr.isEmpty()) return@mapNotNull null
-            val startTs = epgToEpoch(startStr, zone)
-            val stopTs = epgToEpoch(stopStr, zone)
-            EpgProgram(
-                chId = o["ch_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: channelId,
-                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
-                start = startStr,
-                stop = stopStr,
-                desc = o["descr"]?.asJsonPrimitiveOrNull()?.contentOrNull
-                    ?: o["desc"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                category = o["category"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                startTs = startTs + offsetHours * 3600,
-                stopTs = stopTs + offsetHours * 3600,
-                isCurrent = startTs <= System.currentTimeMillis() / 1000 &&
-                    System.currentTimeMillis() / 1000 < stopTs
-            )
+        if (resp != null) {
+            val data = parseDataArray(resp)
+            programs = data.mapNotNull { p ->
+                val o = p.jsonObject
+                val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+                val stopStr = o["stop"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+                if (startStr.isEmpty()) return@mapNotNull null
+                val startTs = epgToEpoch(startStr, zone)
+                val stopTs = epgToEpoch(stopStr, zone)
+                EpgProgram(
+                    chId = o["ch_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: channelId,
+                    name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
+                    start = startStr,
+                    stop = stopStr,
+                    desc = o["descr"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                        ?: o["desc"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                    category = o["category"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                    startTs = startTs + offsetHours * 3600,
+                    stopTs = stopTs + offsetHours * 3600,
+                    isCurrent = startTs <= System.currentTimeMillis() / 1000 &&
+                        System.currentTimeMillis() / 1000 < stopTs
+                )
+            }
         }
         // Sıra: portalın kendi EPG'si → harici XMLTV (Ayarlar'da URL varsa) →
         // varsayılan (kanalın adı). Böylece rehber hiçbir zaman boş kalmaz.
@@ -376,7 +388,10 @@ class PortalRepository(
         if (programs.isEmpty()) {
             programs = defaultEpg(profile, channel)
         }
-        epgCache[channelId] = programs
+        // Varsayılan programlar önbelleğe alınmaz (harici EPG eklenebilir).
+        if (programs.none { it.isDefault }) {
+            epgCache[channelId] = programs
+        }
         return programs
     }
 

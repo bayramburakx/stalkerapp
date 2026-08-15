@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -246,7 +247,8 @@ fun SettingsScreen(
                                         vm.launchSwitch(remaining.first()) { onPortalsChanged() }
                                     }
                                     onPortalsChanged()
-                                }
+                                },
+                                onTest = { vm.testPortal(p) }
                             )
                         }
                     }
@@ -274,7 +276,8 @@ fun SettingsScreen(
                                 isActive = activeKind == "m3u" && activeSourceId == s.id,
                                 onActivate = { vm.setActiveSource("m3u", s.id) },
                                 onEdit = { editingM3u = s; showM3uDialog = true },
-                                onDelete = { vm.deleteM3uSource(s.id) }
+                                onDelete = { vm.deleteM3uSource(s.id) },
+                                onTest = { vm.testM3u(s) }
                             )
                         }
                     }
@@ -302,7 +305,8 @@ fun SettingsScreen(
                                 isActive = activeKind == "xtream" && activeSourceId == s.id,
                                 onActivate = { vm.setActiveSource("xtream", s.id) },
                                 onEdit = { editingXtream = s; showXtreamDialog = true },
-                                onDelete = { vm.deleteXtreamSource(s.id) }
+                                onDelete = { vm.deleteXtreamSource(s.id) },
+                                onTest = { vm.testXtream(s) }
                             )
                         }
                     }
@@ -1058,7 +1062,8 @@ private fun SourceRow(
     isActive: Boolean,
     onActivate: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onTest: (suspend () -> String?)? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1080,6 +1085,22 @@ private fun SourceRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
+        // Test durumu: başarılı/başarısız göstergesi (Test butonundan sonra dolar).
+        var testState by remember { mutableStateOf<String?>(null) } // null=boş, "ok", hata mesajı
+        var testing by remember { mutableStateOf(false) }
+        if (testing) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text("Test ediliyor…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else if (testState != null) {
+            val ok = testState == "ok"
+            Text(
+                if (ok) "✓ Bağlantı başarılı" else "✗ $testState",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (ok) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1088,6 +1109,22 @@ private fun SourceRow(
                 OutlinedButton(onClick = onActivate, modifier = Modifier.weight(1f)) {
                     Text("Aktif Yap")
                 }
+            }
+            if (onTest != null) {
+                OutlinedButton(
+                    onClick = {
+                        val scope = rememberCoroutineScope()
+                        scope.launch {
+                            testing = true
+                            testState = null
+                            val err = onTest()
+                            testState = err ?: "ok"
+                            testing = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !testing
+                ) { Text(if (testing) "…" else "Test Et") }
             }
             OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
                 Text("Düzenle")
