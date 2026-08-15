@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -534,32 +533,8 @@ fun VodDetailScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                            // Fragman: TMDB anahtarı + fragman varsa YouTube'da açar.
-                            if (trailerKey.isNotBlank()) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.20f))
-                                        .clickable {
-                                            runCatching {
-                                                val intent = Intent(
-                                                    Intent.ACTION_VIEW,
-                                                    Uri.parse("https://www.youtube.com/watch?v=$trailerKey")
-                                                )
-                                                context.startActivity(intent)
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.SmartDisplay,
-                                        contentDescription = "Fragman",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
+                            // Fragman butonu kaldırıldı: sinopsisin altındaki gömülü
+                            // fragman oynatıcısı zaten mevcut (TrailerPlayer).
                         }
                     }
                 }

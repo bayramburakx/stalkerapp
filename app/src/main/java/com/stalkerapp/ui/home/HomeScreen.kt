@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
@@ -69,12 +68,13 @@ fun HomeScreen(
     // menü geçişleri daha akıcı olur.
     val saveableStateHolder = rememberSaveableStateHolder()
 
+    // Kütüphanem alt menüden kaldırıldı: Ayarlar → Kütüphanem üzerinden açılır
+    // (tab 5'e geçiş yapılır; menüde 5 öğe kalır: Ana, Canlı, Film, Dizi, Ayarlar).
     val navItems = listOf(
         NavItem(Icons.Default.Home, "Ana Sayfa"),
         NavItem(Icons.Default.LiveTv, "Canlı TV"),
         NavItem(Icons.Default.Movie, "Filmler"),
         NavItem(Icons.Default.VideoLibrary, "Diziler"),
-        NavItem(Icons.Default.Bookmark, "Kütüphanem"),
         NavItem(Icons.Default.Settings, "Ayarlar"),
         NavItem(Icons.Default.Search, "Ara", onClick = onOpenSearch)
     )
@@ -150,12 +150,17 @@ fun HomeScreen(
                 1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding(), onOpenGuide = onOpenGuide)
                 2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
                 3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
-                4 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
-                5 -> SettingsScreen(vm, contentModifier.statusBarsPadding()) {
-                    val p = vm.repository.cachedProfile()
-                    profile = p
-                    if (p != null) vm.syncVodIfNeeded(p)
-                }
+                4 -> SettingsScreen(
+                    vm = vm,
+                    modifier = contentModifier.statusBarsPadding(),
+                    onPortalsChanged = {
+                        val p = vm.repository.cachedProfile()
+                        profile = p
+                        if (p != null) vm.syncVodIfNeeded(p)
+                    },
+                    onOpenLibrary = { tab = 5 }
+                )
+                5 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
             }
         }
     }

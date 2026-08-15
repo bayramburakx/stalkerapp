@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.ListAlt
@@ -106,7 +108,8 @@ private val HOME_SECTIONS = listOf(
 fun SettingsScreen(
     vm: MainViewModel,
     modifier: Modifier = Modifier,
-    onPortalsChanged: () -> Unit = {}
+    onPortalsChanged: () -> Unit = {},
+    onOpenLibrary: () -> Unit = {}
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
@@ -179,8 +182,11 @@ fun SettingsScreen(
         Text("Ayarlar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
         // ================= PLAYLIST & KAYNAKLAR =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.Tv, "Playlist & Kaynaklar")
+        AccordionSection(
+            icon = Icons.Default.Tv,
+            title = "Playlist & Kaynaklar",
+            initiallyExpanded = true
+        ) {
                 Text(
                     "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını buradan yönetirsin. " +
                         "Kapatılan kaynak türü Canlı TV ve kütüphanede kullanılmaz.",
@@ -312,8 +318,10 @@ fun SettingsScreen(
         }
 
         // ================= KÜTÜPHANE & İÇERİK =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.VideoLibrary, "Kütüphane & İçerik")
+        AccordionSection(
+            icon = Icons.Default.VideoLibrary,
+            title = "Kütüphane & İçerik"
+        ) {
 
                 ToggleRow(
                     icon = Icons.Default.Lock,
@@ -519,16 +527,24 @@ fun SettingsScreen(
                     ) { Text("Şimdi Senkronize Et") }
                     OutlinedButton(onClick = { vm.resetVodCatalog() }) { Text("Kataloğu Sıfırla") }
                 }
-        }
-
-        // ================= KÜTÜPHANEM =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.Star, "Kütüphanem")
-                Text(
-                    "Sonra izle, izlediklerin, favorilerin ve özel listelerin alt menüdeki Kütüphanem sekmesinde.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        }        // ================= KÜTÜPHANEM =================
+        AccordionSection(
+            icon = Icons.Default.Star,
+            title = "Kütüphanem"
+        ) {
+            Text(
+                "Sonra izle, izlediklerin, favorilerin ve özel listelerin tek ekranda.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onOpenLibrary,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Kütüphanemi Aç")
+            }
                 Text("Özel Listelerim", style = MaterialTheme.typography.titleSmall)
                 if (userLists.isEmpty()) {
                     Text(
@@ -574,8 +590,10 @@ fun SettingsScreen(
         }
 
         // ================= OYNATICI =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.VolumeUp, "Oynatıcı")
+        AccordionSection(
+            icon = Icons.Default.VolumeUp,
+            title = "Oynatıcı"
+        ) {
 
                 ToggleRow(
                     icon = Icons.Default.PlayArrow,
@@ -691,8 +709,10 @@ fun SettingsScreen(
         }
 
         // ================= ENTEGRASYONLAR =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.Link, "Entegrasyonlar")
+        AccordionSection(
+            icon = Icons.Default.Link,
+            title = "Entegrasyonlar"
+        ) {
                 Text(
                     "TMDB (themoviedb.org) anahtarı: oyuncu fotoğrafları, fragman ve gerçek bölüm adları. " +
                         "Boşsa özellikler kapalıdır.",
@@ -717,8 +737,10 @@ fun SettingsScreen(
         }
 
         // ================= HESAP =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.Person, "Hesap")
+        AccordionSection(
+            icon = Icons.Default.Person,
+            title = "Hesap"
+        ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -753,8 +775,10 @@ fun SettingsScreen(
         }
 
         // ================= GİZLİLİK =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik")
+        AccordionSection(
+            icon = Icons.Default.VerifiedUser,
+            title = "Gizlilik & Güvenlik"
+        ) {
                 Text(
                     "Tüm verilerin (portallar, izleme geçmişi, listeler) yalnızca bu cihazda saklanır. " +
                         "Hiçbir veri uygulama dışına gönderilmez.",
@@ -768,8 +792,10 @@ fun SettingsScreen(
         }
 
         // ================= HAKKINDA & DESTEK =================
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            SectionHeader(Icons.Default.Info, "Hakkında & Destek")
+        AccordionSection(
+            icon = Icons.Default.Info,
+            title = "Hakkında & Destek"
+        ) {
                 Text("Stalker Player v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Stalker portal, M3U ve Xtream Codes destekli IPTV oynatıcı.",
@@ -961,6 +987,57 @@ private fun SettingsCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) { content() }
+    }
+}
+
+/**
+ * Tıklayınca açılıp kapanan ayar bölümü (akordeon). Başlık satırı her zaman
+ * görünür; içerik yalnızca bölüm açıkken çizilir.
+ */
+@Composable
+private fun AccordionSection(
+    icon: ImageVector,
+    title: String,
+    initiallyExpanded: Boolean = false,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
+    SettingsCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "Daralt" else "Genişlet",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        if (expanded) {
+            Spacer(modifier = Modifier.height(6.dp))
+            content()
+        }
     }
 }
 

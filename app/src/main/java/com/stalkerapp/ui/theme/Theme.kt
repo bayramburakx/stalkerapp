@@ -8,11 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF4F8CFF),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF1E3A6E),
-    onPrimaryContainer = Color(0xFFD6E3FF),
-    secondary = Color(0xFF9AA7FF),
+    // Kullanıcı isteği: mavi yok — siyah / beyaz / açık gri palet.
+    primary = Color(0xFFE9EEF5),
+    onPrimary = Color(0xFF10151C),
+    primaryContainer = Color(0xFF2A3340),
+    onPrimaryContainer = Color(0xFFE9EEF5),
+    secondary = Color(0xFFC7CFDA),
     // Kullanıcı isteği: uygulama arka planı tam siyah (hero altı dahil).
     background = Color.Black,
     onBackground = Color(0xFFE9EEF5),
@@ -25,10 +26,11 @@ private val DarkColors = darkColorScheme(
 )
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF2563EB),
+    primary = Color(0xFF10151C),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCE7FF),
-    onPrimaryContainer = Color(0xFF0B2A66),
+    primaryContainer = Color(0xFFE2E7EE),
+    onPrimaryContainer = Color(0xFF10151C),
+    secondary = Color(0xFF56616F),
     background = Color(0xFFF4F6FB),
     onBackground = Color(0xFF10151C),
     surface = Color.White,

@@ -73,6 +73,9 @@ class PortalRepository(
     // Harici (XMLTV) EPG: xmltv_id -> programlar. 6 saatte bir yeniden indirilir.
     private val externalEpgMutex = Mutex()
     private var externalEpg: Map<String, List<EpgProgram>> = emptyMap()
+    // XMLTV'deki kanal kimliği -> görünen ad (display-name). xmltv_id'si boş
+    // olan Stalker kanallarını adla eşleştirmek için tutulur (epg.pw vb.).
+    private var externalEpgNames: Map<String, String> = emptyMap()
     private var externalEpgUrl = ""
     private var externalEpgAt = 0L
     private val externalHttp = OkHttpClient.Builder()
@@ -385,15 +388,30 @@ class PortalRepository(
     private suspend fun externalEpgFor(profile: Profile, channel: Channel): List<EpgProgram> {
         val url = store.settings().epgUrl.trim()
         if (url.isBlank()) return emptyList()
+        ensureExternalEpg(url)
+        // 1) Öncelik: portalın verdiği xmltv_id ile birebir eşleşme.
         val xmltvId = channel.xmltvId.ifBlank {
             // Kanal önbellekte değilse (örn. ana sayfadan doğrudan oynatılan
             // favori kanal) kanal listesinden bul.
             channelsCache[profile.portal?.id]?.values?.asSequence()
                 ?.flatten()?.firstOrNull { it.id == channel.id }?.xmltvId.orEmpty()
         }
-        if (xmltvId.isBlank()) return emptyList()
-        ensureExternalEpg(url)
-        return externalEpg[xmltvId].orEmpty()
+        externalEpg[xmltvId]?.takeIf { it.isNotEmpty() }?.let { return it }
+        // 2) xmltv_id boşsa (çoğu Stalker portalda böyledir) kanal adıyla eşleş.
+        //    epg.pw gibi kaynaklar kanalı display-name ile tanımlar.
+        val name = channel.name.trim().lowercase()
+        if (name.isNotBlank()) {
+            // Önce tam ad, sonra birinci kelime ile yakın eşleşme.
+            val exact = externalEpgNames.entries.firstOrNull { (_, n) ->
+                n.trim().lowercase() == name
+            }
+            val fuzzy = exact ?: externalEpgNames.entries.firstOrNull { (_, n) ->
+                val nn = n.trim().lowercase()
+                nn.isNotBlank() && (nn.contains(name) || name.contains(nn))
+            }
+            fuzzy?.key?.let { k -> externalEpg[k]?.takeIf { it.isNotEmpty() }?.let { return it } }
+        }
+        return emptyList()
     }
 
     /** Harici EPG'yi gerekirse (ilk kez / 6 saat geçti / URL değişti) indirip ayrıştırır. */
@@ -407,38 +425,49 @@ class PortalRepository(
                 System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
                 externalEpg.isEmpty()
             if (!staleAgain) return@withLock
-            externalEpg = downloadAndParseXmltv(url)
+            val (programs, names) = downloadAndParseXmltv(url)
+            externalEpg = programs
+            externalEpgNames = names
             externalEpgUrl = url
             externalEpgAt = System.currentTimeMillis()
         }
     }
 
     /**
-     * XMLTV dosyasını akış olarak indirip ayrıştırır (gzip destekli). Büyük
-     * dosyalarda tüm içerik belleğe alınmaz — XmlPullParser ile satır satır okunur.
+     * XMLTV dosyasını akış olarak indirip ayrıştırır (gzip destekli — hem
+     * .gz uzantısı hem de Content-Encoding: gzip yanıtı için). Büyük dosyalarda
+     * tüm içerik belleğe alınmaz — XmlPullParser ile satır satır okunur.
+     * Dönüş: (programlar, kanal id -> display-name haritası).
      */
-    private suspend fun downloadAndParseXmltv(url: String): Map<String, List<EpgProgram>> {
+    private suspend fun downloadAndParseXmltv(url: String): Pair<Map<String, List<EpgProgram>>, Map<String, String>> {
         return withContext(Dispatchers.IO) {
             runCatching {
                 val req = Request.Builder().url(url)
                     .header("User-Agent", "StalkerPlayer/1.0")
+                    .header("Accept-Encoding", "gzip")
                     .build()
                 externalHttp.newCall(req).execute().use { r ->
-                    if (!r.isSuccessful) return@use emptyMap()
-                    val raw = r.body?.byteStream() ?: return@use emptyMap()
-                    val input = if (url.contains(".gz", ignoreCase = true)) {
-                        GZIPInputStream(raw)
-                    } else raw
+                    if (!r.isSuccessful) return@use emptyMap<String, List<EpgProgram>>() to emptyMap()
+                    val raw = r.body?.byteStream() ?: return@use emptyMap<String, List<EpgProgram>>() to emptyMap()
+                    // OkHttp Accept-Encoding: gzip gönderdiğimizde yanıtı otomatik
+                    // açar; yine de URL .gz ise ya da header gzip ise elle açılır.
+                    val enc = r.header("Content-Encoding")?.lowercase().orEmpty()
+                    val input = when {
+                        url.contains(".gz", ignoreCase = true) -> GZIPInputStream(raw)
+                        enc.contains("gzip") -> GZIPInputStream(raw)
+                        else -> raw
+                    }
                     parseXmltv(input)
                 }
-            }.getOrDefault(emptyMap())
+            }.getOrDefault(emptyMap<String, List<EpgProgram>>() to emptyMap())
         }
     }
 
-    private fun parseXmltv(input: java.io.InputStream): Map<String, List<EpgProgram>> {
+    private fun parseXmltv(input: java.io.InputStream): Pair<Map<String, List<EpgProgram>>, Map<String, String>> {
         val parser = Xml.newPullParser()
         parser.setInput(input, "UTF-8")
         val out = mutableMapOf<String, MutableList<EpgProgram>>()
+        val names = mutableMapOf<String, String>()
         var chId = ""
         var startRaw = ""
         var stopRaw = ""
@@ -446,11 +475,15 @@ class PortalRepository(
         var desc = StringBuilder()
         var inTitle = false
         var inDesc = false
+        var inChannelName = false
+        var channelId = ""
         val now = System.currentTimeMillis() / 1000
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
                 XmlPullParser.START_TAG -> when (parser.name) {
+                    "channel" -> channelId = parser.getAttributeValue(null, "id") ?: ""
+                    "display-name" -> inChannelName = channelId.isNotBlank()
                     "programme" -> {
                         chId = parser.getAttributeValue(null, "channel") ?: ""
                         startRaw = parser.getAttributeValue(null, "start") ?: ""
@@ -462,10 +495,16 @@ class PortalRepository(
                     "desc", "sub-title" -> inDesc = true
                 }
                 XmlPullParser.TEXT -> {
+                    if (inChannelName && channelId.isNotBlank()) {
+                        val n = parser.text?.trim().orEmpty()
+                        if (n.isNotBlank()) names.putIfAbsent(channelId, n)
+                    }
                     if (inTitle) title.append(parser.text)
                     if (inDesc) desc.append(parser.text)
                 }
                 XmlPullParser.END_TAG -> when (parser.name) {
+                    "display-name" -> inChannelName = false
+                    "channel" -> channelId = ""
                     "title" -> inTitle = false
                     "desc", "sub-title" -> inDesc = false
                     "programme" -> {
@@ -492,7 +531,7 @@ class PortalRepository(
             event = parser.next()
         }
         input.close()
-        return out.mapValues { (_, v) -> v.sortedBy { it.startTs } }
+        return out.mapValues { (_, v) -> v.sortedBy { it.startTs } } to names
     }
 
     /** XMLTV zamanı ("20260815183000 +0200") -> epoch saniye. Zaman dilimi yoksa UTC varsayılır. */
@@ -955,6 +994,7 @@ class PortalRepository(
     fun clearEpgCache() {
         epgCache.clear()
         externalEpg = emptyMap()
+        externalEpgNames = emptyMap()
         externalEpgUrl = ""
         externalEpgAt = 0L
     }
