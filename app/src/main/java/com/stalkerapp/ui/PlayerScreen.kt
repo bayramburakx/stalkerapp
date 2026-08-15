@@ -2,6 +2,7 @@ package com.stalkerapp.ui
 
 import android.app.Activity
 import android.content.Context
+import android.util.TypedValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -174,16 +175,20 @@ fun PlayerScreen(navController: NavHostController) {
         PlayerView(context).apply {
             useController = false
             // Altyazı boyutu (Ayarlar → Oynatıcı → Altyazı Boyutu).
-            val size = app.store.settings().subtitleSize.coerceIn(10, 32)
-            captionStyle = CaptionStyleCompat(
-                CaptionStyleCompat.DEFAULT.typeface,
-                CaptionStyleCompat.DEFAULT.foregroundColor,
-                CaptionStyleCompat.DEFAULT.backgroundColor,
-                CaptionStyleCompat.DEFAULT.windowColor,
-                CaptionStyleCompat.DEFAULT.edgeType,
-                CaptionStyleCompat.DEFAULT.edgeColor,
-                size / 16f
-            )
+            subtitleView?.apply {
+                setStyle(CaptionStyleCompat(
+                    CaptionStyleCompat.DEFAULT.foregroundColor,
+                    CaptionStyleCompat.DEFAULT.backgroundColor,
+                    CaptionStyleCompat.DEFAULT.windowColor,
+                    CaptionStyleCompat.DEFAULT.edgeType,
+                    CaptionStyleCompat.DEFAULT.edgeColor,
+                    CaptionStyleCompat.DEFAULT.typeface
+                ))
+                setFixedTextSize(
+                    TypedValue.COMPLEX_UNIT_SP,
+                    app.store.settings().subtitleSize.coerceIn(10, 32).toFloat()
+                )
+            }
         }
     }
 
