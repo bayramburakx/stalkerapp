@@ -23,25 +23,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -61,6 +57,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +75,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.BuildConfig
+import com.stalkerapp.data.Genre
 import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.UpdateChecker
@@ -173,21 +171,52 @@ fun SettingsScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text("Ayarlar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    // Sayfa gezinme: null = bölüm listesi, değer = açık bölüm sayfası.
+    var currentSection by remember { mutableStateOf<String?>(null) }
 
-        // ================= PLAYLIST & KAYNAKLAR =================
-        AccordionSection(
-            icon = Icons.Default.Tv,
-            title = "Playlist & Kaynaklar",
-            initiallyExpanded = true
+    if (currentSection == null) {
+        // ================= AYARLAR — BÖLÜM LİSTESİ =================
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            Text("Ayarlar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Bir bölüm seç:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SettingsNavRow(Icons.Default.Tv, "Playlist & Kaynaklar", "Stalker portal, M3U ve Xtream kaynakları") { currentSection = "playlist" }
+            SettingsNavRow(Icons.Default.VideoLibrary, "Kütüphane & İçerik", "+18, gizlenen gruplar, ana sayfa düzeni") { currentSection = "content" }
+            SettingsNavRow(Icons.Default.Star, "Kütüphanem", "Favoriler, Sonra İzle, özel listeler") { currentSection = "library" }
+            SettingsNavRow(Icons.Default.VolumeUp, "Oynatıcı", "Kalite, altyazı, çözücü, jestler") { currentSection = "player" }
+            SettingsNavRow(Icons.Default.Link, "Entegrasyonlar", "TMDB ve harici servisler") { currentSection = "integrations" }
+            SettingsNavRow(Icons.Default.Person, "Hesap", "Profil ve hesap ayarları") { currentSection = "account" }
+            SettingsNavRow(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik", "Gizlilik anlaşması") { currentSection = "privacy" }
+            SettingsNavRow(Icons.Default.Info, "Hakkında & Destek", "Sürüm, güncelleme, destek") { currentSection = "about" }
+        }
+        return
+    }
+
+    // ================= BÖLÜM SAYFASI =================
+    SettingsPage(
+        title = when (currentSection) {
+            "playlist" -> "Playlist & Kaynaklar"
+            "content" -> "Kütüphane & İçerik"
+            "library" -> "Kütüphanem"
+            "player" -> "Oynatıcı"
+            "integrations" -> "Entegrasyonlar"
+            "account" -> "Hesap"
+            "privacy" -> "Gizlilik & Güvenlik"
+            else -> "Hakkında & Destek"
+        },
+        onBack = { currentSection = null }
+    ) {
+        when (currentSection) {
+            "playlist" -> {
                 Text(
                     "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını buradan yönetirsin. " +
                         "Kapatılan kaynak türü Canlı TV ve kütüphanede kullanılmaz.",
@@ -319,13 +348,8 @@ fun SettingsScreen(
                         Text("Xtream Ekle")
                     }
                 }
-        }
-
-        // ================= KÜTÜPHANE & İÇERİK =================
-        AccordionSection(
-            icon = Icons.Default.VideoLibrary,
-            title = "Kütüphane & İçerik"
-        ) {
+            }
+            "content" -> {
 
                 ToggleRow(
                     icon = Icons.Default.Lock,
@@ -335,48 +359,62 @@ fun SettingsScreen(
                     onCheckedChange = { vm.saveSettings(settings.copy(adultContentEnabled = it)) }
                 )
 
-                // ---- Gizlenen kategoriler ----
+                // ---- Gizlenen canlı TV grupları ----
                 Text(
-                    "Gizlenecek Kategoriler",
+                    "Gizlenecek Canlı TV Grupları",
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 Text(
-                    "İstemediğin kategorileri tek tek kapat — film/dizi listelerinde ve ana sayfada görünmez.",
+                    "İstemediğin kanal gruplarını tek tek kapat — Canlı TV listesinde ve ana sayfada görünmez.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (catalog.categories.isEmpty()) {
+                var channelGroups by remember { mutableStateOf<List<Genre>?>(null) }
+                LaunchedEffect(appProfile, activeKind, activeSourceId) {
+                    channelGroups = runCatching { vm.loadChannelsForActiveSource(appProfile)?.first }.getOrNull()
+                }
+                val groups = channelGroups
+                if (groups == null) {
                     Text(
-                        "Katalog senkronlanınca kategoriler burada listelenir.",
+                        "Kanal grupları yükleniyor…",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    catalog.categories.take(24).forEach { g ->
-                        val hidden = settings.hiddenCategories.contains(g.title)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    val newHidden = if (hidden) settings.hiddenCategories - g.title
-                                    else settings.hiddenCategories + g.title
-                                    vm.saveSettings(settings.copy(hiddenCategories = newHidden))
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                g.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(checked = !hidden, onCheckedChange = {
-                                val newHidden = if (it) settings.hiddenCategories - g.title
-                                else settings.hiddenCategories + g.title
-                                vm.saveSettings(settings.copy(hiddenCategories = newHidden))
-                            })
+                    val visibleGroups = groups.filter { it.id != 0L }
+                    if (visibleGroups.isEmpty()) {
+                        Text(
+                            "Aktif kaynakta grup bulunamadı. Canlı TV'ye kaynak eklerseniz gruplar burada listelenir.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        visibleGroups.forEach { g ->
+                            val hidden = settings.hiddenChannelGroups.contains(g.title)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        val newHidden = if (hidden) settings.hiddenChannelGroups - g.title
+                                        else settings.hiddenChannelGroups + g.title
+                                        vm.saveSettings(settings.copy(hiddenChannelGroups = newHidden))
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    g.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Switch(checked = !hidden, onCheckedChange = {
+                                    val newHidden = if (it) settings.hiddenChannelGroups - g.title
+                                    else settings.hiddenChannelGroups + g.title
+                                    vm.saveSettings(settings.copy(hiddenChannelGroups = newHidden))
+                                })
+                            }
                         }
                     }
                 }
@@ -464,6 +502,26 @@ fun SettingsScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                // Hazır EPG kaynakları: tek dokunuşla seç, sonra Kaydet.
+                val trEpg = "https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz"
+                val allEpg = "https://epg.pw/xmltv/epg.xml"
+                Text(
+                    "Önerilen: Türkiye EPG'si küçük (166KB) ve hızlıdır. epg.pw tüm dünya dosyası çok büyüktür — ilk yükleme uzun sürer.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GlassChip(
+                        selected = epgUrl.trim() == trEpg,
+                        onClick = { epgUrl = trEpg },
+                        label = "Türkiye (önerilen)"
+                    )
+                    GlassChip(
+                        selected = epgUrl.trim() == allEpg,
+                        onClick = { epgUrl = allEpg },
+                        label = "Tüm dünya (epg.pw)"
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
@@ -531,11 +589,8 @@ fun SettingsScreen(
                     ) { Text("Şimdi Senkronize Et") }
                     OutlinedButton(onClick = { vm.resetVodCatalog() }) { Text("Kataloğu Sıfırla") }
                 }
-        }        // ================= KÜTÜPHANEM =================
-        AccordionSection(
-            icon = Icons.Default.Star,
-            title = "Kütüphanem"
-        ) {
+            }
+            "library" -> {
             Text(
                 "Sonra izle, izlediklerin, favorilerin ve özel listelerin tek ekranda.",
                 style = MaterialTheme.typography.bodySmall,
@@ -591,13 +646,8 @@ fun SettingsScreen(
                         enabled = newListName.trim().isNotBlank()
                     ) { Text("Oluştur") }
                 }
-        }
-
-        // ================= OYNATICI =================
-        AccordionSection(
-            icon = Icons.Default.VolumeUp,
-            title = "Oynatıcı"
-        ) {
+            }
+            "player" -> {
 
                 ToggleRow(
                     icon = Icons.Default.PlayArrow,
@@ -710,13 +760,8 @@ fun SettingsScreen(
                     steps = 23
                 )
                 Text("Ofset: ${timezoneOffset.toInt()} saat", style = MaterialTheme.typography.bodyLarge)
-        }
-
-        // ================= ENTEGRASYONLAR =================
-        AccordionSection(
-            icon = Icons.Default.Link,
-            title = "Entegrasyonlar"
-        ) {
+            }
+            "integrations" -> {
                 Text(
                     "TMDB (themoviedb.org) anahtarı: oyuncu fotoğrafları, fragman ve gerçek bölüm adları. " +
                         "Boşsa özellikler kapalıdır.",
@@ -738,13 +783,8 @@ fun SettingsScreen(
                     enabled = tmdbKey.trim().isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Kaydet") }
-        }
-
-        // ================= HESAP =================
-        AccordionSection(
-            icon = Icons.Default.Person,
-            title = "Hesap"
-        ) {
+            }
+            "account" -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -776,13 +816,8 @@ fun SettingsScreen(
                         onClick = { showSwitch = true },
                         enabled = portals.isNotEmpty()                    ) { Text("Profil Değiştir") }
                 }
-        }
-
-        // ================= GİZLİLİK =================
-        AccordionSection(
-            icon = Icons.Default.VerifiedUser,
-            title = "Gizlilik & Güvenlik"
-        ) {
+            }
+            "privacy" -> {
                 Text(
                     "Tüm verilerin (portallar, izleme geçmişi, listeler) yalnızca bu cihazda saklanır. " +
                         "Hiçbir veri uygulama dışına gönderilmez.",
@@ -793,13 +828,8 @@ fun SettingsScreen(
                     onClick = { showPrivacy = true },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Gizlilik Anlaşması'nı Oku") }
-        }
-
-        // ================= HAKKINDA & DESTEK =================
-        AccordionSection(
-            icon = Icons.Default.Info,
-            title = "Hakkında & Destek"
-        ) {
+            }
+            "about" -> {
                 Text("Stalker Player v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Stalker portal, M3U ve Xtream Codes destekli IPTV oynatıcı.",
@@ -819,10 +849,8 @@ fun SettingsScreen(
                 if (updateMessage != null) {
                     Text(updateMessage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
+            }
         }
-
-        // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor.
-        Spacer(Modifier.height(96.dp))
     }
 
     // ---------- Dialog'lar ----------
@@ -995,53 +1023,84 @@ private fun SettingsCard(
 }
 
 /**
- * Tıklayınca açılıp kapanan ayar bölümü (akordeon). Başlık satırı her zaman
- * görünür; içerik yalnızca bölüm açıkken çizilir.
+ * Ayarlar bölüm listesindeki satır: ikonlu cam kutu + başlık + açıklama + sağ ok.
+ * Tıklayınca ilgili bölüm sayfası açılır.
  */
 @Composable
-private fun AccordionSection(
+private fun SettingsNavRow(
     icon: ImageVector,
     title: String,
-    initiallyExpanded: Boolean = false,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    desc: String,
+    onClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(initiallyExpanded) }
-    SettingsCard(modifier = modifier) {
+    SettingsCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Icon(
-                if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (expanded) "Daralt" else "Genişlet",
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(22.dp)
             )
         }
-        if (expanded) {
-            Spacer(modifier = Modifier.height(6.dp))
+    }
+}
+
+/** Bölüm sayfası kabuğu: geri oku + başlık + kaydırılabilir içerik kartı. */
+@Composable
+private fun SettingsPage(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        SettingsCard(modifier = Modifier.fillMaxWidth()) {
             content()
         }
+        Spacer(modifier = Modifier.height(96.dp))
     }
 }
 

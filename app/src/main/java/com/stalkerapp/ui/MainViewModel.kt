@@ -84,6 +84,14 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _watchedVersion.value++
     }
 
+    /** Medyayı ana sayfadaki "Son İzlenenler" / "İzlemeye Devam" bölümlerinden gizler. */
+    fun hideFromHome(itemId: Long) {
+        val current = store.settings().hiddenFromHome
+        if (itemId in current) return
+        store.saveSettings(store.settings().copy(hiddenFromHome = current + itemId))
+        _settings.value = store.settings()
+    }
+
     suspend fun loadHomeChannels(profile: Profile) {
         if (_homeChannels.value == null) {
             _homeChannels.value =

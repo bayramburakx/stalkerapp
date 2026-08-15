@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +93,7 @@ fun VodScreen(
     // aşağı scroll ettikçe kalanı yüklenir (donma/kasma için — Samsung S25FE).
     var visibleCount by remember { mutableStateOf(90) }
     val pageStep = 120
+    val gridState = rememberLazyGridState()
     // İzlenme işaretleri anlık güncellenir: watchedVersion her değiştiğinde
     // Store'dan taze okunur (sheet'te izlendi işaretlenince rozet anında çıkar).
     val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
@@ -110,6 +113,7 @@ fun VodScreen(
     // Kategori/arama değişince paging baştan başlar.
     LaunchedEffect(selectedCategory, query, filterIsSeries) {
         visibleCount = 90
+        gridState.scrollToItem(0)
     }
 
     // +18 ve kullanıcının gizlediği kategoriler listelerden filtrelenir.
@@ -141,6 +145,22 @@ fun VodScreen(
                         it.originalName.contains(q, ignoreCase = true)
                 }
             }
+    }
+
+    // Aşağı scroll ettikçe yükle: son satıra yaklaşınca bir sonraki sayfayı ekle.
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val info = gridState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible >= info.totalItemsCount - 6
+        }
+    }
+    // Sadece shouldLoadMore değişince tetiklenir — sayfa eklendikten sonra son
+    // satır uzağa gider ve kullanıcı tekrar scroll edince yeni sayfa yüklenir.
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && visibleCount < filtered.size) {
+            visibleCount += pageStep
+        }
     }
 
     val catList = catalog.categories
@@ -239,6 +259,7 @@ fun VodScreen(
             else -> {
                 val pageItems = filtered.take(visibleCount)
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Fixed(3),
                     // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son
                     // posterin pill altında kaybolmaması için.
@@ -258,10 +279,9 @@ fun VodScreen(
                             onClick = { onOpenVod(item.id, isSeries) }
                         )
                     }
-                    // Liste sonuna gelindiğinde bir sonraki sayfayı yükle.
+                    // Liste sonuna gelindiğinde bir sonraki sayfa yükleniyor göstergesi.
                     if (visibleCount < filtered.size) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            LaunchedEffect(Unit) { visibleCount += pageStep }
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()

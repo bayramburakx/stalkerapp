@@ -130,10 +130,12 @@ fun HomeDashboardScreen(
         loadingChannels = false
     }
 
-    val continueWatching = remember(catalog, app.store) {
+    // Ana sayfadan kaldırılanlar (uzun bas → "Ana Sayfadan Kaldır").
+    val hiddenFromHome = settings.hiddenFromHome.toSet()
+    val continueWatching = remember(catalog, app.store, hiddenFromHome) {
         val progress = app.store.loadVodProgress()
         progress.mapNotNull { (id, p) ->
-            if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.95) {
+            if (id !in hiddenFromHome && p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.95) {
                 catalog.byId[id]?.let { it to p }
             } else null
         }
@@ -141,13 +143,14 @@ fun HomeDashboardScreen(
 
     // Son İzlenenler: hem film ilerlemeleri hem de dizi bölüm ilerlemeleri,
     // son izlenme zamanına göre sıralanır (tamamlanmışlar da dahil).
-    val recentlyWatched = remember(catalog, app.store) {
+    val recentlyWatched = remember(catalog, app.store, hiddenFromHome) {
         val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
-            catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
+            if (id in hiddenFromHome) null else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
         }
         val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
             val id = key.substringBefore(':').toLongOrNull()
-            if (id == null) null else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
+            if (id == null || id in hiddenFromHome) null
+            else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
         }
         // byId garantili: katalogda olmayan öğe map'te bulunmaz.
         (vod + eps)

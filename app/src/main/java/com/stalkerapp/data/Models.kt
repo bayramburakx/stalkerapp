@@ -42,8 +42,9 @@ data class Settings(
      * Harici EPG (XMLTV) URL'si. Portalın kendi EPG'si yoksa buradan çekilir
      * (kanallar `xmltv_id` ile eşleştirilir). Ör: sağlayıcının EPG linki ya da
      * kendi barındırdığın bir XMLTV dosyası (ör. iptv-org/epg çıktısı).
+     * Varsayılan: Türkiye kanallarını içeren küçük (166KB) bir XMLTV kaynağı.
      */
-    val epgUrl: String = "",
+    val epgUrl: String = "https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz",
 
     // ---------- Kaynak anahtarları (Playlist & Kaynaklar) ----------
     /** Stalker portal kaynağı etkin mi? */
@@ -58,6 +59,10 @@ data class Settings(
     val adultContentEnabled: Boolean = false,
     /** Kullanıcının gizlediği kategori başlıkları (VOD listelerinde ve ana sayfada filtrelenir). */
     val hiddenCategories: List<String> = emptyList(),
+    /** Ana sayfada "Son İzlenenler" / "İzlemeye Devam" bölümlerinde gösterilmeyecek medya ID'leri. */
+    val hiddenFromHome: List<Long> = emptyList(),
+    /** Kullanıcının gizlediği canlı TV grup başlıkları (kanal listesinden ve filtre çiplerinden gizlenir). */
+    val hiddenChannelGroups: List<String> = emptyList(),
     /** Ana sayfa düzeni: "rows" (varsayılan), "compact", "list". */
     val homeLayout: String = "rows",
     /** Ana sayfa bölüm sırası (HomeDashboardScreen bölüm adları). */

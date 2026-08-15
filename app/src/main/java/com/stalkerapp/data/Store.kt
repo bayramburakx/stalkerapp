@@ -135,6 +135,13 @@ class Store(private val context: Context) {
         prefs.edit().putString(KEY_SETTINGS, json.encodeToString(Settings.serializer(), settings)).apply()
     }
 
+    /** İndirilen harici EPG'nin disk önbellek dosyası (uygulama yeniden açılınca yeniden indirme yok). */
+    fun epgCacheFile(): File = File(context.cacheDir, "external_epg.json")
+
+    fun clearEpgCacheFile() {
+        runCatching { epgCacheFile().delete() }
+    }
+
     // ---------- Kullanıcı profili ----------
 
     fun userProfile(): UserProfile = runCatching {

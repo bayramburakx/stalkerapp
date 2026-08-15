@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -76,7 +78,21 @@ class PortalRepository(
     // XMLTV'deki kanal kimliği -> görünen ad (display-name). xmltv_id'si boş
     // olan Stalker kanallarını adla eşleştirmek için tutulur (epg.pw vb.).
     private var externalEpgNames: Map<String, String> = emptyMap()
+    // Normalleştirilmiş kanal adı -> xmltv_id listesi (liste başına "şu an oynayan"
+    // aramasını hızlandırır; her harici EPG yüklemesinde bir kez kurulur).
+    private var externalEpgNormIndex: Map<String, List<String>> = emptyMap()
     private var externalEpgUrl = ""
+
+    /** Harici EPG'nin disk önbelleği (uygulama yeniden açılınca yeniden indirilmez). */
+    @Serializable
+    private data class ExternalEpgCache(
+        val url: String = "",
+        val at: Long = 0,
+        val names: Map<String, String> = emptyMap(),
+        val programs: Map<String, List<EpgProgram>> = emptyMap()
+    )
+
+    private val externalEpgJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private var externalEpgAt = 0L
     private val externalHttp = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -429,7 +445,55 @@ class PortalRepository(
         return emptyList()
     }
 
-    /** Harici EPG'yi gerekirse (ilk kez / 6 saat geçti / URL değişti) indirip ayrıştırır. */
+    /**
+     * Kanal listesi için "şu an oynayan" program adlarını döner (kanal id -> ad).
+     * Harici EPG'yi bir kez hazırlar (disk önbelleğinden anında), sonra her kanal
+     * için xmltv_id / kanal adı eşleşmesi yapar. Portal EPG'si burada çağrılmaz —
+     * liste başına N istek cooldown'u tetiklerdi; oynatıcıdaki rehber portal EPG'sini kullanır.
+     */
+    suspend fun nowPlayingTitles(channels: List<Channel>): Map<Long, String> {
+        if (channels.isEmpty()) return emptyMap()
+        val url = store.settings().epgUrl.trim()
+        if (url.isBlank()) return emptyMap()
+        runCatching { ensureExternalEpg(url) }
+        val epg = externalEpg
+        if (epg.isEmpty()) return emptyMap()
+        return withContext(Dispatchers.Default) {
+            val now = System.currentTimeMillis() / 1000
+            val norm = externalEpgNormIndex
+            val out = HashMap<Long, String>(channels.size)
+            for (ch in channels) {
+                var progs: List<EpgProgram>? = null
+                // 1) xmltv_id ile birebir eşleşme.
+                if (ch.xmltvId.isNotBlank()) progs = epg[ch.xmltvId]
+                // 2) Kanal adıyla: normalleştirilmiş tam eşleşme, sonra içerme.
+                if (progs.isNullOrEmpty()) {
+                    val name = ch.name.trim()
+                    if (name.isBlank()) continue
+                    val key = normalizeEpgName(name)
+                    val ids = norm[key]
+                    var id = ids?.firstOrNull()
+                    if (id == null) {
+                        val fuzzy = norm.entries.firstOrNull { (k, v) ->
+                            v.isNotEmpty() && (k.contains(key) || key.contains(k))
+                        }
+                        id = fuzzy?.value?.firstOrNull()
+                    }
+                    if (id != null) progs = epg[id]
+                }
+                val current = progs?.firstOrNull { it.startTs <= now && now < it.stopTs }
+                if (current != null && !current.isDefault) out[ch.id] = current.name
+            }
+            out
+        }
+    }
+
+    /**
+     * Harici EPG'yi gerekirse (ilk kez / 6 saat geçti / URL değişti) hazırlar.
+     * Sıralama: taze disk önbelleği (anında) → ağdan indirme → ağ başarısızsa
+     * eski disk önbelleği. Böylece rehber "yükleniyor"da takılı kalmaz ve
+     * uygulama yeniden açılınca EPG yeniden indirilmez.
+     */
     private suspend fun ensureExternalEpg(url: String) {
         val stale = externalEpgUrl != url ||
             System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
@@ -440,12 +504,59 @@ class PortalRepository(
                 System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
                 externalEpg.isEmpty()
             if (!staleAgain) return@withLock
+            val disk = loadEpgFromDisk(url)
+            if (disk != null && System.currentTimeMillis() - disk.at < 6 * 3600_000L) {
+                // Disk önbelleği hâlâ taze: ağdan beklemeden anında kullan.
+                applyExternalEpg(disk.programs, disk.names, url, disk.at)
+                return@withLock
+            }
             val (programs, names) = downloadAndParseXmltv(url)
-            externalEpg = programs
-            externalEpgNames = names
-            externalEpgUrl = url
-            externalEpgAt = System.currentTimeMillis()
+            if (programs.isNotEmpty()) {
+                val at = System.currentTimeMillis()
+                applyExternalEpg(programs, names, url, at)
+                saveEpgToDisk(ExternalEpgCache(url, at, names, programs))
+            } else if (disk != null) {
+                // Ağ başarısız: eski disk önbelleğiyle devam et (rehber boş kalmaz).
+                applyExternalEpg(disk.programs, disk.names, url, disk.at)
+            }
         }
+    }
+
+    private fun applyExternalEpg(programs: Map<String, List<EpgProgram>>, names: Map<String, String>, url: String, at: Long) {
+        externalEpg = programs
+        externalEpgNames = names
+        externalEpgUrl = url
+        externalEpgAt = at
+        externalEpgNormIndex = names.entries
+            .groupBy({ normalizeEpgName(it.value) }, { it.key })
+            .filterKeys { it.isNotBlank() }
+    }
+
+    /** Normalleştirilmiş kanal adı: küçük harf, alfanümerik olmayan karakterler atılır. */
+    private fun normalizeEpgName(name: String): String =
+        name.lowercase().filter { it.isLetterOrDigit() || it in "ğışüöçĞIŞÜÖÇ" }
+
+    private suspend fun saveEpgToDisk(cache: ExternalEpgCache) {
+        runCatching {
+            withContext(Dispatchers.IO) {
+                store.epgCacheFile().writeText(externalEpgJson.encodeToString(ExternalEpgCache.serializer(), cache))
+            }
+        }
+    }
+
+    private suspend fun loadEpgFromDisk(url: String): ExternalEpgCache? {
+        val file = store.epgCacheFile()
+        if (!file.exists()) return null
+        return runCatching {
+            withContext(Dispatchers.IO) {
+                val cached = externalEpgJson.decodeFromString(
+                    ExternalEpgCache.serializer(),
+                    file.readText()
+                )
+                // URL değiştiyse eski önbelleği kullanma.
+                if (cached.url == url && cached.programs.isNotEmpty()) cached else null
+            }
+        }.getOrNull()
     }
 
     /**
@@ -526,7 +637,10 @@ class PortalRepository(
                         if (chId.isNotBlank() && startRaw.isNotBlank()) {
                             val startTs = xmltvTimeToEpoch(startRaw)
                             val stopTs = xmltvTimeToEpoch(stopRaw)
-                            if (startTs > 0) {
+                            // Budama: yalnızca rehber için anlamlı programlar tutulur
+                            // (son 6 saat + önümüzdeki 36 saat). epg.pw "All" gibi
+                            // dev dosyalarda bellek ve disk önbelleği küçük kalır.
+                            if (startTs > 0 && stopTs >= now - 6 * 3600 && startTs <= now + 36 * 3600) {
                                 val list = out.getOrPut(chId) { mutableListOf() }
                                 list += EpgProgram(
                                     chId = 0,
@@ -1010,8 +1124,10 @@ class PortalRepository(
         epgCache.clear()
         externalEpg = emptyMap()
         externalEpgNames = emptyMap()
+        externalEpgNormIndex = emptyMap()
         externalEpgUrl = ""
         externalEpgAt = 0L
+        store.clearEpgCacheFile()
     }
 
     /** Force refresh EPG for the given channels (clears and re-fetches in background). */

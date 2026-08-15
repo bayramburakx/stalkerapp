@@ -102,6 +102,10 @@ fun LiveTvScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var selectedGenre by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
+    // Kanal adının altında gösterilecek "şu an oynayan" programlar (harici EPG).
+    var nowPlaying by remember { mutableStateOf(emptyMap<Long, String>()) }
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val hiddenGroups = settings.hiddenChannelGroups.toSet()
 
     LaunchedEffect(profile, kind, sourceId) {
         selectedGenre = 0L
@@ -126,6 +130,12 @@ fun LiveTvScreen(
         } finally {
             loading = false
         }
+    }
+
+    // Kanal listesi yüklendiğinde EPG'den "şu an oynayan" programları hazırla.
+    LaunchedEffect(channels) {
+        val ch = channels ?: return@LaunchedEffect
+        nowPlaying = vm.repository.nowPlayingTitles(ch)
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -203,7 +213,7 @@ fun LiveTvScreen(
             }
         }
 
-        val genreList = genres.orEmpty()
+        val genreList = genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups }
         if (genreList.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -226,7 +236,7 @@ fun LiveTvScreen(
             }
         }
 
-        val allChannels = channels.orEmpty()
+        val allChannels = channels.orEmpty().filter { it.tvGenreTitle !in hiddenGroups }
         // Kategori filtresi tür başlığına göre yapılır (Stalker/M3U/Xtream hepsinde çalışır).
         val activeGenreTitle = genreList.firstOrNull { it.id == selectedGenre }?.title
         val filtered = allChannels.filter { ch ->
@@ -248,6 +258,7 @@ fun LiveTvScreen(
                             channel = ch,
                             baseUrl = profile?.baseUrl.orEmpty(),
                             isFavorite = isFav,
+                            nowPlaying = nowPlaying[ch.id],
                             onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
                             onClick = {
                                 scope.launch {

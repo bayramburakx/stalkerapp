@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Schedule
@@ -170,13 +170,14 @@ fun VodQuickActionsSheet(
                     }
                 }
             }
-            // İlerlemeyi kaldır: Son İzlenen / İzlemeye Devam'dan medya düşer.
+            // Ana sayfadan kaldır: "Son İzlenenler" / "İzlemeye Devam" bölümlerinde
+            // bu medya bir daha görünmez (izleme ilerlemesi korunur).
             QuickActionRow(
-                icon = Icons.Default.Delete,
+                icon = Icons.Default.Home,
                 tint = MaterialTheme.colorScheme.error,
-                label = "İlerlemeyi Kaldır"
+                label = "Ana Sayfadan Kaldır"
             ) {
-                vm.removeProgress(item.id)
+                vm.hideFromHome(item.id)
                 onDismiss()
             }
             QuickActionRow(

@@ -89,6 +89,7 @@ fun ChannelRow(
     modifier: Modifier = Modifier,
     highlight: Boolean = false,
     isFavorite: Boolean = false,
+    nowPlaying: String? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onClick: (Channel) -> Unit
 ) {
@@ -116,7 +117,28 @@ fun ChannelRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (channel.tvGenreTitle.isNotBlank()) {
+            // Şu an oynayan program (EPG) kanal adının hemen altında gösterilir;
+            // yoksa tür adına düşülür.
+            if (!nowPlaying.isNullOrBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFF2E7D32))
+                    )
+                    Text(
+                        text = nowPlaying,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (highlight) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else if (channel.tvGenreTitle.isNotBlank()) {
                 Text(
                     text = channel.tvGenreTitle,
                     style = MaterialTheme.typography.bodySmall,
