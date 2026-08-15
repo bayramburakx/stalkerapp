@@ -393,6 +393,9 @@ object PlaybackManager {
     }
 
     fun stop() {
+        // Oynatıcıdan çıkılırken son konum %85+ ise bölüm izlendi işaretlenir
+        // (5 sn'lik döngü henüz çalışmadan çıkılmış olabilir; stop konumu sıfırlar).
+        checkAutoWatched()
         activePlayer?.stop()
         standbyPlayer?.stop()
         stopService()

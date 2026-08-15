@@ -2,9 +2,6 @@ package com.stalkerapp.ui.vod
 
 import android.content.Intent
 import android.net.Uri
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,6 +45,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +82,8 @@ import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -329,34 +329,38 @@ fun VodDetailScreen(
             playing = true
             try {
                 val allEps = episodes.orEmpty()
-                if (!isSeries || allEps.isEmpty() || episode != null) {
-                    // Film ya da tek bölüm: kayıtlı konumdan devam et.
-                    val prog = if (episode != null) {
-                        app.store.episodeProgress()[episodeKey(episode, selectedSeason ?: 0)]
-                    } else {
-                        app.store.loadVodProgress()[it.id]
-                    }
+                if (!isSeries || allEps.isEmpty()) {
+                    // Film: kayıtlı konumdan devam et.
+                    val prog = app.store.loadVodProgress()[it.id]
                     val startMs = if (prog != null && prog.durationMs > 0 &&
                         prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
                     ) prog.positionMs else 0L
-                    val url = vm.repository.vodStreamUrl(it, p, episode)
+                    val url = vm.repository.vodStreamUrl(it, p, null)
                     PlaybackManager.currentVodId = it.id
                     PlaybackManager.play(url, it.name, it.poster, startPositionMs = startMs)
                 } else {
-                    // Dizi: ilerlemesi olan bölüm varsa oradan, yoksa izlenmemiş
-                    // ilk bölümden başla (kaldığı yerden sorusuz devam).
+                    // Dizi: bölüm HER ZAMAN playEpisode ile oynatılır. Kuyruk
+                    // (VodQueue) doldurulur ki "Sonraki Bölüm" butonu, binge modu
+                    // ve %85 otomatik "izlendi" işareti çalışsın. (Bölümü film
+                    // yoluyla oynatmak kuyruğu temizliyor ve bunların hepsini kırıyordu.)
                     val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
-                    val withProgress = allEps.firstOrNull { ep ->
-                        val pr = app.store.episodeProgress()[episodeKey(ep, seasonNum)]
-                        pr != null && pr.durationMs > 0 &&
-                            pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
+                    val target = if (episode != null) {
+                        episode
+                    } else {
+                        // İlerlemesi olan bölüm varsa oradan, yoksa izlenmemiş ilk bölüm.
+                        val withProgress = allEps.firstOrNull { ep ->
+                            val pr = app.store.episodeProgress()[episodeKey(ep, seasonNum)]
+                            pr != null && pr.durationMs > 0 &&
+                                pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
+                        }
+                        withProgress ?: firstEpisodeToPlay(allEps, seasonNum)
                     }
-                    val target = withProgress ?: firstEpisodeToPlay(allEps, seasonNum)
                     val idx = allEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
-                    val pr = if (withProgress != null) {
-                        app.store.episodeProgress()[episodeKey(withProgress, seasonNum)]
-                    } else null
-                    PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = pr?.positionMs ?: 0)
+                    val pr = app.store.episodeProgress()[episodeKey(target, seasonNum)]
+                    val startMs = if (pr != null && pr.durationMs > 0 &&
+                        pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
+                    ) pr.positionMs else 0L
+                    PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = startMs)
                 }
                 onOpenPlayer()
             } catch (e: Exception) {
@@ -786,7 +790,7 @@ fun VodDetailScreen(
                                         .ifBlank { "Bölüm ${ep.episodeNumber}" }
                                     Box(
                                         modifier = Modifier
-                                            .width(156.dp)
+                                            .width(176.dp)
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(
                                                 if (watched) MaterialTheme.colorScheme.primaryContainer
@@ -979,143 +983,164 @@ fun VodDetailScreen(
 }
 
 /**
- * Fragman oynatıcı: önce YouTube küçük resmi + oynat butonu gösterir; dokununca
- * gömülü WebView oynatıcıya geçer. Beyaz ekran sorununu önlemek için embed
- * (iframe) yerine mobil YouTube sayfası yüklenir + WebChromeClient + DOM
- * depolama etkinleştirilir; hata olursa YouTube uygulamasında açma kısayolu sunulur.
+ * Fragman oynatıcı: küçük resim + oynat butonu gösterir; dokununca fragmanın
+ * doğrudan video akışı çekilir (TMDB videoyu barındırmaz — yalnızca YouTube
+ * kimliğini verir; akış Piped üzerinden alınır) ve ExoPlayer ile uygulama
+ * İÇİNDE video olarak oynatılır (site olarak değil). Akış alınamazsa YouTube
+ * uygulamasında açılır.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
-    var playing by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val app = context.applicationContext as StalkerApp
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(false) }
+    var streamUrl by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    fun openInYoutube() {
+        runCatching {
+            val intent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.youtube.com/watch?v=$key")
+            )
+            context.startActivity(intent)
+        }
+    }
+
+    fun startTrailer() {
+        if (loading) return
+        loading = true
+        scope.launch {
+            val url = app.tmdb.youtubeStreamUrl(key)
+            loading = false
+            if (url.isNullOrBlank()) {
+                failed = true
+                openInYoutube()
+            } else {
+                streamUrl = url
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Black)
     ) {
-        if (!playing) {
-            AsyncImage(
-                model = "https://img.youtube.com/vi/$key/hqdefault.jpg",
-                contentDescription = "Fragman",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.25f))
-                    .clickable { playing = true },
-                contentAlignment = Alignment.Center
-            ) {
+        when {
+            streamUrl != null -> {
+                // Uygulama içinde gerçek video oynatıcı (site değil).
+                TrailerVideoPlayer(url = streamUrl!!)
+                // Sağ altta her zaman YouTube'da açma kısayolu (akış başarısız olursa kaçış).
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.65f)),
-                    contentAlignment = Alignment.Center
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .clickable { openInYoutube() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = "Fragmanı oynat",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
+                    Text(
+                        "YouTube'da aç",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White
                     )
                 }
             }
-        } else if (!failed) {
-            AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.mediaPlaybackRequiresUserGesture = false
-                        settings.javaScriptCanOpenWindowsAutomatically = true
-                        settings.loadWithOverviewMode = true
-                        settings.useWideViewPort = true
-                        settings.allowFileAccess = true
-                        // HTML5 video oynatımı için WebChromeClient şarttır.
-                        webChromeClient = WebChromeClient()
-                        webViewClient = object : WebViewClient() {
-                            override fun onReceivedError(
-                                view: WebView?,
-                                request: android.webkit.WebResourceRequest?,
-                                error: android.webkit.WebResourceError?
-                            ) {
-                                // Yalnızca ana sayfa hatası oynatmayı durdurur;
-                                // alt kaynak (reklam vb.) hataları yok sayılır.
-                                if (request?.isForMainFrame == true) failed = true
-                            }
-                        }
-                        // iframe embed'i Android WebView'da sıklıkla beyaz ekran
-                        // bırakır; mobil YouTube sayfası HTML5 oynatıcıyı açar.
-                        loadUrl("https://m.youtube.com/watch?v=$key&autoplay=1&playsinline=1&rel=0")
+            failed -> {
+                // Akış alınamadı: YouTube uygulamasında aç.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable { openInYoutube() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.SmartDisplay,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Fragman akışı alınamadı — YouTube'da açmak için dokun",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
                     }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-            // Gömülü oynatıcı çalışmazsa (beyaz ekran) kaçış yolu: YouTube'da aç.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .clickable {
-                        failed = true
-                        runCatching {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://www.youtube.com/watch?v=$key")
-                            )
-                            context.startActivity(intent)
-                        }
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    "YouTube'da aç",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White
-                )
+                }
             }
-        } else {
-            // Oynatıcı hata verdi: YouTube uygulamasında yeniden dene.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable {
-                        runCatching {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://www.youtube.com/watch?v=$key")
+            else -> {
+                AsyncImage(
+                    model = "https://img.youtube.com/vi/$key/hqdefault.jpg",
+                    contentDescription = "Fragman",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.25f))
+                        .clickable { startTrailer() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.65f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(30.dp),
+                                strokeWidth = 3.dp,
+                                color = Color.White
                             )
-                            context.startActivity(intent)
+                        } else {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Fragmanı oynat",
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp)
+                            )
                         }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.SmartDisplay,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Gömülü oynatıcı açılamadı — YouTube'da açmak için dokun",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
+                    }
                 }
             }
         }
     }
+}
+
+/** Fragmanı uygulama içinde ExoPlayer ile oynatan mini video oynatıcı. */
+@Composable
+private fun TrailerVideoPlayer(url: String) {
+    val context = LocalContext.current
+    val player = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            prepare()
+            playWhenReady = true
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { player.release() }
+    }
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                useController = true
+                this.player = player
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
 }
 
 /** Süre: portal dakika ya da saniye verebilir; ikisini de "X sa Y dk" / "X dk" biçimine çevirir. */

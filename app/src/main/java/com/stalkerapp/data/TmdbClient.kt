@@ -134,6 +134,38 @@ class TmdbClient(private val keyProvider: () -> String) {
         return person
     }
 
+    /**
+     * Bir YouTube fragmanın doğrudan oynatılabilir video akışını döner.
+     * TMDB videoları barındırmaz — yalnızca YouTube video kimliğini verir;
+     * videonun kendisi YouTube'da. WebView ile site açmak yerine video akışını
+     * Piped (YouTube ön yüzü) genel örneklerinden çekip ExoPlayer ile oynatırız.
+     * Hiçbir örnek çalışmazsa boş döner (çağıran YouTube uygulamasına düşer).
+     */
+    suspend fun youtubeStreamUrl(videoId: String): String? {
+        if (videoId.isBlank()) return null
+        val instances = listOf(
+            "https://pipedapi.kavin.rocks",
+            "https://api.piped.private.coffee",
+            "https://pipedapi.adminforge.de",
+            "https://piped-api.lunar.icu",
+            "https://pipedapi.drgns.space"
+        )
+        for (inst in instances) {
+            val obj = runCatching { getJson("$inst/streams/$videoId") }.getOrNull() ?: continue
+            val streams = obj["videoStreams"] as? JsonArray ?: continue
+            // En yüksek çözünürlükteki akışı seç (videoOnly olmayan tercih edilir).
+            val picked = streams.mapNotNull { it as? JsonObject }
+                .filter { (it["url"] as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true }
+                .sortedWith(
+                    compareByDescending<JsonObject> { (it["videoOnly"] as? JsonPrimitive)?.contentOrNull == "true" }
+                        .thenByDescending { (it["quality"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0 }
+                )
+                .firstOrNull()
+            (picked?.get("url") as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        return null
+    }
+
     private fun extractTrailer(videos: JsonElement?): String {
         val arr = (videos as? JsonObject)?.get("results") as? JsonArray ?: return ""
         for (v in arr) {
