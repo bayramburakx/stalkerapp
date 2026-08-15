@@ -137,6 +137,24 @@ fun HomeDashboardScreen(
         }
     }
 
+    // Son İzlenenler: hem film ilerlemeleri hem de dizi bölüm ilerlemeleri,
+    // son izlenme zamanına göre sıralanır (tamamlanmışlar da dahil).
+    val recentlyWatched = remember(catalog, app.store) {
+        val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
+            catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
+        }
+        val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
+            val id = key.substringBefore(':').toLongOrNull()
+            if (id == null) null else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
+        }
+        // byId garantili: katalogda olmayan öğe map'te bulunmaz.
+        (vod + eps)
+            .sortedByDescending { it.second }
+            .distinctBy { it.first.id }
+            .take(20)
+            .map { it.first to it.third }
+    }
+
     // Uzun bas → hızlı işlemler sheet'i + izlenme işaretleri.
     var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
     // İzlenme işaretleri anlık: watchedVersion değişince Store'dan taze okunur.
@@ -178,7 +196,7 @@ fun HomeDashboardScreen(
 
     // Bölüm sırası (Ayarlar'dan değiştirilebilir).
     val sectionOrder = remember(settings.homeSectionOrder) {
-        val known = listOf("continue", "movies", "series", "favchannels", "live", "favvods")
+        val known = listOf("recent", "continue", "movies", "series", "favchannels", "live", "favvods")
         val custom = settings.homeSectionOrder.filter { it in known }
         custom + known.filter { it !in custom }
     }
@@ -204,6 +222,26 @@ fun HomeDashboardScreen(
 
         sectionOrder.forEach { key ->
             when (key) {
+                "recent" -> if (recentlyWatched.isNotEmpty()) {
+                    Section(title = "Son İzlenenler", onSeeAll = null) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(recentlyWatched, key = { it.first.id }) { (item, _) ->
+                                VodPoster(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = catalog.isSeriesItem(item),
+                                    posterWidth = posterWidth,
+                                    watched = isWatched(item),
+                                    onLongPress = { quickActionItem = item },
+                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                )
+                            }
+                        }
+                    }
+                }
                 "continue" -> if (continueWatching.isNotEmpty()) {
                     Section(title = "İzlemeye Devam", onSeeAll = null) {
                         LazyRow(

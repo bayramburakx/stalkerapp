@@ -92,6 +92,7 @@ private val AVATARS = listOf(
 )
 
 private val HOME_SECTIONS = listOf(
+    "recent" to "Son İzlenenler",
     "continue" to "İzlemeye Devam",
     "movies" to "Popüler Filmler",
     "series" to "Popüler Diziler",

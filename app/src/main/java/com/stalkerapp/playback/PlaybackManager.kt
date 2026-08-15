@@ -90,6 +90,10 @@ object PlaybackManager {
     private var vodPlayback: Boolean = false
     fun isVod(): Boolean = vodPlayback
 
+    // Canlı TV: geçici akış kesintilerinde otomatik yeniden deneme sayacı.
+    // Kullanıcı kanal değiştirdiğinde sıfırlanır; peş peşe en fazla 3 deneme.
+    private var liveRetryCount = 0
+
     private val playerListeners = CopyOnWriteArrayList<(ExoPlayer?) -> Unit>()
     private var stateListeners = CopyOnWriteArrayList<(Boolean, Boolean) -> Unit>()
     private val errorListeners = CopyOnWriteArrayList<(String?) -> Unit>()
@@ -237,6 +241,8 @@ object PlaybackManager {
         logo: String = "",
         subtitle: String = ""
     ) {
+        // Kullanıcı kanal seçti/kanal değiştirdi: otomatik retry sayacı sıfırlanır.
+        liveRetryCount = 0
         ChannelQueue.channels = channels
         ChannelQueue.index = index
         ChannelQueue.profile = profile
@@ -608,6 +614,17 @@ object PlaybackManager {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener.
+                // Yeni bir create_link çağrısı taze play_token üretir; en fazla 3
+                // deneme, ardından hata kullanıcıya gösterilir.
+                if (!vodPlayback && liveRetryCount < 3 && ChannelQueue.channels.isNotEmpty()) {
+                    liveRetryCount++
+                    setError(null)
+                    notifyStateChanged()
+                    retryLiveChannel()
+                    return
+                }
+                liveRetryCount = 0
                 setError(error.message ?: "Oynatma hatası")
                 notifyStateChanged()
             }
@@ -644,6 +661,25 @@ object PlaybackManager {
         val isPlaying = p?.playWhenReady == true && p.playbackState == Player.STATE_READY
         val buffering = p?.playbackState == Player.STATE_BUFFERING
         stateListeners.forEach { it(isPlaying, buffering) }
+    }
+
+    /** Canlı TV kanalını yeni akış URL'siyle (taze play_token) yeniden oynatmayı dener. */
+    private fun retryLiveChannel() {
+        val ch = ChannelQueue.current ?: return
+        scope.launch {
+            delay(2000)
+            val url = try {
+                repository.channelStreamUrl(ch, ChannelQueue.profile)
+            } catch (e: Exception) {
+                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                return@launch
+            }
+            if (url.isBlank()) {
+                setError("Kanal akış URL'si boş")
+                return@launch
+            }
+            playInternal(url, ch.name, ch.logo, ch.tvGenreTitle, isVod = false)
+        }
     }
 
     private fun mediaItem(url: String, title: String, artwork: String = ""): MediaItem {

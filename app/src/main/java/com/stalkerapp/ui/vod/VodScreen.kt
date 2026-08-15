@@ -299,6 +299,27 @@ fun VodPoster(
                     )
                 }
             }
+            // IMDb puanı rozeti (sol alt): portal rating'i boş/0 değilse gösterilir.
+            val ratingText = item.rating.trim().trimEnd('/').let { r ->
+                if (r.isBlank() || r == "0" || r == "0.0") null else r
+            }
+            if (ratingText != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.72f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "★ $ratingText",
+                        color = Color(0xFFFFC107),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
+                    )
+                }
+            }
         }
         Column(modifier = Modifier.padding(top = 6.dp)) {
             Text(
