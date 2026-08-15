@@ -124,14 +124,20 @@ class PortalRepository(
         return saved
     }
 
-    suspend fun channelStreamUrl(ch: Channel, profile: Profile): String {
-        val base = profile.baseUrl
+    suspend fun channelStreamUrl(ch: Channel, profile: Profile?): String {
+        // M3U / Xtream kanallarında `cmd` zaten doğrudan oynatılabilir bir URL'dir
+        // (Stalker create_link gerekmez). Önce o kontrol edilir.
+        StalkerClient.parseCmd(ch.cmd)?.let { u ->
+            if (u.startsWith("http://") || u.startsWith("https://")) return u
+        }
+        val p = profile ?: throw StalkerException("Kanal akış URL'si alınamadı (profil yok)")
+        val base = p.baseUrl
         val resp = try {
             client.request(
                 base,
                 "portal.php?type=itv&action=create_link",
                 "POST",
-                tokenFor(profile),
+                tokenFor(p),
                 mapOf(
                     "cmd" to ch.cmd.ifEmpty { "http://localhost/ch/${ch.id}_" },
                     "series" to "0",
@@ -143,10 +149,10 @@ class PortalRepository(
             null
         }
         if (resp != null) {
-            StalkerClient.extractUrl(resp)?.let { return rewriteLocalhost(it, profile) }
+            StalkerClient.extractUrl(resp)?.let { return rewriteLocalhost(it, p) }
         }
-        StalkerClient.parseCmd(ch.cmd)?.let { return rewriteLocalhost(it, profile) }
-        val server = profile.serverAddress
+        StalkerClient.parseCmd(ch.cmd)?.let { return rewriteLocalhost(it, p) }
+        val server = p.serverAddress
         if (server.isNotBlank()) {
             val s = if (server.startsWith("http")) server else "http://$server"
             return "$s/${ch.id}"

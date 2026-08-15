@@ -209,7 +209,7 @@ object PlaybackManager {
     fun playChannel(
         channels: List<Channel>,
         index: Int,
-        profile: Profile,
+        profile: Profile?,
         logo: String = "",
         subtitle: String = ""
     ) {

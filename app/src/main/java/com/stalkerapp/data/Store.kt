@@ -33,6 +33,50 @@ class Store(private val context: Context) {
 
     fun activePortal(): Portal? = activePortalId()?.let { id -> portals().firstOrNull { it.id == id } }
 
+    // ---------- M3U / Xtream kaynakları ----------
+
+    fun m3uSources(): List<M3uSource> = runCatching {
+        json.decodeFromString(
+            ListSerializer(M3uSource.serializer()),
+            prefs.getString(KEY_M3U_SOURCES, "[]").orEmpty()
+        )
+    }.getOrDefault(emptyList())
+
+    fun saveM3uSources(list: List<M3uSource>) {
+        prefs.edit().putString(
+            KEY_M3U_SOURCES,
+            json.encodeToString(ListSerializer(M3uSource.serializer()), list)
+        ).apply()
+    }
+
+    fun xtreamSources(): List<XtreamSource> = runCatching {
+        json.decodeFromString(
+            ListSerializer(XtreamSource.serializer()),
+            prefs.getString(KEY_XTREAM_SOURCES, "[]").orEmpty()
+        )
+    }.getOrDefault(emptyList())
+
+    fun saveXtreamSources(list: List<XtreamSource>) {
+        prefs.edit().putString(
+            KEY_XTREAM_SOURCES,
+            json.encodeToString(ListSerializer(XtreamSource.serializer()), list)
+        ).apply()
+    }
+
+    /** Aktif kanal kaynağı: "stalker", "m3u" veya "xtream". */
+    fun activeSourceKind(): String = prefs.getString(KEY_ACTIVE_SOURCE_KIND, "stalker").orEmpty()
+
+    fun activeSourceId(): String? = prefs.getString(KEY_ACTIVE_SOURCE_ID, null)
+
+    fun setActiveSource(kind: String, id: String?) {
+        prefs.edit()
+            .putString(KEY_ACTIVE_SOURCE_KIND, kind)
+            .apply {
+                if (id == null) remove(KEY_ACTIVE_SOURCE_ID) else putString(KEY_ACTIVE_SOURCE_ID, id)
+            }
+            .apply()
+    }
+
     fun isOnboardingDone(): Boolean = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
 
     fun setOnboardingDone(done: Boolean) {
@@ -395,6 +439,10 @@ class Store(private val context: Context) {
         private const val KEY_WATCHED_OVERRIDES = "watched_overrides"
         private const val KEY_WATCHED_EPISODES = "watched_episodes"
         private const val KEY_EPISODE_PROGRESS = "episode_progress"
+        private const val KEY_M3U_SOURCES = "m3u_sources"
+        private const val KEY_XTREAM_SOURCES = "xtream_sources"
+        private const val KEY_ACTIVE_SOURCE_KIND = "active_source_kind"
+        private const val KEY_ACTIVE_SOURCE_ID = "active_source_id"
     }
 }
 

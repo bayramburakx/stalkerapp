@@ -37,6 +37,27 @@ data class ServerInfo(
     val city: String = ""
 )
 
+/** M3U tabanlı IPTV kaynağı (URL üzerinden çekilen #EXTM3U listesi). */
+@Serializable
+data class M3uSource(
+    val id: String = "",
+    val name: String = "",
+    val url: String = "",
+    /** Son başarılı indirmenin içeriği — çevrimdışı/tekrar açılışta indirme gerekmez. */
+    val content: String = ""
+)
+
+/** Xtream Codes tabanlı IPTV kaynağı (sunucu + kullanıcı adı + şifre). */
+@Serializable
+data class XtreamSource(
+    val id: String = "",
+    val name: String = "",
+    /** Ör: "http://host:port" (player_api.php otomatik eklenir). */
+    val server: String = "",
+    val username: String = "",
+    val password: String = ""
+)
+
 @Serializable
 data class Profile(
     val mac: String = "",

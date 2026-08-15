@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Genre
@@ -59,17 +58,27 @@ fun LiveTvScreen(
     modifier: Modifier = Modifier,
     onOpenGuide: () -> Unit = {}
 ) {
-    if (profile == null) {
+    val app = LocalContext.current.applicationContext as StalkerApp
+    val vm: MainViewModel = rememberMainViewModel(app)
+    val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    // Aktif kanal kaynağı: Stalker portal (varsayılan) ya da M3U / Xtream.
+    val kind = vm.activeSourceKind()
+    val sourceId = vm.activeSourceId()
+    val isExternal = kind == "m3u" || kind == "xtream"
+    val sourceName = when (kind) {
+        "m3u" -> vm.m3uSources().firstOrNull { it.id == sourceId }?.name
+        "xtream" -> vm.xtreamSources().firstOrNull { it.id == sourceId }?.name
+        else -> null
+    }
+
+    if (!isExternal && profile == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Portal bağlı değil")
         }
         return
     }
-
-    val app = LocalContext.current.applicationContext as StalkerApp
-    val vm: MainViewModel = rememberMainViewModel(app)
-    val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
 
     var genres by remember { mutableStateOf<List<Genre>?>(null) }
     var channels by remember { mutableStateOf<List<Channel>?>(null) }
@@ -78,20 +87,24 @@ fun LiveTvScreen(
     var selectedGenre by remember { mutableStateOf(0L) }
     var query by remember { mutableStateOf("") }
 
-    LaunchedEffect(profile) {
-        try {
-            genres = vm.repository.loadGenres(profile)
-        } catch (e: Exception) {
-            error = e.message
-            genres = emptyList()
-        }
+    LaunchedEffect(profile, kind, sourceId) {
+        selectedGenre = 0L
+        query = ""
     }
 
-    LaunchedEffect(selectedGenre, profile) {
+    LaunchedEffect(selectedGenre, profile, kind, sourceId) {
         loading = true
         error = null
         try {
-            channels = vm.repository.loadChannels(profile, selectedGenre)
+            val loaded = vm.loadChannelsForActiveSource(profile)
+            if (loaded == null) {
+                error = if (isExternal) "Kaynak yüklenemedi — Ayarlar'dan kontrol edin"
+                else "Portal bağlı değil"
+            } else {
+                val (g, ch) = loaded
+                genres = g
+                channels = ch
+            }
         } catch (e: Exception) {
             error = e.message
         } finally {
@@ -111,6 +124,21 @@ fun LiveTvScreen(
                     "Cooldown aktif — ${cooldown}s sonra istek gönderilebilir",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        // Aktif kaynak rozeti (Stalker dışındaki kaynaklar için).
+        if (isExternal && sourceName != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    "Kaynak: ${sourceName.ifBlank { if (kind == "m3u") "M3U" else "Xtream" }}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -159,7 +187,7 @@ fun LiveTvScreen(
                         label = { Text("Tümü") }
                     )
                 }
-                items(genreList) { g ->
+                items(genreList.filter { it.id != 0L }, key = { it.id }) { g ->
                     FilterChip(
                         selected = selectedGenre == g.id,
                         onClick = { selectedGenre = g.id },
@@ -169,29 +197,32 @@ fun LiveTvScreen(
             }
         }
 
+        val allChannels = channels.orEmpty()
+        // Kategori filtresi tür başlığına göre yapılır (Stalker/M3U/Xtream hepsinde çalışır).
+        val activeGenreTitle = genreList.firstOrNull { it.id == selectedGenre }?.title
+        val filtered = allChannels.filter { ch ->
+            (selectedGenre <= 0L || ch.tvGenreTitle == activeGenreTitle || ch.tvGenreId == selectedGenre) &&
+                (query.isBlank() || ch.name.contains(query.trim(), ignoreCase = true))
+        }
+
         when {
             loading && channels == null -> LoadingBox()
-            error != null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
-            channels.orEmpty().isEmpty() -> EmptyState("Kanal bulunamadı")
+            error != null && channels == null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
+            allChannels.isEmpty() -> EmptyState("Kanal bulunamadı")
+            filtered.isEmpty() -> EmptyState("Sonuç bulunamadı")
             else -> {
                 val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
-                val filtered = channels.orEmpty().let { list ->
-                    if (query.isBlank()) list
-                    else list.filter { it.name.contains(query.trim(), ignoreCase = true) }
-                }
-                // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son
-                // kanalın pill altında kaybolmaması için.
                 LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
                     items(filtered, key = { it.id }) { ch ->
                         val isFav = favChannels.any { it.id == ch.id }
                         ChannelRow(
                             channel = ch,
-                            baseUrl = profile.baseUrl,
+                            baseUrl = profile?.baseUrl.orEmpty(),
                             isFavorite = isFav,
                             onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
                             onClick = {
                                 scope.launch {
-                                    val list = channels.orEmpty()
+                                    val list = allChannels
                                     val idx = list.indexOfFirst { it.id == ch.id }
                                     if (idx >= 0) {
                                         PlaybackManager.playChannel(list, idx, profile)

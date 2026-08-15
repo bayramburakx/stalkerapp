@@ -10,6 +10,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Genre
+import com.stalkerapp.data.M3uParser
+import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.PortalStatus
@@ -17,6 +19,8 @@ import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Settings
 import com.stalkerapp.data.Store
 import com.stalkerapp.data.VodItem
+import com.stalkerapp.data.XtreamClient
+import com.stalkerapp.data.XtreamSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +76,103 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (_homeChannels.value == null) {
             _homeChannels.value =
                 runCatching { repository.loadChannels(profile, 0).take(30) }.getOrNull()
+        }
+    }
+
+    // ---------- M3U / Xtream kaynakları ----------
+    // Oturum içinde bir kez yüklenip önbellekte tutulur (sekmeler arası geçişte
+    // tekrar indirme olmaz).
+    private val m3uCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
+    private val xtreamCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
+
+    fun m3uSources(): List<M3uSource> = store.m3uSources()
+    fun xtreamSources(): List<XtreamSource> = store.xtreamSources()
+
+    fun activeSourceKind(): String = store.activeSourceKind()
+    fun activeSourceId(): String? = store.activeSourceId()
+
+    fun setActiveSource(kind: String, id: String?) {
+        store.setActiveSource(kind, id)
+        if (kind != "stalker") _homeChannels.value = null
+    }
+
+    fun saveM3uSource(source: M3uSource) {
+        val list = store.m3uSources().toMutableList()
+        val idx = list.indexOfFirst { it.id == source.id }
+        if (idx >= 0) list[idx] = source else list.add(source)
+        store.saveM3uSources(list)
+        m3uCache.remove(source.id)
+    }
+
+    fun deleteM3uSource(id: String) {
+        store.saveM3uSources(store.m3uSources().filterNot { it.id == id })
+        m3uCache.remove(id)
+        if (store.activeSourceKind() == "m3u" && store.activeSourceId() == id) {
+            store.setActiveSource("stalker", null)
+        }
+    }
+
+    fun saveXtreamSource(source: XtreamSource) {
+        val list = store.xtreamSources().toMutableList()
+        val idx = list.indexOfFirst { it.id == source.id }
+        if (idx >= 0) list[idx] = source else list.add(source)
+        store.saveXtreamSources(list)
+        xtreamCache.remove(source.id)
+    }
+
+    fun deleteXtreamSource(id: String) {
+        store.saveXtreamSources(store.xtreamSources().filterNot { it.id == id })
+        xtreamCache.remove(id)
+        if (store.activeSourceKind() == "xtream" && store.activeSourceId() == id) {
+            store.setActiveSource("stalker", null)
+        }
+    }
+
+    /** M3U kaynağının kanallarını yükler (gerekirse indirir + çözer). */
+    suspend fun loadM3uChannels(source: M3uSource): Pair<List<Genre>, List<Channel>> {
+        m3uCache[source.id]?.let { return it }
+        var content = source.content
+        if (content.isBlank() && source.url.isNotBlank()) {
+            content = M3uParser.fetch(source.url).orEmpty()
+            if (content.isNotBlank()) {
+                saveM3uSource(source.copy(content = content))
+            }
+        }
+        val channels = M3uParser.parse(content, source.id)
+        // group-title'lar kategori olarak kullanılır.
+        val groups = channels.map { it.tvGenreTitle }.filter { it.isNotBlank() }.distinct().sorted()
+        val genres = listOf(Genre(0, "Tümü")) +
+            groups.mapIndexed { i, g -> Genre((i + 1).toLong(), g) }
+        val result = genres to channels
+        m3uCache[source.id] = result
+        return result
+    }
+
+    /** Xtream kaynağının canlı kanallarını yükler (kategoriler + kanallar). */
+    suspend fun loadXtreamChannels(source: XtreamSource): Pair<List<Genre>, List<Channel>> {
+        xtreamCache[source.id]?.let { return it }
+        val client = XtreamClient()
+        val cats = client.liveCategories(source)
+        val channels = client.liveStreams(source)
+        val genres = listOf(Genre(0, "Tümü")) + cats
+        val result = genres to channels
+        xtreamCache[source.id] = result
+        return result
+    }
+
+    /** Aktif kaynağın kanallarını yükler (Stalker profil veya m3u/xtream). */
+    suspend fun loadChannelsForActiveSource(profile: Profile?): Pair<List<Genre>, List<Channel>>? {
+        val kind = store.activeSourceKind()
+        val id = store.activeSourceId()
+        return when (kind) {
+            "m3u" -> store.m3uSources().firstOrNull { it.id == id }?.let { loadM3uChannels(it) }
+            "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamChannels(it) }
+            else -> {
+                val p = profile ?: return null
+                val cats = runCatching { repository.loadGenres(p) }.getOrDefault(emptyList())
+                val channels = runCatching { repository.loadChannels(p, 0) }.getOrDefault(emptyList())
+                listOf(Genre(0, "Tümü")) + cats to channels
+            }
         }
     }
 

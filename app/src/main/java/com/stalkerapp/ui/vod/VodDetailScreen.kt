@@ -2,6 +2,8 @@ package com.stalkerapp.ui.vod
 
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebChromeClient
+import android.webkit.WebView
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -82,6 +84,8 @@ import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
@@ -983,11 +987,11 @@ fun VodDetailScreen(
 }
 
 /**
- * Fragman oynatıcı: küçük resim + oynat butonu gösterir; dokununca fragmanın
- * doğrudan video akışı çekilir (TMDB videoyu barındırmaz — yalnızca YouTube
- * kimliğini verir; akış Piped üzerinden alınır) ve ExoPlayer ile uygulama
- * İÇİNDE video olarak oynatılır (site olarak değil). Akış alınamazsa YouTube
- * uygulamasında açılır.
+ * Fragman oynatıcı (katmanlı): önce doğrudan video akışı aranır (Piped —
+ * TMDB videoyu barındırmaz, yalnızca YouTube kimliğini verir) ve ExoPlayer ile
+ * uygulama İÇİNDE video olarak oynatılır. Akış sunucularına ulaşılamazsa gömülü
+ * WebView'da mobil YouTube sayfası açılır (yine uygulama içinde oynar); en kötü
+ * ihtimalle YouTube uygulamasında açma kısayolu vardır.
  */
 @Composable
 private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
@@ -996,7 +1000,7 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(false) }
     var streamUrl by remember { mutableStateOf<String?>(null) }
-    var failed by remember { mutableStateOf(false) }
+    var siteMode by remember { mutableStateOf(false) }
 
     fun openInYoutube() {
         runCatching {
@@ -1009,13 +1013,14 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
     }
 
     fun startTrailer() {
-        if (loading) return
+        if (loading || streamUrl != null) return
         loading = true
         scope.launch {
             val url = app.tmdb.youtubeStreamUrl(key)
             loading = false
             if (url.isNullOrBlank()) {
-                failed = true
+                // Akış sunucularına ulaşılamadı: WebView yedeğine geç (yine oynar).
+                siteMode = true
             } else {
                 streamUrl = url
             }
@@ -1031,65 +1036,17 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
         when {
             streamUrl != null -> {
                 // Uygulama içinde gerçek video oynatıcı (site değil).
-                TrailerVideoPlayer(url = streamUrl!!)
-                // Sağ altta her zaman YouTube'da açma kısayolu (akış başarısız olursa kaçış).
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Color.Black.copy(alpha = 0.7f))
-                        .clickable { openInYoutube() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        "YouTube'da aç",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White
-                    )
-                }
-            }
-            failed -> {
-                // Akış sunucuları geçici kapalı olabilir: otomatik YouTube'a
-                // düşmek yerine tekrar dene + YouTube'da aç seçenekleri sunulur.
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.SmartDisplay,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Fragman akışı alınamadı",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(
-                                onClick = { failed = false; startTrailer() },
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Tekrar Dene", style = MaterialTheme.typography.labelMedium)
-                            }
-                            OutlinedButton(
-                                onClick = { openInYoutube() },
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Text("YouTube'da Aç", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
+                TrailerVideoPlayer(
+                    url = streamUrl!!,
+                    onError = {
+                        streamUrl = null
+                        siteMode = true
                     }
-                }
+                )
+            }
+            siteMode -> {
+                // Video akışı alınamadı: gömülü mobil YouTube sayfası (uygulama içinde).
+                TrailerWebView(key)
             }
             else -> {
                 AsyncImage(
@@ -1130,28 +1087,79 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                 }
             }
         }
+        // Sağ altta her zaman YouTube'da açma kısayolu.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.Black.copy(alpha = 0.7f))
+                .clickable { openInYoutube() }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                "YouTube'da aç",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White
+            )
+        }
     }
 }
 
 /** Fragmanı uygulama içinde ExoPlayer ile oynatan mini video oynatıcı. */
 @Composable
-private fun TrailerVideoPlayer(url: String) {
+private fun TrailerVideoPlayer(url: String, onError: () -> Unit) {
     val context = LocalContext.current
+    // Bazı akış sunucuları varsayılan ExoPlayer UA'sını reddeder; tarayıcı UA'sı kullanılır.
+    val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+        .setUserAgent("Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+        .setAllowCrossProtocolRedirects(true)
     val player = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
-            prepare()
-            playWhenReady = true
-        }
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory))
+            .build()
+            .apply {
+                setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+                prepare()
+                playWhenReady = true
+            }
     }
     DisposableEffect(Unit) {
-        onDispose { player.release() }
+        val listener = object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                onError()
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
     }
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
                 useController = true
                 this.player = player
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+/** Gömülü mobil YouTube sayfası (akış yedekleri kapalıysa yine uygulama içinde oynatır). */
+@Composable
+private fun TrailerWebView(key: String) {
+    AndroidView(
+        factory = { ctx ->
+            WebView(ctx).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                webChromeClient = WebChromeClient()
+                loadUrl("https://m.youtube.com/watch?v=$key&playsinline=1")
             }
         },
         modifier = Modifier.fillMaxSize()
