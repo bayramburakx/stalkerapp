@@ -296,6 +296,8 @@ object PlaybackManager {
         p.prepare()
         p.playWhenReady = true
         p.seekTo(startPositionMs.coerceAtLeast(0))
+        // Varsayılan oynatma hızı (Ayarlar → Oynatıcı).
+        p.setPlaybackSpeed(store.settings().playbackSpeed.coerceIn(0.5f, 2f))
         startService()
         updateNotification()
     }

@@ -85,6 +85,10 @@ data class Settings(
     val autoRetryLive: Boolean = true,
     /** Oynatıcı açıkken ekran uyusun mu (false = ekran açık kalır)? */
     val keepScreenOn: Boolean = true,
+    /** Varsayılan oynatma hızı (0.75, 1.0, 1.25, 1.5, 2.0). */
+    val playbackSpeed: Float = 1f,
+    /** Altyazı yazı boyutu (dp). */
+    val subtitleSize: Int = 16,
 
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */

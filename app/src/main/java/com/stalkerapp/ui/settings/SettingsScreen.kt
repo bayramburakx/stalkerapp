@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
@@ -64,6 +65,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,10 +80,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.BuildConfig
+import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Genre
+import com.stalkerapp.data.M3uParser
 import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.UpdateChecker
@@ -122,6 +127,7 @@ fun SettingsScreen(
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val profile by vm.userProfile.collectAsStateWithLifecycle()
     val sourcesVersion by vm.sourcesVersion.collectAsStateWithLifecycle()
+    val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
     val userLists by vm.userLists.collectAsStateWithLifecycle()
     val appProfile = vm.repository.cachedProfile()
     val activeKind = vm.activeSourceKind()
@@ -137,6 +143,7 @@ fun SettingsScreen(
     var timezoneOffset by remember(settings.timezoneOffset) { mutableFloatStateOf(settings.timezoneOffset.toFloat()) }
     var requestInterval by remember(settings.requestIntervalMs) { mutableFloatStateOf(settings.requestIntervalMs.toFloat()) }
     var buffer by remember(settings.maxBufferMs) { mutableFloatStateOf((settings.maxBufferMs / 1000).toFloat()) }
+    var subtitleSize by remember(settings.subtitleSize) { mutableFloatStateOf(settings.subtitleSize.toFloat()) }
 
     var tmdbKey by remember(settings.tmdbApiKey) { mutableStateOf(settings.tmdbApiKey) }
     var epgUrl by remember(settings.epgUrl) { mutableStateOf(settings.epgUrl) }
@@ -162,11 +169,17 @@ fun SettingsScreen(
     var showClearHistory by remember { mutableStateOf(false) }
     var showResetAll by remember { mutableStateOf(false) }
     var restoreMessage by remember { mutableStateOf<String?>(null) }
+    // TMDB anahtar testi + görsel önbelleği.
+    var tmdbTest by remember { mutableStateOf<String?>(null) }
+    var testingTmdb by remember { mutableStateOf(false) }
+    // Hakkında: lisans diyaloğu.
+    var showLicense by remember { mutableStateOf(false) }
     // Gizlilik bölümündeki PIN alanı (mevcut PIN ile başlar).
     var pinNew by remember(settings.pin) { mutableStateOf(settings.pin) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val app = context.applicationContext as StalkerApp
 
     // Yedek geri yükleme: sistem dosya seçici ile JSON seçilir.
     val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -309,6 +322,16 @@ fun SettingsScreen(
     ) {
         when (currentSection) {
             "playlist" -> {
+                // Kaynak başına kanal sayısı (M3U içeriğinden / Xtream önbelleğinden).
+                val sourceCounts = remember(sourcesVersion) { mutableStateMapOf<String, Int>() }
+                LaunchedEffect(sourcesVersion, m3uSources, xtreamSources) {
+                    m3uSources.forEach { s ->
+                        sourceCounts[s.id] = runCatching { M3uParser.parse(s.content, s.id).size }.getOrDefault(0)
+                    }
+                    xtreamSources.forEach { s ->
+                        sourceCounts[s.id] = runCatching { vm.loadXtreamChannels(s).second.size }.getOrDefault(0)
+                    }
+                }
                 Text(
                     "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını buradan yönetirsin. " +
                         "Kapatılan kaynak türü Canlı TV ve kütüphanede kullanılmaz.",
@@ -393,7 +416,7 @@ fun SettingsScreen(
                         m3uSources.forEach { s ->
                             SourceRow(
                                 name = s.name.ifBlank { s.url },
-                                subtitle = s.url,
+                                subtitle = "${s.url} • ${sourceCounts[s.id] ?: 0} kanal",
                                 isActive = activeKind == "m3u" && activeSourceId == s.id,
                                 onActivate = { vm.setActiveSource("m3u", s.id) },
                                 onEdit = { editingM3u = s; showM3uDialog = true },
@@ -422,7 +445,7 @@ fun SettingsScreen(
                         xtreamSources.forEach { s ->
                             SourceRow(
                                 name = s.name.ifBlank { s.server },
-                                subtitle = "${s.server} • ${s.username}",
+                                subtitle = "${s.server} • ${s.username} • ${sourceCounts[s.id] ?: 0} kanal",
                                 isActive = activeKind == "xtream" && activeSourceId == s.id,
                                 onActivate = { vm.setActiveSource("xtream", s.id) },
                                 onEdit = { editingXtream = s; showXtreamDialog = true },
@@ -534,6 +557,38 @@ fun SettingsScreen(
                                     vm.saveSettings(settings.copy(hiddenChannelGroups = newHidden))
                                 })
                             }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ---- Ana sayfadan gizlenenler (geri göster) ----
+                if (settings.hiddenFromHome.isNotEmpty()) {
+                    SectionHeader(Icons.Default.Home, "Ana Sayfadan Gizlenenler")
+                    Text(
+                        "Uzun bas → \"Ana Sayfadan Kaldır\" ile gizlenen medya buradan geri getirilebilir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    settings.hiddenFromHome.mapNotNull { id -> catalog.byId[id] }.forEach { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                item.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = {
+                                vm.saveSettings(
+                                    settings.copy(hiddenFromHome = settings.hiddenFromHome - item.id)
+                                )
+                                vm.showMessage("Ana sayfada tekrar görünüyor")
+                            }) { Text("Geri Göster") }
                         }
                     }
                 }
@@ -694,6 +749,20 @@ fun SettingsScreen(
                         vm.repository.clearEpgCache()
                         vm.showMessage("EPG önbelleği temizlendi")
                     }) { Text("Temizle") }
+                }
+                Text("Zaman Dilimi (hızlı seçim)", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0, 1, 2, 3, -3).forEach { off ->
+                        GlassChip(
+                            selected = settings.timezoneOffset == off,
+                            onClick = { vm.saveSettings(settings.copy(timezoneOffset = off)) },
+                            label = when (off) {
+                                3 -> "+3 (TR)"
+                                0 -> "0 (GMT)"
+                                else -> if (off > 0) "+$off" else "$off"
+                            }
+                        )
+                    }
                 }
 
                 // ---- VOD senkron ----
@@ -860,6 +929,38 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                Text("Varsayılan Oynatma Hızı", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Her oynatmada bu hız uygulanır (oynatıcı içinden de değiştirilebilir).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0.75f to "0.75×", 1f to "1×", 1.25f to "1.25×", 1.5f to "1.5×", 2f to "2×").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.playbackSpeed == key,
+                            onClick = { vm.saveSettings(settings.copy(playbackSpeed = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                SliderSetting(
+                    icon = Icons.Default.Info,
+                    title = "Altyazı Boyutu",
+                    description = "Oynatıcıdaki altyazı yazı boyutu (varsayılan 16).",
+                    value = subtitleSize,
+                    valueRange = 10f..32f,
+                    steps = 21,
+                    valueText = "${subtitleSize.toInt()}",
+                    onChange = {
+                        subtitleSize = it
+                        vm.saveSettings(settings.copy(subtitleSize = it.toInt()))
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                 Text("Varsayılan Video Kalitesi", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("auto" to "Otomatik", "1080p" to "1080p", "720p" to "720p", "480p" to "480p").forEach { (key, label) ->
@@ -963,6 +1064,33 @@ fun SettingsScreen(
                     enabled = tmdbKey.trim().isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Kaydet") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                testingTmdb = true
+                                tmdbTest = null
+                                val ok = app.tmdb.testKey(tmdbKey.trim())
+                                tmdbTest = if (ok) "✓ Anahtar geçerli" else "✗ Geçersiz anahtar"
+                                testingTmdb = false
+                            }
+                        },
+                        enabled = tmdbKey.trim().isNotEmpty() && !testingTmdb
+                    ) { Text(if (testingTmdb) "Test ediliyor…" else "Anahtarı Test Et") }
+                    OutlinedButton(onClick = {
+                        app.tmdb.clearCache()
+                        runCatching { coil.Coil.imageLoader(context).memoryCache?.clear() }
+                        runCatching { coil.Coil.imageLoader(context).diskCache?.clear() }
+                        vm.showMessage("Görsel ve TMDB önbelleği temizlendi")
+                    }) { Text("Önbelleği Temizle") }
+                }
+                if (tmdbTest != null) {
+                    Text(
+                        tmdbTest.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (tmdbTest?.startsWith("✓") == true) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 Text("TMDB Dili", style = MaterialTheme.typography.titleSmall)
@@ -1027,6 +1155,30 @@ fun SettingsScreen(
                         onClick = { showSwitch = true },
                         enabled = portals.isNotEmpty()                    ) { Text("Profil Değiştir") }
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader(Icons.Default.Star, "İstatistikler")
+                val stats = remember(watchedVersion, settings) {
+                    val prog = vm.store.loadVodProgress()
+                    val filmsWatched = prog.values.count { it.durationMs > 0 && it.positionMs >= it.durationMs * 0.95 }
+                    val epsWatched = vm.store.watchedEpisodes().size
+                    val favVods = vm.store.favoriteVods().size
+                    val favCh = vm.store.favoriteChannels().size
+                    val totalMs = prog.values.sumOf { it.positionMs }
+                    Triple(filmsWatched + epsWatched, favVods + favCh, totalMs / 3600_000.0)
+                }
+                Text(
+                    "✓ İzlenen: ${stats.first} (film + bölüm)",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "★ Favoriler: ${stats.second} (film + kanal)",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "⏱ Toplam izleme: ${("%.1f").format(stats.third)} saat",
+                    style = MaterialTheme.typography.bodyMedium
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 SectionHeader(Icons.Default.Refresh, "Yedekleme & Veri")
@@ -1125,6 +1277,33 @@ fun SettingsScreen(
                 }
                 if (updateMessage != null) {
                     Text(updateMessage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    "Sürüm ${BuildConfig.VERSION_NAME} (kod ${BuildConfig.VERSION_CODE})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(
+                    onClick = { showLicense = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Lisans & Açık Kaynak") }
+                if (showLicense) {
+                    AlertDialog(
+                        onDismissRequest = { showLicense = false },
+                        confirmButton = { TextButton(onClick = { showLicense = false }) { Text("Kapat") } },
+                        title = { Text("Lisans") },
+                        text = {
+                            Text(
+                                "Bu uygulama kişisel kullanım için geliştirilmiştir. " +
+                                    "Stalker portal, M3U ve Xtream Codes destekli bir IPTV oynatıcıdır. " +
+                                    "Hiçbir içerik uygulama tarafından barındırılmaz; yalnızca kullanıcının " +
+                                    "eklediği kaynaklar oynatılır. Tüm veriler cihazda saklanır.\n\n" +
+                                    "Açık kaynak bileşenler: ExoPlayer (media3), Coil, OkHttp, kotlinx.serialization."
+                            )
+                        }
+                    )
                 }
             }
         }

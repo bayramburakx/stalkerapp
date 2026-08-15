@@ -68,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -172,6 +173,17 @@ fun PlayerScreen(navController: NavHostController) {
     val playerView = remember {
         PlayerView(context).apply {
             useController = false
+            // Altyazı boyutu (Ayarlar → Oynatıcı → Altyazı Boyutu).
+            val size = app.store.settings().subtitleSize.coerceIn(10, 32)
+            captionStyle = CaptionStyleCompat(
+                CaptionStyleCompat.DEFAULT.typeface,
+                CaptionStyleCompat.DEFAULT.foregroundColor,
+                CaptionStyleCompat.DEFAULT.backgroundColor,
+                CaptionStyleCompat.DEFAULT.windowColor,
+                CaptionStyleCompat.DEFAULT.edgeType,
+                CaptionStyleCompat.DEFAULT.edgeColor,
+                size / 16f
+            )
         }
     }
 

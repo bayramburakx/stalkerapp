@@ -64,6 +64,22 @@ class TmdbClient(
 
     fun hasKey(): Boolean = keyProvider().isNotBlank()
 
+    /** Anahtarın geçerli olup olmadığını hafif bir istekle doğrular (Ayarlar → Entegrasyonlar). */
+    suspend fun testKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) false
+        else runCatching {
+            val req = Request.Builder()
+                .url("https://api.themoviedb.org/3/configuration?api_key=$apiKey")
+                .build()
+            okHttp.newCall(req).execute().use { it.isSuccessful }
+        }.getOrDefault(false)
+    }
+
+    /** TMDB yanıt önbelleğini temizler. */
+    fun clearCache() {
+        cache.clear()
+    }
+
     private suspend fun getJson(url: String): JsonObject? = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url).build()
