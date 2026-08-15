@@ -1085,10 +1085,12 @@ private fun SourceRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
-        // Test durumu: başarılı/başarısız göstergesi (Test butonundan sonra dolar).
-        var testState by remember { mutableStateOf<String?>(null) } // null=boş, "ok", hata mesajı
-        var testing by remember { mutableStateOf(false) }
-        if (testing) {
+    // Test durumu: başarılı/başarısız göstergesi (Test butonundan sonra dolar).
+    var testState by remember { mutableStateOf<String?>(null) } // null=boş, "ok", hata mesajı
+    var testing by remember { mutableStateOf(false) }
+    // rememberCoroutineScope composable bağlamda bir kez alınır (onClick içinde değil).
+    val scope = rememberCoroutineScope()
+    if (testing) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                 Text("Test ediliyor…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1113,7 +1115,6 @@ private fun SourceRow(
             if (onTest != null) {
                 OutlinedButton(
                     onClick = {
-                        val scope = rememberCoroutineScope()
                         scope.launch {
                             testing = true
                             testState = null
