@@ -616,8 +616,10 @@ object PlaybackManager {
             override fun onPlayerError(error: PlaybackException) {
                 // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener.
                 // Yeni bir create_link çağrısı taze play_token üretir; en fazla 3
-                // deneme, ardından hata kullanıcıya gösterilir.
-                if (!vodPlayback && liveRetryCount < 3 && ChannelQueue.channels.isNotEmpty()) {
+                // deneme, ardından hata kullanıcıya gösterilir. Ayarlardan kapatılabilir.
+                if (!vodPlayback && liveRetryCount < 3 &&
+                    store.settings().autoRetryLive && ChannelQueue.channels.isNotEmpty()
+                ) {
                     liveRetryCount++
                     setError(null)
                     notifyStateChanged()

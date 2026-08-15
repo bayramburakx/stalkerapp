@@ -2,6 +2,9 @@ package com.stalkerapp.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -71,6 +75,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -108,7 +114,8 @@ fun SettingsScreen(
     vm: MainViewModel,
     modifier: Modifier = Modifier,
     onPortalsChanged: () -> Unit = {},
-    onOpenLibrary: () -> Unit = {}
+    onOpenLibrary: () -> Unit = {},
+    onBack: () -> Unit = {}
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
@@ -148,9 +155,59 @@ fun SettingsScreen(
     var showProfileEdit by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
+    // "Tüm Kaynakları Test Et" sonuçları.
+    var testingAll by remember { mutableStateOf(false) }
+    var testResults by remember { mutableStateOf<List<Pair<String, String?>>?>(null) }
+    // İzleme geçmişi / tüm veriler temizliği onay diyalogları.
+    var showClearHistory by remember { mutableStateOf(false) }
+    var showResetAll by remember { mutableStateOf(false) }
+    var restoreMessage by remember { mutableStateOf<String?>(null) }
+    // Gizlilik bölümündeki PIN alanı (mevcut PIN ile başlar).
+    var pinNew by remember(settings.pin) { mutableStateOf(settings.pin) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Yedek geri yükleme: sistem dosya seçici ile JSON seçilir.
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val json = runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }.getOrNull()
+                if (json.isNullOrBlank()) {
+                    restoreMessage = "Yedek okunamadı"
+                } else {
+                    restoreMessage = if (vm.restoreBackup(json)) "Yedek geri yüklendi ✓" else "Yedek geçersiz"
+                }
+            }
+        }
+    }
+
+    fun shareBackup() {
+        val json = vm.backupJson()
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Stalker Player yedeği")
+            putExtra(Intent.EXTRA_TEXT, json)
+        }
+        runCatching { context.startActivity(Intent.createChooser(send, "Yedeği Paylaş")) }
+    }
+
+    // Sayfa gezinme: null = bölüm listesi, değer = açık bölüm sayfası.
+    var currentSection by remember { mutableStateOf<String?>(null) }
+
+    // PIN kilidi: ayarlara giriş. PIN boşsa kilit yoktur; ayarlanınca her
+    // girişte sorulur (Gizlilik & Güvenlik bölümünden değiştirilir). Key'siz
+    // remember: PIN'i bu ekranda ayarlayınca kullanıcı anında kilitlenmesin.
+    var pinUnlocked by remember { mutableStateOf(settings.pin.isBlank()) }
+    var pinError by remember { mutableStateOf(false) }
+    var showPinReset by remember { mutableStateOf(false) }
+
+    // Telefon geri tuşu: açık bölüm sayfasındaysa bölüm listesine, değilse ana sayfaya döner.
+    BackHandler(enabled = true) {
+        if (currentSection != null) currentSection = null else onBack()
+    }
 
     fun checkForUpdate() {
         scope.launch {
@@ -171,8 +228,40 @@ fun SettingsScreen(
         }
     }
 
-    // Sayfa gezinme: null = bölüm listesi, değer = açık bölüm sayfası.
-    var currentSection by remember { mutableStateOf<String?>(null) }
+    // PIN girilmediyse ayarlar kilitli kalır (yalnızca kilit ekranı gösterilir).
+    if (!pinUnlocked) {
+        PinLockOverlay(
+            modifier = modifier,
+            error = pinError,
+            onUnlock = { input ->
+                if (input == settings.pin) {
+                    pinUnlocked = true
+                    pinError = false
+                } else {
+                    pinError = true
+                }
+            },
+            onResetRequest = { showPinReset = true }
+        )
+        if (showPinReset) {
+            AlertDialog(
+                onDismissRequest = { showPinReset = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showPinReset = false
+                        vm.clearAllData()
+                        pinUnlocked = true
+                    }) { Text("Evet, Sıfırla") }
+                },
+                dismissButton = { TextButton(onClick = { showPinReset = false }) { Text("Vazgeç") } },
+                title = { Text("Tüm veriler sıfırlanacak") },
+                text = {
+                    Text("PIN'i unuttuysan tek seçenek tüm verileri silmek: portallar, ayarlar, izleme geçmişi ve katalog silinir. Devam edilsin mi?")
+                }
+            )
+        }
+        return
+    }
 
     if (currentSection == null) {
         // ================= AYARLAR — BÖLÜM LİSTESİ =================
@@ -197,6 +286,8 @@ fun SettingsScreen(
             SettingsNavRow(Icons.Default.Person, "Hesap", "Profil ve hesap ayarları") { currentSection = "account" }
             SettingsNavRow(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik", "Gizlilik anlaşması") { currentSection = "privacy" }
             SettingsNavRow(Icons.Default.Info, "Hakkında & Destek", "Sürüm, güncelleme, destek") { currentSection = "about" }
+            // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor (scroll altı boş kalmasın).
+            Spacer(Modifier.height(96.dp))
         }
         return
     }
@@ -213,7 +304,8 @@ fun SettingsScreen(
             "privacy" -> "Gizlilik & Güvenlik"
             else -> "Hakkında & Destek"
         },
-        onBack = { currentSection = null }
+        onBack = { currentSection = null },
+        modifier = modifier
     ) {
         when (currentSection) {
             "playlist" -> {
@@ -348,6 +440,33 @@ fun SettingsScreen(
                         Text("Xtream Ekle")
                     }
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                // ---- Toplu kaynak testi ----
+                Button(
+                    onClick = {
+                        scope.launch {
+                            testingAll = true
+                            testResults = null
+                            val results = mutableListOf<Pair<String, String?>>()
+                            portals.forEach { p -> results += (p.name.ifBlank { p.url }) to vm.testPortal(p) }
+                            m3uSources.forEach { s -> results += (s.name.ifBlank { s.url }) to vm.testM3u(s) }
+                            xtreamSources.forEach { s -> results += (s.name.ifBlank { s.server }) to vm.testXtream(s) }
+                            testResults = results
+                            testingAll = false
+                        }
+                    },
+                    enabled = !testingAll &&
+                        (portals.isNotEmpty() || m3uSources.isNotEmpty() || xtreamSources.isNotEmpty()),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (testingAll) "Test ediliyor…" else "Tüm Kaynakları Test Et") }
+                testResults?.forEach { (name, err) ->
+                    Text(
+                        if (err == null) "✓ $name — bağlantı başarılı" else "✗ $name — $err",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (err == null) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                    )
+                }
             }
             "content" -> {
 
@@ -417,6 +536,44 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ---- İzleme geçmişi ----
+                SectionHeader(Icons.Default.Schedule, "İzleme Geçmişi")
+                Text(
+                    "Film/bölüm ilerlemeleri ve izlendi işaretleri silinir. Ana sayfadaki Son İzlenenler / İzlemeye Devam bölümleri boşalır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(
+                    onClick = { showClearHistory = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("İzleme Geçmişini Temizle") }
+                if (showClearHistory) {
+                    AlertDialog(
+                        onDismissRequest = { showClearHistory = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showClearHistory = false
+                                vm.clearWatchHistory()
+                                vm.showMessage("İzleme geçmişi temizlendi")
+                            }) { Text("Temizle") }
+                        },
+                        dismissButton = { TextButton(onClick = { showClearHistory = false }) { Text("Vazgeç") } },
+                        title = { Text("İzleme geçmişi temizlensin mi?") },
+                        text = { Text("Tüm ilerlemeler ve izlendi işaretleri silinir. Bu işlem geri alınamaz.") }
+                    )
+                }
+                if (settings.hiddenCategories.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = {
+                            vm.saveSettings(settings.copy(hiddenCategories = emptyList()))
+                            vm.showMessage("Gizlenen kategoriler tekrar gösteriliyor")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Gizlenen Kategorileri Göster (${settings.hiddenCategories.size})") }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -504,9 +661,11 @@ fun SettingsScreen(
                 )
                 // Hazır EPG kaynakları: tek dokunuşla seç, sonra Kaydet.
                 val trEpg = "https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz"
-                val allEpg = "https://epg.pw/xmltv/epg.xml"
+                // epg.pw'nin tam "All" dosyası yüzlerce MB'dir ve telefonlarda pratik
+                // değildir — çip, çalışan küçük "Lite" sürümüne işaret eder.
+                val allEpg = "https://epg.pw/xmltv/epg_lite.xml.gz"
                 Text(
-                    "Önerilen: Türkiye EPG'si küçük (166KB) ve hızlıdır. epg.pw tüm dünya dosyası çok büyüktür — ilk yükleme uzun sürer.",
+                    "Önerilen: Türkiye EPG'si küçük (166KB) ve hızlıdır. epg.pw Lite dünya kanallarını içerir (1.7MB). İndirilen EPG cihaza kaydedilir, bir daha indirilmez.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -519,7 +678,7 @@ fun SettingsScreen(
                     GlassChip(
                         selected = epgUrl.trim() == allEpg,
                         onClick = { epgUrl = allEpg },
-                        label = "Tüm dünya (epg.pw)"
+                        label = "Tüm dünya (epg.pw Lite)"
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -677,6 +836,27 @@ fun SettingsScreen(
                     checked = settings.subtitlesEnabled,
                     onCheckedChange = { vm.saveSettings(settings.copy(subtitlesEnabled = it)) }
                 )
+                ToggleRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Kaldığın Yerden Devam Et",
+                    desc = "Film ve bölümler kaldığı konumdan başlar",
+                    checked = settings.resumePlayback,
+                    onCheckedChange = { vm.saveSettings(settings.copy(resumePlayback = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Refresh,
+                    title = "Canlı TV Otomatik Yeniden Bağlan",
+                    desc = "Akış kesilince en fazla 3 kez otomatik yeniden dener",
+                    checked = settings.autoRetryLive,
+                    onCheckedChange = { vm.saveSettings(settings.copy(autoRetryLive = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Speed,
+                    title = "Ekranı Açık Tut",
+                    desc = "Oynatıcı açıkken ekran uyumaz",
+                    checked = settings.keepScreenOn,
+                    onCheckedChange = { vm.saveSettings(settings.copy(keepScreenOn = it)) }
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -783,6 +963,37 @@ fun SettingsScreen(
                     enabled = tmdbKey.trim().isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Kaydet") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text("TMDB Dili", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Başlık, fragman ve oyuncu bilgilerinin dili (posterler etkilenmez).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("tr" to "Türkçe", "en" to "English").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.tmdbLanguage == key,
+                            onClick = { vm.saveSettings(settings.copy(tmdbLanguage = key)) },
+                            label = label
+                        )
+                    }
+                }
+                ToggleRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Fragmanlar",
+                    desc = "Detay ekranında TMDB fragmanlarını göster",
+                    checked = settings.tmdbTrailers,
+                    onCheckedChange = { vm.saveSettings(settings.copy(tmdbTrailers = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Person,
+                    title = "Oyuncu Fotoğrafları",
+                    desc = "Detay ekranında TMDB oyuncu görsellerini kullan",
+                    checked = settings.tmdbPeople,
+                    onCheckedChange = { vm.saveSettings(settings.copy(tmdbPeople = it)) }
+                )
             }
             "account" -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -816,6 +1027,48 @@ fun SettingsScreen(
                         onClick = { showSwitch = true },
                         enabled = portals.isNotEmpty()                    ) { Text("Profil Değiştir") }
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader(Icons.Default.Refresh, "Yedekleme & Veri")
+                Text(
+                    "Tüm veriler (kaynaklar, ayarlar, favoriler, izleme geçmişi, listeler) tek JSON olarak dışa aktarılır. Telefon değiştirirken yedeği geri yükleyebilirsin.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = { shareBackup() },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Yedeği Dışa Aktar (Paylaş)") }
+                OutlinedButton(
+                    onClick = { restoreLauncher.launch(arrayOf("text/*", "application/json")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Yedekten Geri Yükle") }
+                if (restoreMessage != null) {
+                    Text(
+                        restoreMessage.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                OutlinedButton(
+                    onClick = { showResetAll = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Tüm Verileri Sıfırla", color = MaterialTheme.colorScheme.error) }
+                if (showResetAll) {
+                    AlertDialog(
+                        onDismissRequest = { showResetAll = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showResetAll = false
+                                vm.clearAllData()
+                                vm.showMessage("Tüm veriler silindi")
+                            }) { Text("Evet, Sil", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = { TextButton(onClick = { showResetAll = false }) { Text("Vazgeç") } },
+                        title = { Text("Tüm veriler silinecek") },
+                        text = { Text("Kaynaklar, ayarlar, favoriler, izleme geçmişi ve katalog kalıcı olarak silinir. Bu işlem geri alınamaz.") }
+                    )
+                }
             }
             "privacy" -> {
                 Text(
@@ -828,6 +1081,30 @@ fun SettingsScreen(
                     onClick = { showPrivacy = true },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Gizlilik Anlaşması'nı Oku") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader(Icons.Default.Lock, "PIN Kilidi")
+                Text(
+                    "Ayarlara giriş için 4 haneli PIN istenir. PIN boş bırakılırsa kilit kaldırılır. PIN unutulursa tek çözüm tüm verileri sıfırlamaktır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = pinNew,
+                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) pinNew = it },
+                    label = { Text("4 haneli PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        vm.saveSettings(settings.copy(pin = pinNew))
+                        vm.showMessage(if (pinNew.isBlank()) "PIN kilidi kaldırıldı" else "PIN kaydedildi")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("PIN'i Kaydet") }
             }
             "about" -> {
                 Text("Stalker Player v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
@@ -1075,10 +1352,13 @@ private fun SettingsNavRow(
 private fun SettingsPage(
     title: String,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Column(
-        modifier = Modifier
+        // Üst ekran içi boşluk (status bar) dahil dış modifier uygulanır;
+        // aksi halde başlık/geri tuşu bildirim paneliyle iç içe kalır.
+        modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1101,6 +1381,67 @@ private fun SettingsPage(
             content()
         }
         Spacer(modifier = Modifier.height(96.dp))
+    }
+}
+
+/** PIN kilit ekranı: ayarlara giriş yalnızca doğru PIN ile açılır. */
+@Composable
+private fun PinLockOverlay(
+    modifier: Modifier = Modifier,
+    error: Boolean,
+    onUnlock: (String) -> Unit,
+    onResetRequest: () -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(18.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("PIN Kilidi", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Ayarlara erişmek için PIN'i gir.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(20.dp))
+        OutlinedTextField(
+            value = pin,
+            onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) pin = it },
+            label = { Text("4 haneli PIN") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            isError = error,
+            supportingText = if (error) {
+                { Text("Yanlış PIN", color = MaterialTheme.colorScheme.error) }
+            } else null,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { onUnlock(pin) },
+            enabled = pin.length == 4,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Kilidi Aç") }
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onResetRequest) {
+            Text("PIN'i unuttum — tüm verileri sıfırla", color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 

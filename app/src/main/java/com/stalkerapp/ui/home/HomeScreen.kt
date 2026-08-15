@@ -158,7 +158,9 @@ fun HomeScreen(
                         profile = p
                         if (p != null) vm.syncVodIfNeeded(p)
                     },
-                    onOpenLibrary = { tab = 5 }
+                    onOpenLibrary = { tab = 5 },
+                    // Telefon geri tuşu ayarlardan çıkarken uygulamayı kapatmasın.
+                    onBack = { gotoTab(0) }
                 )
                 5 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
             }

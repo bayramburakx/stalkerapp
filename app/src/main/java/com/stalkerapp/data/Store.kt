@@ -7,6 +7,9 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 class Store(private val context: Context) {
 
@@ -141,6 +144,64 @@ class Store(private val context: Context) {
     fun clearEpgCacheFile() {
         runCatching { epgCacheFile().delete() }
     }
+
+    // ---------- Yedekleme / geri yükleme ----------
+
+    /** İzleme geçmişini (film/bölüm ilerlemeleri + izlendi işaretleri) temizler. */
+    fun clearWatchHistory() {
+        prefs.edit()
+            .remove(KEY_VOD_PROGRESS)
+            .remove(KEY_EPISODE_PROGRESS)
+            .remove(KEY_WATCHED_OVERRIDES)
+            .remove(KEY_WATCHED_EPISODES)
+            .apply()
+    }
+
+    /** Tüm uygulama verilerini siler (portallar, ayarlar, geçmiş, katalog, önbellek). */
+    fun clearAllData() {
+        prefs.edit().clear().apply()
+        clearEpgCacheFile()
+        runCatching {
+            context.filesDir.listFiles().orEmpty()
+                .filter { it.name.startsWith("vod_catalog_") || it.name.startsWith("vod_partial_") }
+                .forEach { it.deleteRecursively() }
+        }
+    }
+
+    /** Tüm kullanıcı verilerini tek JSON olarak dışa aktarır (yedek). */
+    fun backupJson(): String {
+        val data = LinkedHashMap<String, JsonElement>()
+        JSON_BACKUP_KEYS.forEach { k ->
+            prefs.getString(k, null)?.let { raw ->
+                runCatching { data[k] = json.parseToJsonElement(raw) }
+            }
+        }
+        PLAIN_BACKUP_KEYS.forEach { k ->
+            prefs.getString(k, null)?.let { data[k] = JsonPrimitive(it) }
+        }
+        if (prefs.contains(KEY_ONBOARDING_DONE)) {
+            data[KEY_ONBOARDING_DONE] = JsonPrimitive(prefs.getBoolean(KEY_ONBOARDING_DONE, false))
+        }
+        return json.encodeToString(AppBackup.serializer(), AppBackup(version = 1, data = data))
+    }
+
+    /** Yedek JSON'u geri yükler. Başarılıysa true döner. */
+    fun restoreJson(jsonStr: String): Boolean = runCatching {
+        val backup = json.decodeFromString(AppBackup.serializer(), jsonStr)
+        if (backup.data.isEmpty()) return@runCatching false
+        prefs.edit().apply {
+            clear()
+            backup.data.forEach { (k, v) ->
+                when (k) {
+                    KEY_ONBOARDING_DONE -> putBoolean(k, (v as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() ?: true)
+                    in PLAIN_BACKUP_KEYS -> putString(k, (v as? JsonPrimitive)?.contentOrNull.orEmpty())
+                    else -> putString(k, v.toString())
+                }
+            }
+        }.apply()
+        clearEpgCacheFile()
+        true
+    }.getOrDefault(false)
 
     // ---------- Kullanıcı profili ----------
 
@@ -526,8 +587,35 @@ class Store(private val context: Context) {
         private const val KEY_USER_PROFILE = "user_profile"
         private const val KEY_WATCH_LATER = "watch_later"
         private const val KEY_USER_LISTS = "user_lists"
+
+        /** Yedeklemeye dahil edilen tüm SharedPreferences anahtarları. */
+        private val BACKUP_KEYS = setOf(
+            KEY_PORTALS, KEY_ACTIVE_PORTAL, KEY_ONBOARDING_DONE, KEY_PROFILES,
+            KEY_SETTINGS, KEY_FAVORITES, KEY_FAVORITE_CHANNELS, KEY_FAVORITE_VODS,
+            KEY_VOD_PROGRESS, KEY_WATCHED_OVERRIDES, KEY_WATCHED_EPISODES,
+            KEY_EPISODE_PROGRESS, KEY_M3U_SOURCES, KEY_XTREAM_SOURCES,
+            KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_USER_PROFILE,
+            KEY_WATCH_LATER, KEY_USER_LISTS
+        )
+
+        /** JSON olarak kodlanmış (putString + serialize) yedek anahtarları. */
+        private val JSON_BACKUP_KEYS = BACKUP_KEYS - setOf(
+            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_ONBOARDING_DONE
+        )
+
+        /** Düz metin olarak saklanan yedek anahtarları. */
+        private val PLAIN_BACKUP_KEYS = setOf(
+            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID
+        )
     }
 }
+
+@kotlinx.serialization.Serializable
+data class AppBackup(
+    val version: Int = 1,
+    /** Anahtar -> JSON değer (SharedPreferences anahtarları). */
+    val data: Map<String, JsonElement> = emptyMap()
+)
 
 @kotlinx.serialization.Serializable
 data class CatalogMetaFile(

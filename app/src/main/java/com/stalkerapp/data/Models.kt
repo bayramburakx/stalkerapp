@@ -78,7 +78,25 @@ data class Settings(
     /** Altyazılar gösterilsin mi? */
     val subtitlesEnabled: Boolean = true,
     /** Çözücü: "auto", "hardware", "software". */
-    val decoder: String = "auto"
+    val decoder: String = "auto",
+    /** Film/bölüm kaldığı yerden otomatik devam etsin mi? */
+    val resumePlayback: Boolean = true,
+    /** Canlı TV akışı kesilince otomatik yeniden bağlanmaya çalışılsın mı? */
+    val autoRetryLive: Boolean = true,
+    /** Oynatıcı açıkken ekran uyusun mu (false = ekran açık kalır)? */
+    val keepScreenOn: Boolean = true,
+
+    // ---------- Entegrasyonlar ----------
+    /** TMDB istek dili ("tr", "en" vb.). */
+    val tmdbLanguage: String = "tr",
+    /** Detay ekranında TMDB fragmanları gösterilsin mi? */
+    val tmdbTrailers: Boolean = true,
+    /** Detay ekranında TMDB oyuncu fotoğrafları gösterilsin mi? */
+    val tmdbPeople: Boolean = true,
+
+    // ---------- Gizlilik ----------
+    /** Ayarlar girişi için 4 haneli PIN. Boşsa PIN kilidi kapalıdır. */
+    val pin: String = ""
 )
 
 @Serializable

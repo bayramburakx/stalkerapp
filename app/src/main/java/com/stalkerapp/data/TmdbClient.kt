@@ -41,7 +41,10 @@ data class TmdbEnrichment(
  * TMDB API istemcisi. Anahtar yoksa tüm çağrılar boş sonuç döner (özellik
  * sessizce kapalı kalır). Yanıtlar oturum boyunca bellek içinde önbelleklenir.
  */
-class TmdbClient(private val keyProvider: () -> String) {
+class TmdbClient(
+    private val keyProvider: () -> String,
+    private val languageProvider: () -> String = { "tr" }
+) {
 
     private val okHttp = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -82,7 +85,7 @@ class TmdbClient(private val keyProvider: () -> String) {
         cache[cacheKey]?.let { return it as TmdbEnrichment }
         if (tmdbId <= 0 || apiKey.isBlank()) return TmdbEnrichment()
         val type = if (isSeries) "tv" else "movie"
-        val url = "https://api.themoviedb.org/3/$type/$tmdbId?api_key=$apiKey&append_to_response=videos,credits&language=tr-TR"
+        val url = "https://api.themoviedb.org/3/$type/$tmdbId?api_key=$apiKey&append_to_response=videos,credits&language=${languageProvider()}"
         val obj = getJson(url) ?: return TmdbEnrichment()
         val rating = (obj["vote_average"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull() ?: 0.0
         val trailerKey = extractTrailer(obj["videos"])
@@ -99,7 +102,7 @@ class TmdbClient(private val keyProvider: () -> String) {
         val cacheKey = "tv:$tmdbId:season:$seasonNumber"
         cache[cacheKey]?.let { return it as String }
         if (tmdbId <= 0 || apiKey.isBlank()) return ""
-        val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$seasonNumber?api_key=$apiKey&language=tr-TR"
+        val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$seasonNumber?api_key=$apiKey&language=${languageProvider()}"
         val obj = getJson(url)
         val path = (obj?.get("poster_path") as? JsonPrimitive)?.contentOrNull.orEmpty()
         cache[cacheKey] = path
@@ -115,7 +118,7 @@ class TmdbClient(private val keyProvider: () -> String) {
         val cacheKey = "tv:$tmdbId:s$seasonNumber:e$episodeNumber"
         cache[cacheKey]?.let { return it as TmdbEpisodeInfo }
         if (tmdbId <= 0 || apiKey.isBlank()) return TmdbEpisodeInfo()
-        val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$seasonNumber/episode/$episodeNumber?api_key=$apiKey&language=tr-TR"
+        val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$seasonNumber/episode/$episodeNumber?api_key=$apiKey&language=${languageProvider()}"
         val obj = getJson(url)
         val info = TmdbEpisodeInfo(
             name = (obj?.get("name") as? JsonPrimitive)?.contentOrNull.orEmpty(),
@@ -130,7 +133,7 @@ class TmdbClient(private val keyProvider: () -> String) {
         val cacheKey = "person:$name"
         cache[cacheKey]?.let { return it as TmdbPerson? }
         if (apiKey.isBlank()) return null
-        val url = "https://api.themoviedb.org/3/search/person?api_key=$apiKey&query=${Uri.encode(name)}&language=tr-TR"
+        val url = "https://api.themoviedb.org/3/search/person?api_key=$apiKey&query=${Uri.encode(name)}&language=${languageProvider()}"
         val obj = getJson(url) ?: return null
         val results = obj["results"] as? JsonArray ?: return null
         val first = results.firstOrNull { it is JsonObject } as? JsonObject ?: return null

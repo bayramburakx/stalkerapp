@@ -92,6 +92,39 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _settings.value = store.settings()
     }
 
+    /** Store'daki tüm StateFlow'ları diske göre tazeler (geri yükleme / sıfırlama sonrası). */
+    fun refreshFlows() {
+        _settings.value = store.settings()
+        _favorites.value = store.favorites()
+        _favoriteChannels.value = store.favoriteChannels()
+        _favoriteVods.value = store.favoriteVods()
+        _watchLater.value = store.watchLater()
+        _userLists.value = store.userLists()
+        _userProfile.value = store.userProfile()
+        _watchedVersion.value++
+    }
+
+    fun backupJson(): String = store.backupJson()
+
+    /** Yedek JSON'u geri yükler; başarılıysa akışları tazeler ve true döner. */
+    fun restoreBackup(json: String): Boolean {
+        val ok = store.restoreJson(json)
+        if (ok) refreshFlows()
+        return ok
+    }
+
+    /** Tüm uygulama verilerini siler ve akışları sıfırlar. */
+    fun clearAllData() {
+        store.clearAllData()
+        refreshFlows()
+    }
+
+    /** İzleme geçmişini (ilerlemeler + izlendi işaretleri) temizler. */
+    fun clearWatchHistory() {
+        store.clearWatchHistory()
+        _watchedVersion.value++
+    }
+
     suspend fun loadHomeChannels(profile: Profile) {
         if (_homeChannels.value == null) {
             _homeChannels.value =

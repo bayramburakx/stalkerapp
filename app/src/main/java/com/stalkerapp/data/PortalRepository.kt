@@ -96,7 +96,9 @@ class PortalRepository(
     private var externalEpgAt = 0L
     private val externalHttp = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        // EPG dosyaları büyük olabilir (epg.pw "All" vb.) — uzun okuma süresi
+        // sayesinde indirme yarıda kesilmez (arka planda akış olarak çözülür).
+        .readTimeout(300, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
     // Which query parameter filters VOD lists by category on this portal

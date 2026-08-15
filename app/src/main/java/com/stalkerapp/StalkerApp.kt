@@ -31,7 +31,10 @@ class StalkerApp : Application() {
         store = Store(this)
         repository = PortalRepository(store, StalkerClient { store.settings() })
         vodSyncManager = VodSyncManager(Dispatchers.IO, repository, store)
-        tmdb = TmdbClient { store.settings().tmdbApiKey }
+        tmdb = TmdbClient(
+            keyProvider = { store.settings().tmdbApiKey },
+            languageProvider = { store.settings().tmdbLanguage }
+        )
         PlaybackManager.init(this, store, repository)
         instance = this
 

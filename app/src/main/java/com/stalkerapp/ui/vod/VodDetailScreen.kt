@@ -137,11 +137,15 @@ fun VodDetailScreen(
 
     LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint) {
         val i = item ?: return@LaunchedEffect
-        val key = app.store.settings().tmdbApiKey
+        val settings = app.store.settings()
+        val key = settings.tmdbApiKey
         if (key.isNotBlank() && i.tmdbId > 0) {
-            val enr = app.tmdb.enrich(i.tmdbId, i.isSeries || isSeriesHint, key)
-            tmdbCast = enr.cast
-            trailerKey = enr.trailerKey
+            // Zenginleştirme alt-anahtarları (Ayarlar → Entegrasyonlar).
+            if (settings.tmdbPeople || settings.tmdbTrailers) {
+                val enr = app.tmdb.enrich(i.tmdbId, i.isSeries || isSeriesHint, key)
+                if (settings.tmdbPeople) tmdbCast = enr.cast
+                if (settings.tmdbTrailers) trailerKey = enr.trailerKey
+            }
         }
     }
 
@@ -342,9 +346,10 @@ fun VodDetailScreen(
             try {
                 val allEps = episodes.orEmpty()
                 if (!isSeries || allEps.isEmpty()) {
-                    // Film: kayıtlı konumdan devam et.
+                    // Film: kayıtlı konumdan devam et (Ayarlar'dan kapatılabilir).
+                    val resume = app.store.settings().resumePlayback
                     val prog = app.store.loadVodProgress()[it.id]
-                    val startMs = if (prog != null && prog.durationMs > 0 &&
+                    val startMs = if (resume && prog != null && prog.durationMs > 0 &&
                         prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95)
                     ) prog.positionMs else 0L
                     val url = vm.repository.vodStreamUrl(it, p, null)
@@ -369,7 +374,8 @@ fun VodDetailScreen(
                     }
                     val idx = allEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
                     val pr = app.store.episodeProgress()[episodeKey(target, seasonNum)]
-                    val startMs = if (pr != null && pr.durationMs > 0 &&
+                    val resume = app.store.settings().resumePlayback
+                    val startMs = if (resume && pr != null && pr.durationMs > 0 &&
                         pr.positionMs.toDouble() in (pr.durationMs * 0.02)..(pr.durationMs * 0.95)
                     ) pr.positionMs else 0L
                     PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = startMs)
