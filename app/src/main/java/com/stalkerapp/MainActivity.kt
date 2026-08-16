@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -25,8 +26,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.stalkerapp.StalkerApp
+import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.favorites.FavoritesScreen
+import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.home.HomeScreen
 import com.stalkerapp.ui.live.EpgGuideScreen
 import com.stalkerapp.ui.onboarding.OnboardingScreen
@@ -89,6 +92,18 @@ private fun NotificationPermission() {
 private fun AppNav() {
     val app = LocalContext.current.applicationContext as StalkerApp
     val navController = rememberNavController()
+    val vm: MainViewModel = rememberMainViewModel(app)
+    // Ana ekran widget'ından gelen kanal: uygulama açılır açılmaz o kanal oynatılır.
+    val activity = LocalContext.current as? Activity
+    val widgetChannelId = remember {
+        activity?.intent?.getLongExtra(com.stalkerapp.widget.FavoritesWidgetProvider.EXTRA_PLAY_CHANNEL, -1L) ?: -1L
+    }
+    LaunchedEffect(widgetChannelId) {
+        if (widgetChannelId > 0) {
+            vm.playChannelById(widgetChannelId)
+            navController.navigate("player") { launchSingleTop = true }
+        }
+    }
     // Başlangıç ekranı: ilk açılışta profil oluşturma (onboarding); sonrasında
     // doğrudan Ana Sayfa — kaynaklar Ayarlar → Playlist & Kaynaklar'dan eklenir.
     val startDestination = remember {

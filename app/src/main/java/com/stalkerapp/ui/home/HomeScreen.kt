@@ -82,13 +82,14 @@ fun HomeScreen(
 
     // Kütüphanem alt menüden kaldırıldı: Ayarlar → Kütüphanem üzerinden açılır
     // (tab 5'e geçiş yapılır; menüde 6 öğe kalır: Ana, Canlı, Film, Dizi, Ayarlar, Ara).
+    val lang = vm.store.settings().language
     val navItems = listOf(
-        NavItem(Icons.Default.Home, "Ana Sayfa"),
-        NavItem(Icons.Default.LiveTv, "Canlı TV"),
-        NavItem(Icons.Default.Movie, "Filmler"),
-        NavItem(Icons.Default.VideoLibrary, "Diziler"),
-        NavItem(Icons.Default.Settings, "Ayarlar"),
-        NavItem(Icons.Default.Search, "Ara", onClick = onOpenSearch)
+        NavItem(Icons.Default.Home, com.stalkerapp.util.L10n.t(lang, "nav.home")),
+        NavItem(Icons.Default.LiveTv, com.stalkerapp.util.L10n.t(lang, "nav.live")),
+        NavItem(Icons.Default.Movie, com.stalkerapp.util.L10n.t(lang, "nav.movies")),
+        NavItem(Icons.Default.VideoLibrary, com.stalkerapp.util.L10n.t(lang, "nav.series")),
+        NavItem(Icons.Default.Settings, com.stalkerapp.util.L10n.t(lang, "nav.settings")),
+        NavItem(Icons.Default.Search, com.stalkerapp.util.L10n.t(lang, "nav.search"), onClick = onOpenSearch)
     )
 
     Scaffold(

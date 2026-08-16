@@ -153,6 +153,8 @@ data class Settings(
     val startOnBoot: Boolean = false,
     /** Kumanda kanal +/- ve medya tuşlarıyla kanal değiştirme (zapping). */
     val remoteChannelKeys: Boolean = true,
+    /** Arayüz dili: "tr" veya "en" (kısmi çeviri — ana menü ve ayar başlıkları). */
+    val language: String = "tr",
 
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */

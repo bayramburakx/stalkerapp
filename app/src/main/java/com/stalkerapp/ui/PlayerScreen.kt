@@ -1356,6 +1356,8 @@ fun EpgSheet(
     val reminders = remember(remindersVersion) { vm.store.epgReminders() }
     val recordings = remember(remindersVersion) { vm.store.recordings() }
     val nowTs = System.currentTimeMillis() / 1000
+    // Catch-up URL çözmek için (onClick içinde @Composable çağrısı yapılamaz).
+    val epgScope = rememberCoroutineScope()
 
     LaunchedEffect(channel.id) {
         try {
@@ -1495,8 +1497,7 @@ fun EpgSheet(
                             if (!p.isDefault && p.stopTs <= nowTs) {
                                 TextButton(
                                     onClick = {
-                                        val scope = rememberCoroutineScope()
-                                        scope.launch {
+                                        epgScope.launch {
                                             val url = vm.repository.catchupUrl(channel, profile, p.startTs)
                                             if (!url.isNullOrBlank()) {
                                                 PlaybackManager.play(url, "${channel.name} — ${p.name}", subtitle = vm.repository.formatEpoch(p.startTs))

@@ -500,6 +500,8 @@ class Store(private val context: Context) {
             true
         }
         saveFavoriteChannels(list)
+        // Ana ekran widget'ı favorileri gösterir — değişince yenile.
+        runCatching { com.stalkerapp.widget.FavoritesWidgetProvider.notifyChanged(context) }
         return added
     }
 

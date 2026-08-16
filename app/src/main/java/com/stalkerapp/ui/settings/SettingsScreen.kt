@@ -320,21 +320,25 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("Ayarlar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Bir bölüm seç:",
+                com.stalkerapp.util.L10n.t(settings.language, "settings.title"),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                com.stalkerapp.util.L10n.t(settings.language, "settings.select"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            SettingsNavRow(Icons.Default.Tv, "Playlist & Kaynaklar", "Stalker portal, M3U ve Xtream kaynakları") { currentSection = "playlist" }
-            SettingsNavRow(Icons.Default.VideoLibrary, "Kütüphane & İçerik", "+18, gizlenen kategoriler, ana sayfa, VOD senkronu") { currentSection = "content" }
-            SettingsNavRow(Icons.Default.Star, "Kütüphanem", "Favoriler, Sonra İzle, özel listeler") { currentSection = "library" }
-            SettingsNavRow(Icons.Default.VolumeUp, "Oynatıcı", "Kalite, altyazı, çözücü, jestler") { currentSection = "player" }
-            SettingsNavRow(Icons.Default.Palette, "Görünüm & Cihaz", "Tema, vurgu rengi, yazı ölçeği, TV") { currentSection = "appearance" }
-            SettingsNavRow(Icons.Default.Link, "Entegrasyonlar", "TMDB ve harici servisler") { currentSection = "integrations" }
-            SettingsNavRow(Icons.Default.Person, "Hesap", "Profil ve hesap ayarları") { currentSection = "account" }
-            SettingsNavRow(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik", "Gizlilik anlaşması") { currentSection = "privacy" }
-            SettingsNavRow(Icons.Default.Info, "Hakkında & Destek", "Sürüm, güncelleme, destek") { currentSection = "about" }
+            SettingsNavRow(Icons.Default.Tv, com.stalkerapp.util.L10n.t(settings.language, "settings.playlist"), "Stalker portal, M3U ve Xtream kaynakları") { currentSection = "playlist" }
+            SettingsNavRow(Icons.Default.VideoLibrary, com.stalkerapp.util.L10n.t(settings.language, "settings.content"), "+18, gizlenen kategoriler, ana sayfa, VOD senkronu") { currentSection = "content" }
+            SettingsNavRow(Icons.Default.Star, com.stalkerapp.util.L10n.t(settings.language, "settings.library"), "Favoriler, Sonra İzle, özel listeler") { currentSection = "library" }
+            SettingsNavRow(Icons.Default.VolumeUp, com.stalkerapp.util.L10n.t(settings.language, "settings.player"), "Kalite, altyazı, çözücü, jestler") { currentSection = "player" }
+            SettingsNavRow(Icons.Default.Palette, com.stalkerapp.util.L10n.t(settings.language, "settings.appearance"), "Tema, vurgu rengi, yazı ölçeği, TV") { currentSection = "appearance" }
+            SettingsNavRow(Icons.Default.Link, com.stalkerapp.util.L10n.t(settings.language, "settings.integrations"), "TMDB ve harici servisler") { currentSection = "integrations" }
+            SettingsNavRow(Icons.Default.Person, com.stalkerapp.util.L10n.t(settings.language, "settings.account"), "Profil ve hesap ayarları") { currentSection = "account" }
+            SettingsNavRow(Icons.Default.VerifiedUser, com.stalkerapp.util.L10n.t(settings.language, "settings.privacy"), "Gizlilik anlaşması") { currentSection = "privacy" }
+            SettingsNavRow(Icons.Default.Info, com.stalkerapp.util.L10n.t(settings.language, "settings.about"), "Sürüm, güncelleme, destek") { currentSection = "about" }
             // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor (scroll altı boş kalmasın).
             Spacer(Modifier.height(96.dp))
         }
@@ -344,15 +348,15 @@ fun SettingsScreen(
     // ================= BÖLÜM SAYFASI =================
     SettingsPage(
         title = when (currentSection) {
-            "playlist" -> "Playlist & Kaynaklar"
-            "content" -> "Kütüphane & İçerik"
-            "library" -> "Kütüphanem"
-            "player" -> "Oynatıcı"
-            "appearance" -> "Görünüm & Cihaz"
-            "integrations" -> "Entegrasyonlar"
-            "account" -> "Hesap"
-            "privacy" -> "Gizlilik & Güvenlik"
-            else -> "Hakkında & Destek"
+            "playlist" -> com.stalkerapp.util.L10n.t(settings.language, "settings.playlist")
+            "content" -> com.stalkerapp.util.L10n.t(settings.language, "settings.content")
+            "library" -> com.stalkerapp.util.L10n.t(settings.language, "settings.library")
+            "player" -> com.stalkerapp.util.L10n.t(settings.language, "settings.player")
+            "appearance" -> com.stalkerapp.util.L10n.t(settings.language, "settings.appearance")
+            "integrations" -> com.stalkerapp.util.L10n.t(settings.language, "settings.integrations")
+            "account" -> com.stalkerapp.util.L10n.t(settings.language, "settings.account")
+            "privacy" -> com.stalkerapp.util.L10n.t(settings.language, "settings.privacy")
+            else -> com.stalkerapp.util.L10n.t(settings.language, "settings.about")
         },
         onBack = { currentSection = null },
         modifier = modifier
@@ -1810,6 +1814,22 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Text("Dil", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "İngilizce şimdilik ana menü ve ayar başlıklarını çevirir (tam çeviri sonraki sürümde).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("tr" to "Türkçe", "en" to "English").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.language == key,
+                            onClick = { vm.saveSettings(settings.copy(language = key)) },
+                            label = label
+                        )
+                    }
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             }

@@ -490,6 +490,23 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         }
     }
 
+    /**
+     * Ana ekran widget'ı / derin bağlantıdan gelen kanal id'sini oynatır.
+     * Kaynak hâlâ aktifse kanalı bulup başlatır (hata durumunda sessizce geçer).
+     */
+    fun playChannelById(channelId: Long) {
+        if (channelId <= 0) return
+        viewModelScope.launch {
+            val profile = repository.cachedProfile()
+            val loaded = loadChannelsForActiveSource(profile) ?: return@launch
+            val channels = loaded.second
+            val idx = channels.indexOfFirst { it.id == channelId }
+            if (idx >= 0) {
+                PlaybackManager.playChannel(channels, idx, profile)
+            }
+        }
+    }
+
     /** Aktif kaynağın kanallarını yükler (Stalker profil veya m3u/xtream). */
     suspend fun loadChannelsForActiveSource(profile: Profile?): Pair<List<Genre>, List<Channel>>? {
         val kind = enabledSourceKind() ?: return null
