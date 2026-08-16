@@ -248,6 +248,9 @@ object PlaybackManager {
         logo: String = "",
         subtitle: String = ""
     ) {
+        // Yeni kanal seçimi: önceki oturumdan kalma "sonraki kanal" ön-buffer'ı
+        // varsa serbest bırak (aksi halde arka planda ses vermeye devam edebilir).
+        releaseStandby()
         // Kullanıcı kanal seçti/kanal değiştirdi: otomatik retry sayacı sıfırlanır.
         liveRetryCount = 0
         ChannelQueue.channels = channels
@@ -278,6 +281,9 @@ object PlaybackManager {
         subtitle: String = "",
         startPositionMs: Long = 0
     ) {
+        // Kanal ön-buffer'ı varsa serbest bırak: VOD başlarken arka planda
+        // eski kanal sesi çalmamalı.
+        releaseStandby()
         // Film oynatımı: önceki bir diziden kalma bölüm kuyruğu temizlenir,
         // böylece oynatıcıda "Sonraki Bölüm" butonu yalnızca gerçek dizilerde görünür.
         // currentVodId SIFIRLANMAZ: çağıran (VodDetailScreen) film id'sini önceden
@@ -416,6 +422,8 @@ object PlaybackManager {
                 activePlayer = standby
                 standbyPlayer = null
                 tmp?.stop()
+                // Standby sessiz (playWhenReady=false) kuruldu; takas edilince çalsın.
+                activePlayer!!.playWhenReady = true
                 attachListener(activePlayer!!)
                 notifyPlayerChanged()
                 ChannelQueue.index = nextIndex
@@ -439,6 +447,7 @@ object PlaybackManager {
      */
     private fun prepareNextChannelForZapping() {
         val next = ChannelQueue.next ?: return
+        val queue = ChannelQueue.channels
         scope.launch {
             try {
                 val url = repository.channelStreamUrl(next, ChannelQueue.profile) ?: return@launch
@@ -447,11 +456,26 @@ object PlaybackManager {
                 val p = buildPlayer()
                 p.setMediaItem(mediaItem(url, next.name, next.logo))
                 p.prepare()
+                // Ön-tampon yalnızca: playWhenReady=false olduğu için ses çıkmaz ve
+                // audio-focus alınmaz. Yoksa sıradaki kanal aktif kanalla aynı anda
+                // çalmaya başlar (arka planda başka ses).
+                p.playWhenReady = false
+                // Bu sırada kuyruk değiştiyse (yeni kanal seçildi) standby artık
+                // geçersizdir; boşa kurulan player'ı serbest bırak.
+                if (ChannelQueue.channels !== queue) {
+                    p.release()
+                    return@launch
+                }
                 standbyPlayer = p
             } catch (_: Exception) {
                 standbyPlayer = null
             }
         }
+    }
+
+    private fun releaseStandby() {
+        standbyPlayer?.release()
+        standbyPlayer = null
     }
 
     fun previousChannel(): Boolean {
