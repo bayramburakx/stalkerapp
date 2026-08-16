@@ -18,11 +18,23 @@ android {
         versionName = "1.0.3"
     }
 
+    signingConfigs {
+        create("release") {
+            // Sabit keystore: her CI derlemesi aynı imzayla yapılır, Google
+            // girişi için SHA-1 parmak izi bir kez Firebase'e eklenir.
+            // (keystore/release.p12 — şifre: stalkerapp2026)
+            storeFile = rootProject.file("keystore/release.p12")
+            storePassword = "stalkerapp2026"
+            keyAlias = "stalkerapp"
+            keyPassword = "stalkerapp2026"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
