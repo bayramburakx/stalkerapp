@@ -68,6 +68,7 @@ import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.rememberMainViewModel
 import kotlinx.coroutines.launch
 
+private data class Feature(val icon: ImageVector, val title: String, val desc: String)
 
 private val FEATURES = listOf(
     Feature(Icons.Default.LiveTv, "Canlı TV", "Stalker, Xtream ve M3U kanalları tek listede"),

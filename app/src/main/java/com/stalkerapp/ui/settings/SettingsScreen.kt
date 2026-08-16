@@ -2783,6 +2783,27 @@ private fun SliderSetting(
 }
 
 @Composable
+private fun PrivacyDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
+        title = { Text("Gizlilik Anlaşması") },
+        text = {
+            Text(
+                "1. Kaynak bilgilerin (portal URL, MAC, kullanıcı adı/şifre) yalnızca bu cihazda saklanır " +
+                    "ve yalnızca kendi IPTV sağlayıcına gönderilir.\n\n" +
+                    "2. Hesap oluşturup giriş yaparsan verilerin (kaynaklar, ayarlar, favoriler, izleme geçmişi) " +
+                    "Firebase hesabının bulut depolamasına yedeklenir ve cihazlar arasında senkronlanır.\n\n" +
+                    "3. İzleme verileri üçüncü taraflarla paylaşılmaz (uygulama aracılığıyla değil).\n\n" +
+                    "4. TMDB anahtarını kendin eklersen, zenginleştirme istekleri doğrudan themoviedb.org'a gider.\n\n" +
+                    "5. Uygulamayı kaldırdığında cihazdaki tüm veriler silinir; bulut yedeği hesapta kalır.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    )
+}
+
+@Composable
 private fun PortalEditDialog(
     initial: Portal?,
     onDismiss: () -> Unit,
