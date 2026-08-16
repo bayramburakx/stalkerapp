@@ -44,6 +44,7 @@ import com.stalkerapp.data.VodItem
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -705,6 +706,78 @@ object PlaybackManager {
         return true
     }
 
+    // ---------- Uyku zamanlayıcısı ----------
+
+    // Kalan süre (sn). 0 = kapalı; -1 = "bölüm sonunda dur" modu.
+    @Volatile private var sleepRemainingSec = 0L
+    private var sleepUntilEpisodeEnd = false
+    private var sleepJob: Job? = null
+    private val sleepListeners = CopyOnWriteArrayList<(Long) -> Unit>()
+
+    /** Uyku zamanlayıcısını ayarlar (dakika). 0 = kapat. Süre dolunca oynatma durur. */
+    fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        sleepUntilEpisodeEnd = false
+        if (minutes <= 0) {
+            sleepRemainingSec = 0
+            notifySleepChanged()
+            return
+        }
+        sleepRemainingSec = minutes * 60L
+        notifySleepChanged()
+        sleepJob = scope.launch {
+            while (sleepRemainingSec > 0) {
+                delay(1000)
+                sleepRemainingSec--
+                notifySleepChanged()
+                if (sleepRemainingSec <= 0) {
+                    // Süre doldu: oynatmayı durdur (bildirim de kapanır).
+                    pause()
+                    stopService()
+                }
+            }
+        }
+    }
+
+    /** "Bölüm sonunda dur": geçerli bölüm/medya bitince oynatma kapanır. */
+    fun setSleepUntilEpisodeEnd() {
+        sleepJob?.cancel()
+        sleepRemainingSec = -1
+        sleepUntilEpisodeEnd = true
+        notifySleepChanged()
+    }
+
+    fun cancelSleepTimer() {
+        sleepJob?.cancel()
+        sleepRemainingSec = 0
+        sleepUntilEpisodeEnd = false
+        notifySleepChanged()
+    }
+
+    /** Kalan süre (sn); -1 = bölüm sonu modu; 0 = kapalı. */
+    fun sleepTimerRemainingSec(): Long = sleepRemainingSec
+
+    fun addSleepListener(l: (Long) -> Unit) {
+        sleepListeners.add(l)
+        l(sleepRemainingSec)
+    }
+
+    fun removeSleepListener(l: (Long) -> Unit) {
+        sleepListeners.remove(l)
+    }
+
+    private fun notifySleepChanged() {
+        sleepListeners.forEach { it(sleepRemainingSec) }
+    }
+
+    /** Zamanlayıcıyı bitirir (bölüm sonu modu tetiklendiğinde çağrılır). */
+    private fun finishSleepTimer() {
+        sleepJob?.cancel()
+        sleepRemainingSec = 0
+        sleepUntilEpisodeEnd = false
+        notifySleepChanged()
+    }
+
     // ---------- Chromecast ----------
 
     /** Yayın oturumu bağlı mı? (İçerik TV'de oynatılıyor.) */
@@ -924,9 +997,13 @@ object PlaybackManager {
                     Player.STATE_ENDED -> {
                         if (vodPlayback) {
                             // Bölüm bitince izlendi işaretle; binge mod açıksa
-                            // sıradaki bölüm otomatik oynatılır.
+                            // sıradaki bölüm otomatik oynatılır. Uyku zamanlayıcısı
+                            // "bölüm sonunda dur" modundaysa binge kapalı gibi davran.
                             markCurrentEpisodeWatched()
-                            if (store.settings().bingeMode && VodQueue.hasNext) {
+                            if (sleepUntilEpisodeEnd) {
+                                finishSleepTimer()
+                                service?.stopSelf()
+                            } else if (store.settings().bingeMode && VodQueue.hasNext) {
                                 playNextEpisode(auto = false)
                             } else {
                                 service?.stopSelf()

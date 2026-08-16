@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -95,6 +96,7 @@ import android.os.BatteryManager
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import kotlin.math.abs
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.Close
@@ -110,6 +112,7 @@ import androidx.compose.material.icons.filled.Tv
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.cast.CastManager
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.EpgReminder
 import com.stalkerapp.data.Profile
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -148,6 +151,11 @@ fun PlayerScreen(navController: NavHostController) {
     var showTracks by remember { mutableStateOf(false) }
     var showSubs by remember { mutableStateOf(false) }
     var showEpg by remember { mutableStateOf(false) }
+    // Uyku zamanlayıcısı: kalan saniye (0=kapalı, -1=bölüm sonu).
+    var sleepRemaining by remember { mutableStateOf(PlaybackManager.sleepTimerRemainingSec()) }
+    var showSleepDialog by remember { mutableStateOf(false) }
+    // Canlı yayında timeshift: akış geri sarılabilir mi?
+    var liveSeekable by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
     var showPlayerSettings by remember { mutableStateOf(false) }
     var showChannels by remember { mutableStateOf(false) }
@@ -235,6 +243,13 @@ fun PlayerScreen(navController: NavHostController) {
         val cl: (Boolean) -> Unit = { isCasting = it }
         PlaybackManager.addCastListener(cl)
         onDispose { PlaybackManager.removeCastListener(cl) }
+    }
+
+    // Uyku zamanlayıcısı kalan süresi (oynatıcıda chip olarak gösterilir).
+    DisposableEffect(Unit) {
+        val sl: (Long) -> Unit = { sleepRemaining = it }
+        PlaybackManager.addSleepListener(sl)
+        onDispose { PlaybackManager.removeSleepListener(sl) }
     }
 
     // Yayın dialog'u açıkken cihaz ara; kapandığında taramayı durdur (pil tasarrufu).
@@ -386,6 +401,8 @@ fun PlayerScreen(navController: NavHostController) {
                 position = p.currentPosition
                 duration = if (p.duration > 0) p.duration else 0L
             }
+            // Canlı yayın geri sarılabilir mi? (timeshift: sunucu destekliyorsa)
+            liveSeekable = p?.isCurrentWindowSeekable == true && !PlaybackManager.isVod()
             delay(300)
         }
     }
@@ -694,6 +711,28 @@ fun PlayerScreen(navController: NavHostController) {
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                        // Uyku zamanlayıcısı: aktifken kalan süre ikonun altında görünür.
+                        IconButton(
+                            onClick = { showSleepDialog = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.Bedtime,
+                                    contentDescription = "Uyku zamanlayıcısı",
+                                    tint = if (sleepRemaining != 0L) Color(0xFFFFB74D) else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                if (sleepRemaining != 0L) {
+                                    Text(
+                                        sleepLabel(sleepRemaining),
+                                        color = Color(0xFFFFB74D),
+                                        fontSize = 8.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 val url = PlaybackManager.currentStreamUrl
@@ -869,8 +908,48 @@ fun PlayerScreen(navController: NavHostController) {
                     // LIVE TV CONTROLS
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         Text("● CANLI", color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
+                        if (liveSeekable) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "(timeshift: geri sarılabilir)",
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
+
+                    // Canlı yayın geri sarılabilirken (timeshift) ilerleme çubuğu
+                    // + "Canlıya Dön" — sunucu desteklemiyorsa gizlenir.
+                    if (liveSeekable) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = formatMs(position),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Slider(
+                                value = position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f)),
+                                onValueChange = {
+                                    seeking = true
+                                    position = it.toLong()
+                                },
+                                onValueChangeFinished = {
+                                    PlaybackManager.seekTo(position)
+                                    seeking = false
+                                },
+                                valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { PlaybackManager.seekTo((duration - 1000).coerceAtLeast(0L)) }) {
+                                Text("Canlıya Dön", color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -897,6 +976,17 @@ fun PlayerScreen(navController: NavHostController) {
                                     tint = Color.White,
                                     modifier = Modifier.size(52.dp)
                                 )
+                            }
+                            // Timeshift: canlı yayında 30 sn geri sar (sunucu destekliyorsa).
+                            if (liveSeekable) {
+                                IconButton(onClick = { PlaybackManager.seekBack(30_000L) }) {
+                                    Icon(
+                                        Icons.Default.Replay10,
+                                        contentDescription = "30 sn geri sar",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
                             }
                             IconButton(onClick = {
                                 val p = queueProfile ?: return@IconButton
@@ -1072,6 +1162,71 @@ fun PlayerScreen(navController: NavHostController) {
             onDismiss = { castDialogVisible = false }
         )
     }
+
+    if (showSleepDialog) {
+        SleepTimerDialog(
+            current = sleepRemaining,
+            onMinutes = { minutes -> PlaybackManager.setSleepTimer(minutes); showSleepDialog = false },
+            onUntilEnd = { PlaybackManager.setSleepUntilEpisodeEnd(); showSleepDialog = false },
+            onCancel = { PlaybackManager.cancelSleepTimer(); showSleepDialog = false },
+            onDismiss = { showSleepDialog = false }
+        )
+    }
+}
+
+private fun sleepLabel(sec: Long): String = when {
+    sec < 0 -> "Bölüm sonu"
+    sec >= 3600 -> "%d:%02d:%02d".format(sec / 3600, (sec % 3600) / 60, sec % 60)
+    else -> "%d:%02d".format(sec / 60, sec % 60)
+}
+
+@Composable
+private fun SleepTimerDialog(
+    current: Long,
+    onMinutes: (Int) -> Unit,
+    onUntilEnd: () -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Uyku Zamanlayıcısı") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (current != 0L) {
+                    Text(
+                        "Aktif: ${if (current < 0) "Bölüm sonunda dur" else "${sleepLabel(current)} kaldı"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                listOf(15 to "15 dk", 30 to "30 dk", 60 to "1 saat", 90 to "1.5 saat").forEach { (m, label) ->
+                    ListItem(
+                        headlineContent = { Text(label) },
+                        trailingContent = if (current == m * 60L) {
+                            { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                        } else null,
+                        modifier = Modifier.clickable { onMinutes(m) }
+                    )
+                }
+                ListItem(
+                    headlineContent = { Text("Bölüm sonunda dur") },
+                    supportingContent = { Text("Geçerli bölüm/medya bitince kapanır") },
+                    trailingContent = if (current < 0) {
+                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                    } else null,
+                    modifier = Modifier.clickable(onClick = onUntilEnd)
+                )
+                if (current != 0L) {
+                    ListItem(
+                        headlineContent = { Text("Kapat") },
+                        modifier = Modifier.clickable(onClick = onCancel)
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1156,6 +1311,9 @@ fun EpgSheet(
     }
     var programs by remember { mutableStateOf<List<com.stalkerapp.data.EpgProgram>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Hatırlatıcı ekle/kaldır sonrası listeyi tazele.
+    var remindersVersion by remember { mutableStateOf(0) }
+    val reminders = remember(remindersVersion) { vm.store.epgReminders() }
 
     LaunchedEffect(channel.id) {
         try {
@@ -1228,6 +1386,35 @@ fun EpgSheet(
                                     maxLines = 3,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                            }
+                            // Program hatırlatıcısı: gelecekteki programlara "başlayınca bildir".
+                            if (!p.isDefault && p.startTs > System.currentTimeMillis() / 1000) {
+                                val reminded = reminders.any { it.channelId == channel.id && it.startTs == p.startTs }
+                                TextButton(
+                                    onClick = {
+                                        if (reminded) {
+                                            vm.store.removeEpgReminder(channel.id, p.startTs)
+                                        } else {
+                                            vm.store.addEpgReminder(
+                                                EpgReminder(
+                                                    id = "r_${channel.id}_${p.startTs}",
+                                                    channelId = channel.id,
+                                                    channelName = channel.name,
+                                                    programName = p.name,
+                                                    startTs = p.startTs
+                                                )
+                                            )
+                                        }
+                                        remindersVersion++
+                                    },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        if (reminded) "🔔 Hatırlatma ayarlandı (dokun: kaldır)" else "🔔 Başlayınca Bildir",
+                                        color = if (reminded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
                             }
                         }
                         HorizontalDivider()

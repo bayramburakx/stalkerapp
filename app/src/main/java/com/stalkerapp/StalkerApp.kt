@@ -1,6 +1,14 @@
 package com.stalkerapp
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import com.stalkerapp.data.EpgReminder
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.StalkerClient
 import com.stalkerapp.data.Store
@@ -12,6 +20,7 @@ import com.stalkerapp.util.isWifiConnected
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class StalkerApp : Application() {
@@ -38,6 +47,9 @@ class StalkerApp : Application() {
         )
         PlaybackManager.init(this, store, repository)
         instance = this
+        // EPG program hatırlatıcıları: 30 sn'de bir kontrol edilir; program
+        // başlama vaktine yaklaşınca bildirim gönderilir.
+        startReminderChecker()
 
         // Auto-login: diske kayıtlı profil ile doğrudan Ana Sayfa'ya başlanır
         // (login ekranı atlanır). Arka planda sessizce yeniden bağlanılır:
@@ -71,7 +83,65 @@ class StalkerApp : Application() {
         return meta.version < Store.VOD_CATALOG_VERSION
     }
 
+    // ---------- EPG program hatırlatıcıları ----------
+
+    private fun startReminderChecker() {
+        scope.launch {
+            while (true) {
+                runCatching { checkEpgReminders() }
+                delay(30_000)
+            }
+        }
+    }
+
+    private fun checkEpgReminders() {
+        val now = System.currentTimeMillis() / 1000
+        var list = store.epgReminders()
+        if (list.isEmpty()) return
+        val toFire = list.filter { !it.fired && it.startTs in (now - 60)..(now + 30) }
+        toFire.forEach { postReminderNotification(it) }
+        if (toFire.isNotEmpty()) {
+            list = list.map { if (it in toFire) it.copy(fired = true) else it }
+            store.saveEpgReminders(list)
+        }
+        // 24 saatten eski (tetiklenmiş) hatırlatıcıları temizle.
+        val pruned = list.filter { it.fired && now - it.startTs > 86400 }
+        if (pruned.isNotEmpty()) {
+            store.saveEpgReminders(list.filterNot { it in pruned })
+        }
+    }
+
+    private fun postReminderNotification(r: EpgReminder) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    REMINDER_CHANNEL,
+                    "Program Hatırlatıcıları",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply { setShowBadge(true) }
+            )
+        }
+        val intent = Intent(this, MainActivity::class.java)
+        val pi = PendingIntent.getActivity(
+            this,
+            r.id.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(this, REMINDER_CHANNEL)
+            .setSmallIcon(R.drawable.ic_play)
+            .setContentTitle(r.programName)
+            .setContentText("${r.channelName} kanalında şimdi başladı")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        manager.notify(r.id.hashCode(), notif)
+    }
+
     companion object {
+        const val REMINDER_CHANNEL = "epg_reminders"
         lateinit var instance: StalkerApp
             private set
     }

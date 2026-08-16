@@ -296,6 +296,19 @@ data class Episode(
     val thumb: String = ""
 )
 
+/** EPG program hatırlatıcısı: program başlayınca bildirim gönderilir. */
+@Serializable
+data class EpgReminder(
+    val id: String = "",
+    val channelId: Long = 0,
+    val channelName: String = "",
+    val programName: String = "",
+    /** Programın başlama zamanı (epoch sn). */
+    val startTs: Long = 0,
+    /** Bildirim gönderildi mi? */
+    val fired: Boolean = false
+)
+
 @Serializable
 data class EpgProgram(
     @SerialName("ch_id") val chId: Long = 0,

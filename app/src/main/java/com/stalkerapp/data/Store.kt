@@ -278,6 +278,34 @@ class Store(private val context: Context) {
         prefs.edit().putString(KEY_LAST_LIVE_CHANNEL, "$kind|$sourceId|$channelId").apply()
     }
 
+    // ---------- EPG program hatırlatıcıları ----------
+
+    fun epgReminders(): List<EpgReminder> = runCatching {
+        json.decodeFromString(
+            ListSerializer(EpgReminder.serializer()),
+            prefs.getString(KEY_EPG_REMINDERS, "[]").orEmpty()
+        )
+    }.getOrDefault(emptyList())
+
+    fun saveEpgReminders(list: List<EpgReminder>) {
+        prefs.edit().putString(
+            KEY_EPG_REMINDERS,
+            json.encodeToString(ListSerializer(EpgReminder.serializer()), list)
+        ).apply()
+    }
+
+    /** Yeni hatırlatıcı ekler (aynı program için tekrarlamaz). */
+    fun addEpgReminder(r: EpgReminder) {
+        val list = epgReminders().toMutableList()
+        if (list.any { it.channelId == r.channelId && it.startTs == r.startTs }) return
+        list.add(r)
+        saveEpgReminders(list)
+    }
+
+    fun removeEpgReminder(channelId: Long, startTs: Long) {
+        saveEpgReminders(epgReminders().filterNot { it.channelId == channelId && it.startTs == startTs })
+    }
+
     /** Tüm kullanıcı verilerini tek JSON olarak dışa aktarır (yedek). */
     fun backupJson(): String {
         val data = LinkedHashMap<String, JsonElement>()
@@ -718,6 +746,7 @@ class Store(private val context: Context) {
         private const val KEY_USER_LISTS = "user_lists"
         private const val KEY_CHANNEL_CUSTOMIZATION = "channel_customization"
         private const val KEY_LAST_LIVE_CHANNEL = "last_live_channel"
+        private const val KEY_EPG_REMINDERS = "epg_reminders"
 
         /** Varsayılan profil kimliği (eski tek profil). Bu profilde veri anahtarları izole edilmez. */
         const val DEFAULT_PROFILE_ID = "default"
@@ -738,7 +767,7 @@ class Store(private val context: Context) {
             KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_USER_PROFILE,
             KEY_USER_PROFILES, KEY_ACTIVE_PROFILE,
             KEY_WATCH_LATER, KEY_USER_LISTS, KEY_CHANNEL_CUSTOMIZATION,
-            KEY_LAST_LIVE_CHANNEL
+            KEY_LAST_LIVE_CHANNEL, KEY_EPG_REMINDERS
         )
 
         /** JSON olarak kodlanmış (putString + serialize) yedek anahtarları. */
