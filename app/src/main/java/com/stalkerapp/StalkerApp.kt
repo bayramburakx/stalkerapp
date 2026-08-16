@@ -38,6 +38,7 @@ class StalkerApp : Application() {
     lateinit var firebase: FirebaseSyncManager
         private set
 
+    /** Uygulama geneli coroutine scope (arka plan görevleri + bulut senkron). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -68,7 +69,7 @@ class StalkerApp : Application() {
             repository.restoreProfileFromDisk()
             val portal = store.activePortal()
             if (portal != null) {
-                scope.launch { runCatching { repository.connect(portal) } }
+                appScope.launch { runCatching { repository.connect(portal) } }
             }
             // Resume an interrupted sync (or run the first one) in the background.
             // Kütüphane & İçerik ayarlarına saygı gösterilir: otomatik senkron
@@ -93,7 +94,7 @@ class StalkerApp : Application() {
     // ---------- EPG program hatırlatıcıları ----------
 
     private fun startReminderChecker() {
-        scope.launch {
+        appScope.launch {
             while (true) {
                 runCatching { checkEpgReminders() }
                 runCatching { checkRecordings() }
@@ -112,7 +113,7 @@ class StalkerApp : Application() {
         if (recs.isEmpty()) return
         // Başlama zamanı geçmiş ama bitiş zamanı gelmemiş planlı kayıtlar.
         recs.filter { it.status == "scheduled" && now >= it.startTs && now < it.stopTs }.forEach { r ->
-            scope.launch {
+            appScope.launch {
                 val url = r.streamUrl.ifBlank {
                     runCatching { repository.channelStreamUrl(r.channel, repository.cachedProfile()) }
                         .getOrNull().orEmpty()
