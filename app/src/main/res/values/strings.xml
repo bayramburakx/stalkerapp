@@ -6,5 +6,5 @@
       Sign-in method → Google → Web SDK configuration kısmındaki değer).
       Boşsa "Google ile devam et" butonu devre dışı kalır; e-posta/şifre girişi çalışır.
     -->
-    <string name="google_web_client_id" translatable="false"></string>
+    <string name="google_web_client_id" translatable="false">111484817724-ndjq78hu3bpv9i1pk8bg5bpoh4ttrqik.apps.googleusercontent.com</string>
 </resources>
