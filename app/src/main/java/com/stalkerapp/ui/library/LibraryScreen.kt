@@ -89,14 +89,14 @@ fun LibraryScreen(
     fun isWatched(item: VodItem): Boolean {
         val p = vodProgress[item.id]
         return item.id in watchedOverrides ||
-            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
+            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.85)
     }
 
-    // Devam edenler: %5..%95 arası ilerlemesi olan filmler + bölüm ilerlemesi olan diziler.
+    // Devam edenler: %5..%85 arası ilerlemesi olan filmler + bölüm ilerlemesi olan diziler.
     val continueItems = remember(vodProgress, episodeProgress, byId) {
         val vodIds = vodProgress.filter { (_, p) ->
             p.durationMs > 0 && p.positionMs > 0 &&
-                p.positionMs < p.durationMs * 0.95
+                p.positionMs < p.durationMs * 0.85
         }.keys
         val seriesIds = episodeProgress.keys.mapNotNull { key ->
             key.substringBefore(':').toLongOrNull()
@@ -107,11 +107,11 @@ fun LibraryScreen(
             .take(20)
     }
 
-    // İzlenenler: override / %95+ izlenen film + en az bir bölümü izlenen diziler.
+    // İzlenenler: override / %85+ izlenen film + en az bir bölümü izlenen diziler.
     val watchedItems = remember(watchedOverrides, vodProgress, watchedEps, byId) {
         val fromOverride = watchedOverrides.mapNotNull { byId[it] }
         val fromProgress = vodProgress.filter { (_, p) ->
-            p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95
+            p.durationMs > 0 && p.positionMs >= p.durationMs * 0.85
         }.keys.mapNotNull { byId[it] }
         val fromEps = watchedEps.mapNotNull { key ->
             key.substringBefore(':').toLongOrNull()
@@ -350,7 +350,7 @@ private fun PosterRow(
         items(items, key = { it.id }) { item ->
             val p = vodProgress[item.id]
             val watched = item.id in watchedOverrides ||
-                (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
+                (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.85)
             Column(modifier = Modifier.width(120.dp)) {
                 VodPoster(
                     item = item,

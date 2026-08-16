@@ -363,6 +363,9 @@ fun PlayerScreen(navController: NavHostController) {
                     } else {
                         app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
                     }
+                    // Ana sayfa/Kütüphane "İzlemeye Devam" & "Son İzlenenler"
+                    // listelerinin tazelenmesi için watchedVersion'ı arttır.
+                    vm.bumpWatched()
                 }
             }
         }

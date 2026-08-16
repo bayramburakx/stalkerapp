@@ -1162,7 +1162,7 @@ fun SettingsScreen(
                 SectionHeader(Icons.Default.Star, "İstatistikler")
                 val stats = remember(watchedVersion, settings) {
                     val prog = vm.store.loadVodProgress()
-                    val filmsWatched = prog.values.count { it.durationMs > 0 && it.positionMs >= it.durationMs * 0.95 }
+                    val filmsWatched = prog.values.count { it.durationMs > 0 && it.positionMs >= it.durationMs * 0.85 }
                     val epsWatched = vm.store.watchedEpisodes().size
                     val favVods = vm.store.favoriteVods().size
                     val favCh = vm.store.favoriteChannels().size

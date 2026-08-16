@@ -65,7 +65,7 @@ fun VodQuickActionsSheet(
     var showLists by remember { mutableStateOf(false) }
     val progress = vm.store.loadVodProgress()[item.id]
     val watchedByProgress = progress != null && progress.durationMs > 0 &&
-        progress.positionMs >= progress.durationMs * 0.95
+        progress.positionMs >= progress.durationMs * 0.85
     var watched by remember { mutableStateOf(vm.store.isWatchedOverride(item.id) || watchedByProgress) }
     val baseUrl = vm.repository.cachedProfile()?.baseUrl.orEmpty()
 

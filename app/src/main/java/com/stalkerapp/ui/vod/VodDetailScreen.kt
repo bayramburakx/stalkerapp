@@ -884,7 +884,7 @@ fun VodDetailScreen(
                                             // Bölüm yarıda bırakıldıysa progress bar (kartın altında).
                                             val prog = episodeProg[episodeKey(ep, seasonNum)]
                                             if (prog != null && prog.durationMs > 0 &&
-                                                prog.positionMs > 0 && prog.positionMs < prog.durationMs * 0.95
+                                                prog.positionMs > 0 && prog.positionMs < prog.durationMs * 0.85
                                             ) {
                                                 LinearProgressIndicator(
                                                     progress = { (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f) },

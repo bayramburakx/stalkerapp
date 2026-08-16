@@ -140,18 +140,26 @@ object PlaybackManager {
         }
     }
 
-    /** Bölüm %85+ izlendiyse otomatik "izlendi" işaretler (tekrar tekrar işaretlemez). */
+    /** İçerik %85+ izlendiyse otomatik "izlendi" işaretler (tekrar tekrar işaretlemez). */
     private fun checkAutoWatched() {
         val p = activePlayer ?: return
         if (!vodPlayback) return
-        val cur = VodQueue.current ?: return
-        val item = VodQueue.item ?: return
-        if (!item.isSeries && item.seriesId <= 0) return
         val dur = p.duration
         val pos = p.currentPosition
-        if (dur > 0 && pos >= dur * 0.85) {
+        if (dur <= 0 || pos <= 0 || pos < dur * 0.85) return
+        val cur = VodQueue.current
+        val item = VodQueue.item
+        if (cur != null && item != null && (item.isSeries || item.seriesId > 0)) {
+            // Dizi bölümü: bölüm anahtarıyla işaretle.
             val key = "${item.id}:${VodQueue.season}:${cur.episodeNumber}"
             if (!store.isEpisodeWatched(key)) store.markEpisodeWatched(key)
+        } else if (currentVodId != 0L) {
+            // Film: ilerlemeyi kalıcı kaydet — "izlendi" işareti positionMs >= %85
+            // üzerinden hesaplandığı için film buradan izlendi sayılır.
+            val prog = store.loadVodProgress()[currentVodId]
+            if (prog == null || prog.positionMs < dur * 0.85) {
+                store.saveVodProgress(currentVodId, pos, dur)
+            }
         }
     }
 
@@ -272,9 +280,11 @@ object PlaybackManager {
     ) {
         // Film oynatımı: önceki bir diziden kalma bölüm kuyruğu temizlenir,
         // böylece oynatıcıda "Sonraki Bölüm" butonu yalnızca gerçek dizilerde görünür.
+        // currentVodId SIFIRLANMAZ: çağıran (VodDetailScreen) film id'sini önceden
+        // atar ve ilerleme kaydı bu id'ye bağlıdır — sıfırlanırsa film ilerlemesi
+        // asla kaydedilmez (resume + "İzlemeye Devam" + izlendi işareti kırılırdı).
         VodQueue.item = null
         VodQueue.episodes = emptyList()
-        currentVodId = 0
         playInternal(url, title, artwork, subtitle, isVod = true, startPositionMs = startPositionMs)
     }
 

@@ -132,10 +132,13 @@ fun HomeDashboardScreen(
 
     // Ana sayfadan kaldırılanlar (uzun bas → "Ana Sayfadan Kaldır").
     val hiddenFromHome = settings.hiddenFromHome.toSet()
-    val continueWatching = remember(catalog, app.store, hiddenFromHome) {
+    // İzleme ilerlemeleri oynatma sırasında değişir; watchedVersion her
+    // değişimde bu listeler Store'dan taze okunur (yoksa bayat kalırdı).
+    val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
+    val continueWatching = remember(catalog, watchedVersion, hiddenFromHome) {
         val progress = app.store.loadVodProgress()
         progress.mapNotNull { (id, p) ->
-            if (id !in hiddenFromHome && p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.95) {
+            if (id !in hiddenFromHome && p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85) {
                 catalog.byId[id]?.let { it to p }
             } else null
         }
@@ -143,7 +146,7 @@ fun HomeDashboardScreen(
 
     // Son İzlenenler: hem film ilerlemeleri hem de dizi bölüm ilerlemeleri,
     // son izlenme zamanına göre sıralanır (tamamlanmışlar da dahil).
-    val recentlyWatched = remember(catalog, app.store, hiddenFromHome) {
+    val recentlyWatched = remember(catalog, watchedVersion, hiddenFromHome) {
         val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
             if (id in hiddenFromHome) null else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
         }
@@ -163,13 +166,12 @@ fun HomeDashboardScreen(
     // Uzun bas → hızlı işlemler sheet'i + izlenme işaretleri.
     var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
     // İzlenme işaretleri anlık: watchedVersion değişince Store'dan taze okunur.
-    val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
     val watchedOverrides = remember(watchedVersion) { app.store.watchedOverrides() }
     val vodProgressMap = remember(watchedVersion) { app.store.loadVodProgress() }
     fun isWatched(item: VodItem): Boolean {
         val p = vodProgressMap[item.id]
         return item.id in watchedOverrides ||
-            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
+            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.85)
     }
 
     // Kullanıcının gizlediği kategoriler + +18 filtresi (Kütüphane & İçerik ayarları).

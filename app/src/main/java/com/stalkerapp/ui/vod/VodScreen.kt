@@ -103,7 +103,7 @@ fun VodScreen(
     fun isWatched(item: VodItem): Boolean {
         val p = vodProgress[item.id]
         return item.id in watchedOverrides ||
-            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.95)
+            (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.85)
     }
 
     LaunchedEffect(profile) {
