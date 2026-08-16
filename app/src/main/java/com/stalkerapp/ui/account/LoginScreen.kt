@@ -109,7 +109,14 @@ fun LoginScreen(
                     busy = false
                 }
             } catch (e: ApiException) {
-                error = "Google girişi iptal edildi veya başarısız"
+                // 10 = DEVELOPER_ERROR (client ID / SHA-1 eşleşmesi), 12500 = sunucu hatası,
+                // 12501 = kullanıcı iptal etti. Kullanıcıya anlamlı bir mesaj göster.
+                error = when (e.statusCode) {
+                    10 -> "Google yapılandırma hatası: Firebase'e SHA-1 parmak izi ve Google oturumu eklenmiş olmalı"
+                    12500 -> "Google sunucu hatası — Firebase konsolunda Google oturum açma etkin mi kontrol et"
+                    12501 -> "Google girişi iptal edildi"
+                    else -> "Google girişi başarısız (kod ${e.statusCode})"
+                }
             }
         } else {
             error = "Google girişi iptal edildi"
