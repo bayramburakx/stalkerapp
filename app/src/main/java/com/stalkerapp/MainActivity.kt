@@ -29,6 +29,7 @@ import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.account.LoginScreen
+import com.stalkerapp.ui.account.ProfilePickerScreen
 import com.stalkerapp.data.FirebaseSyncManager
 import com.stalkerapp.ui.favorites.FavoritesScreen
 import com.stalkerapp.ui.rememberMainViewModel
@@ -117,21 +118,21 @@ private fun AppNav() {
     // Firebase hesap yönetimi (giriş/çıkış için uygulama genelinde kullanılır).
     val firebase = remember { FirebaseSyncManager.init(app) }
 
-    // Başlangıç ekranı: ilk açılışta profil oluşturma (onboarding); sonrasında
-    // oturum varsa doğrudan Ana Sayfa, yoksa Giriş ekranı.
+    // Başlangıç ekranı: ilk açılışta onboarding; sonrasında oturum varsa
+    // Netflix tarzı profil seçici, yoksa Giriş ekranı.
     val startDestination = remember {
         when {
             !app.store.isOnboardingDone() -> "onboarding"
-            firebase.isSignedIn -> "home"
+            firebase.isSignedIn -> "profiles"
             else -> "login"
         }
     }
     NavHost(navController = navController, startDestination = startDestination) {
         composable("onboarding") {
             OnboardingScreen(onDone = {
-                // Onboarding sonrası: hesabı olan içeri, olmayan giriş ekranına gider.
+                // Onboarding sonrası: hesabı olan profil seçiciye, olmayan giriş ekranına gider.
                 if (firebase.isSignedIn) {
-                    navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
+                    navController.navigate("profiles") { popUpTo("onboarding") { inclusive = true } }
                 } else {
                     navController.navigate("login") { popUpTo("onboarding") { inclusive = true } }
                 }
@@ -143,9 +144,18 @@ private fun AppNav() {
                 onSignedIn = {
                     // Bulut yedeği geri yüklendiyse Store değişti; akışları tazele.
                     vm.refreshFlows()
-                    navController.navigate("home") { popUpTo("login") { inclusive = true } }
+                    navController.navigate("profiles") { popUpTo("login") { inclusive = true } }
                 },
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable("profiles") {
+            ProfilePickerScreen(
+                vm = vm,
+                firebase = firebase,
+                onProfileSelected = {
+                    navController.navigate("home") { popUpTo("profiles") { inclusive = true } }
+                }
             )
         }
         composable("favorites") {
@@ -163,7 +173,7 @@ private fun AppNav() {
                 onOpenSearch = { navController.navigate("search") },
                 onOpenGuide = { navController.navigate("epg") },
                 onOpenOnboarding = {
-                    // Oturum kapalıysa doğrudan giriş ekranına, açıksa kurulum sihirbazına.
+                    // Oturum kapalıysa giriş ekranına, açıksa kurulum sihirbazına.
                     if (firebase.isSignedIn) {
                         navController.navigate("onboarding") {
                             popUpTo("home") { inclusive = false }
@@ -174,6 +184,12 @@ private fun AppNav() {
                             popUpTo("home") { inclusive = false }
                             launchSingleTop = true
                         }
+                    }
+                },
+                onOpenProfiles = {
+                    navController.navigate("profiles") {
+                        popUpTo("home") { inclusive = false }
+                        launchSingleTop = true
                     }
                 }
             )

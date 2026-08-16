@@ -68,12 +68,6 @@ import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.rememberMainViewModel
 import kotlinx.coroutines.launch
 
-private val AVATARS = listOf(
-    "😀", "😎", "🦊", "🐼", "🐸", "🐙", "🦁", "🐯",
-    "🚀", "🎬", "🍿", "🎮", "⚽", "🎵", "👾", "🤖"
-)
-
-private data class Feature(val icon: ImageVector, val title: String, val desc: String)
 
 private val FEATURES = listOf(
     Feature(Icons.Default.LiveTv, "Canlı TV", "Stalker, Xtream ve M3U kanalları tek listede"),
@@ -85,9 +79,9 @@ private val FEATURES = listOf(
 /**
  * Adım adım kurulum sihirbazı:
  *  1. Hoş geldin + özellik tanıtımı
- *  2. Profil (ad + avatar)
- *  3. İlk kaynak (Stalker / Xtream / M3U) — atlanabilir
+ *  2. İlk kaynak (Stalker / Xtream / M3U) — atlanabilir
  *
+ * Profil oluşturma artık giriş sonrası Netflix tarzı profil seçicide yapılır.
  * Her adımdan "Atla" ile çıkılabilir; kaynaklar her zaman sonradan
  * Ayarlar → Playlist & Kaynaklar'dan eklenebilir.
  */
@@ -97,10 +91,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { 3 })
-
-    var name by remember { mutableStateOf("") }
-    var avatar by remember { mutableStateOf(AVATARS.first()) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
 
     // Kaynak adımı durumu
     var sourceChoice by remember { mutableStateOf<String?>(null) } // "portal" | "xtream" | "m3u"
@@ -120,15 +111,6 @@ fun OnboardingScreen(onDone: () -> Unit) {
     var sourceError by remember { mutableStateOf<String?>(null) }
 
     fun finish() {
-        // Profil adımındaki bilgilerle aktif profili kaydet (ilk kurulumda "default" oluşur).
-        val current = vm.userProfile.value
-        vm.saveUserProfile(
-            com.stalkerapp.data.UserProfile(
-                id = current.id,
-                name = name.trim().ifBlank { "İzleyici" },
-                avatar = avatar
-            )
-        )
         app.store.setOnboardingDone(true)
         onDone()
     }
@@ -163,14 +145,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
         ) { page ->
             when (page) {
                 0 -> WelcomePage { scope.launch { pagerState.animateScrollToPage(1) } }
-                1 -> ProfilePage(
-                    name = name,
-                    onName = { name = it },
-                    avatar = avatar,
-                    onAvatar = { avatar = it },
-                    onNext = { scope.launch { pagerState.animateScrollToPage(2) } }
-                )
-                2 -> SourcePage(
+                1 -> SourcePage(
                     vm = vm,
                     sourceChoice = sourceChoice,
                     onChoice = { sourceChoice = it },
@@ -196,7 +171,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
             horizontalArrangement = Arrangement.Center
         ) {
-            repeat(3) { i ->
+            repeat(2) { i ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
@@ -277,88 +252,6 @@ private fun WelcomePage(onStart: () -> Unit) {
             shape = RoundedCornerShape(14.dp)
         ) {
             Text("Başla", fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun ProfilePage(
-    name: String,
-    onName: (String) -> Unit,
-    avatar: String,
-    onAvatar: (String) -> Unit,
-    onNext: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Profilini Oluştur",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Text(
-            "İzleme deneyimini kişiselleştirmek için bir ad ve avatar seç. " +
-                "Favorilerin ve izleme geçmişin bu profilde saklanır.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Spacer(Modifier.height(28.dp))
-        OutlinedTextField(
-            value = name,
-            onValueChange = { onName(it.take(24)) },
-            label = { Text("Adın") },
-            placeholder = { Text("Örn. Burak") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(24.dp))
-        Text(
-            "Avatarını seç",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(12.dp))
-        AVATARS.chunked(4).forEach { rowAvatars ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                rowAvatars.forEach { emoji ->
-                    val selected = emoji == avatar
-                    Box(
-                        modifier = Modifier
-                            .size(58.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                                else Color.White.copy(alpha = 0.06f)
-                            )
-                            .clickable { onAvatar(emoji) }
-                            .then(if (selected) Modifier.padding(4.dp) else Modifier),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(emoji, fontSize = MaterialTheme.typography.headlineMedium.fontSize)
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-        Spacer(Modifier.height(28.dp))
-        Button(
-            onClick = onNext,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text("Devam", fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(16.dp))
     }

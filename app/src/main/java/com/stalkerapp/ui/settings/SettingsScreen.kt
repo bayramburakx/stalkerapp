@@ -105,7 +105,6 @@ import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.UpdateChecker
 import com.stalkerapp.data.UpdateInfo
-import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.FirebaseSyncManager
@@ -119,11 +118,6 @@ import com.stalkerapp.ui.components.GlassChip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private val AVATARS = listOf(
-    "😀", "😎", "🦊", "🐼", "🐸", "🐙", "🦁", "🐯",
-    "🚀", "🎬", "🍿", "🎮", "⚽", "🎵", "👾", "🤖"
-)
 
 private fun recordingStatusLabel(status: String): String = when (status) {
     "scheduled" -> "Planlandı"
@@ -152,7 +146,8 @@ fun SettingsScreen(
     onOpenLibrary: () -> Unit = {},
     onOpenPlayer: () -> Unit = {},
     onBack: () -> Unit = {},
-    onRestartSetup: () -> Unit = {}
+    onRestartSetup: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {}
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
@@ -199,12 +194,10 @@ fun SettingsScreen(
     // Dialog'lar
     var showPortalDialog by remember { mutableStateOf(false) }
     var editingPortal by remember { mutableStateOf<Portal?>(null) }
-    var showProfiles by remember { mutableStateOf(false) }
     var showM3uDialog by remember { mutableStateOf(false) }
     var editingM3u by remember { mutableStateOf<M3uSource?>(null) }
     var showXtreamDialog by remember { mutableStateOf(false) }
     var editingXtream by remember { mutableStateOf<XtreamSource?>(null) }
-    var showProfileEdit by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
     // "Tüm Kaynakları Test Et" sonuçları.
@@ -2124,14 +2117,10 @@ fun SettingsScreen(
                         )
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showProfileEdit = true }) {
-                        Text("Profili Düzenle")
-                    }
-                    OutlinedButton(onClick = { showProfiles = true }) {
-                        Text("Profiller (${profiles.size})")
-                    }
-                }
+                OutlinedButton(
+                    onClick = onOpenProfiles,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Profili Değiştir (${profiles.size} profil)") }
                 OutlinedButton(
                     onClick = onRestartSetup,
                     modifier = Modifier.fillMaxWidth()
@@ -2405,34 +2394,6 @@ fun SettingsScreen(
                     vm.setActiveSource("xtream", source.id)
                     vm.showMessage("Xtream kaynağı eklendi — Canlı TV'de yükleniyor")
                 }
-            }
-        )
-    }
-
-    if (showProfiles) {
-        MultiProfileDialog(
-            profiles = profiles,
-            activeId = profile.id.ifBlank { com.stalkerapp.data.Store.DEFAULT_PROFILE_ID },
-            onDismiss = { showProfiles = false },
-            onSwitch = { id ->
-                showProfiles = false
-                vm.switchProfile(id)
-            },
-            onAdd = { n, a ->
-                showProfiles = false
-                vm.addProfile(n, a)
-            },
-            onDelete = { id -> vm.deleteProfile(id) }
-        )
-    }
-
-    if (showProfileEdit) {
-        ProfileEditDialog(
-            initial = profile,
-            onDismiss = { showProfileEdit = false },
-            onSave = { p ->
-                vm.saveUserProfile(p)
-                showProfileEdit = false
             }
         )
     }
@@ -2819,173 +2780,6 @@ private fun SliderSetting(
         Slider(value = value, onValueChange = onChange, valueRange = valueRange, steps = steps)
         Text(valueText, style = MaterialTheme.typography.bodyLarge)
     }
-}
-
-@Composable
-private fun ProfileEditDialog(
-    initial: UserProfile,
-    onDismiss: () -> Unit,
-    onSave: (UserProfile) -> Unit
-) {
-    var name by remember { mutableStateOf(initial.name) }
-    var avatar by remember { mutableStateOf(initial.avatar) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = { onSave(UserProfile(id = initial.id, name = name.trim().ifBlank { "İzleyici" }, avatar = avatar)) }) {
-                Text("Kaydet")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } },
-        title = { Text("Profili Düzenle") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(24) },
-                    label = { Text("Adın") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                val rows = AVATARS.chunked(4)
-                rows.forEach { rowAvatars ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        rowAvatars.forEach { emoji ->
-                            val selected = emoji == avatar
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                                        else Color.White.copy(alpha = 0.06f)
-                                    )
-                                    .clickable { avatar = emoji },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(emoji, fontSize = MaterialTheme.typography.titleLarge.fontSize)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
-        }
-    )
-}
-
-@Composable
-private fun PrivacyDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Anladım") } },
-        title = { Text("Gizlilik Anlaşması") },
-        text = {
-            Text(
-                "1. Tüm portal bilgileri, MAC adresi, izleme geçmişi, favoriler ve listeler yalnızca bu cihazda " +
-                    "ve yalnızca uygulamanın kendi veri deposunda saklanır.\n\n" +
-                    "2. Uygulama hiçbir veriyi üçüncü taraflarla paylaşmaz; analiz/izleme SDK'sı içermez.\n\n" +
-                    "3. IPTV sağlayıcısına yapılan istekler doğrudan cihazdan, sağlayıcının kendi sunucusuna gider " +
-                    "(uygulama aracılığıyla değil).\n\n" +
-                    "4. TMDB anahtarını kendin eklersen, zenginleştirme istekleri doğrudan themoviedb.org'a gider.\n\n" +
-                    "5. Uygulamayı kaldırdığında tüm veriler cihazdan silinir.",
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    )
-}
-
-@Composable
-private fun MultiProfileDialog(
-    profiles: List<UserProfile>,
-    activeId: String,
-    onDismiss: () -> Unit,
-    onSwitch: (String) -> Unit,
-    onAdd: (String, String) -> Unit,
-    onDelete: (String) -> Unit
-) {
-    var adding by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    var newAvatar by remember { mutableStateOf(AVATARS.first()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
-        title = { Text("Profiller") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                profiles.forEach { p ->
-                    val isActive = p.id == activeId
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                else Color.Transparent
-                            )
-                            .clickable { if (!isActive) onSwitch(p.id) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(p.avatar, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(p.name.ifBlank { "İzleyici" }, style = MaterialTheme.typography.bodyLarge)
-                            if (isActive) {
-                                Text("Aktif", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        if (profiles.size > 1) {
-                            IconButton(onClick = { onDelete(p.id) }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Profili sil",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-                HorizontalDivider()
-                if (adding) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it.take(24) },
-                        label = { Text("Yeni profil adı") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        AVATARS.take(8).forEach { emoji ->
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (emoji == newAvatar) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                                        else Color.White.copy(alpha = 0.08f)
-                                    )
-                                    .clickable { newAvatar = emoji },
-                                contentAlignment = Alignment.Center
-                            ) { Text(emoji) }
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            onAdd(newName.trim().ifBlank { "İzleyici" }, newAvatar)
-                            adding = false
-                            newName = ""
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Profili Ekle") }
-                } else {
-                    TextButton(onClick = { adding = true }) { Text("+ Yeni Profil") }
-                }
-            }
-        }
-    )
 }
 
 @Composable

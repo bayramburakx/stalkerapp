@@ -111,7 +111,8 @@ fun HomeScreen(
     onOpenVod: (Long, Boolean) -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
-    onOpenOnboarding: () -> Unit = {}
+    onOpenOnboarding: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {}
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
@@ -254,7 +255,8 @@ fun HomeScreen(
                     onOpenPlayer = onOpenPlayer,
                     // Telefon geri tuşu ayarlardan çıkarken uygulamayı kapatmasın.
                     onBack = { gotoTab(0) },
-                    onRestartSetup = onOpenOnboarding
+                    onRestartSetup = onOpenOnboarding,
+                    onOpenProfiles = onOpenProfiles
                 )
                 5 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
             }
