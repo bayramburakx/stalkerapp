@@ -142,6 +142,18 @@ data class Settings(
     /** Program açıklamaları (desc) tutulsun mu? Kapalıyken bellek/önbellekten atılır. */
     val epgKeepDescriptions: Boolean = true,
 
+    // ---------- Görünüm & Cihaz ----------
+    /** Tema: "system" | "light" | "dark" | "amoled". */
+    val themeMode: String = "system",
+    /** Vurgu rengi (ARGB int). 0 = varsayılan (siyah/beyaz palet). */
+    val accentColor: Long = 0L,
+    /** Arayüz yazı boyutu ölçeği (0.85 - 1.4). */
+    val uiFontScale: Float = 1f,
+    /** Cihaz açılışında uygulamayı otomatik başlat (TV box'lar). */
+    val startOnBoot: Boolean = false,
+    /** Kumanda kanal +/- ve medya tuşlarıyla kanal değiştirme (zapping). */
+    val remoteChannelKeys: Boolean = true,
+
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */
     val tmdbLanguage: String = "tr",

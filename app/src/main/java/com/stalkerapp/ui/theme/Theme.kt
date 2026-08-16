@@ -5,7 +5,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import com.stalkerapp.StalkerApp
 
 private val DarkColors = darkColorScheme(
     // Kullanıcı isteği: mavi yok — siyah / beyaz / açık gri palet.
@@ -41,13 +47,56 @@ private val LightColors = lightColorScheme(
     error = Color(0xFFD32F2F)
 )
 
+/**
+ * Tema modu (sistem/açık/koyu/AMOLED), vurgu rengi ve yazı ölçeği
+ * Ayarlar → Görünüm & Cihaz'dan okunur. AMOLED modda arka plan tam siyahtır.
+ */
 @Composable
 fun StalkerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        content = content
-    )
+    val context = LocalContext.current
+    val settings = (context.applicationContext as StalkerApp).store.settings()
+
+    val dark = when (settings.themeMode) {
+        "light" -> false
+        "dark", "amoled" -> true
+        else -> darkTheme
+    }
+    var colors = if (dark) DarkColors else LightColors
+
+    // Vurgu rengi: atanmışsa primary/container ondan türetilir.
+    val accent = settings.accentColor
+    if (accent != 0L) {
+        val c = Color(accent.toInt())
+        val bg = if (dark) Color.Black else Color.White
+        colors = colors.copy(
+            primary = c,
+            onPrimary = if (dark) Color.Black else Color.White,
+            primaryContainer = c.copy(alpha = 0.18f).compositeOver(bg),
+            onPrimaryContainer = if (dark) Color.White else Color(0xFF10151C)
+        )
+    }
+    // AMOLED: tüm yüzeyler tam siyah.
+    if (settings.themeMode == "amoled") {
+        colors = colors.copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceVariant = Color(0xFF101418)
+        )
+    }
+
+    // Yazı ölçeği: tüm sp tabanlı metinleri ölçeklendirir (LocalDensity.fontScale).
+    val density = LocalDensity.current
+    val fontScale = settings.uiFontScale.coerceIn(0.85f, 1.4f)
+
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, density.fontScale * fontScale)
+    ) {
+        MaterialTheme(
+            colorScheme = colors,
+            content = content
+        )
+    }
 }

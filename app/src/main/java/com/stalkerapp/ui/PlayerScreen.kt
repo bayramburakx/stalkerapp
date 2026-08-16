@@ -62,8 +62,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -468,10 +475,40 @@ fun PlayerScreen(navController: NavHostController) {
         error = PlaybackManager.errorMessage
     }
 
+    // Kumanda tuşları: kanal +/- ve medya sonraki/önceki ile zapping (Android TV).
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { ev ->
+                if (ev.type != KeyEventType.KeyDown || !settings.remoteChannelKeys) return@onKeyEvent false
+                when (ev.key) {
+                    Key.ChannelsUp -> {
+                        if (ChannelQueue.index > 0) switchTo(ChannelQueue.index - 1)
+                        true
+                    }
+                    Key.ChannelsDown -> {
+                        if (ChannelQueue.index + 1 < ChannelQueue.channels.size) switchTo(ChannelQueue.index + 1)
+                        true
+                    }
+                    Key.MediaPrevious -> {
+                        if (ChannelQueue.index > 0) switchTo(ChannelQueue.index - 1)
+                        true
+                    }
+                    Key.MediaNext -> {
+                        if (ChannelQueue.index + 1 < ChannelQueue.channels.size) switchTo(ChannelQueue.index + 1)
+                        true
+                    }
+                    else -> false
+                }
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { if (!locked) overlayVisible = !overlayVisible },

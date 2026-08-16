@@ -39,8 +39,11 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
@@ -180,6 +183,8 @@ fun SettingsScreen(
     var channelCustVersion by remember { mutableStateOf(0) }
     // Kayıtlar (recording) listesi tazeleme.
     var recordingsVersion by remember { mutableStateOf(0) }
+    // Görünüm: yazı ölçeği kaydırıcısı.
+    var uiFontScale by remember(settings.uiFontScale) { mutableFloatStateOf(settings.uiFontScale) }
 
     // Dialog'lar
     var showPortalDialog by remember { mutableStateOf(false) }
@@ -325,6 +330,7 @@ fun SettingsScreen(
             SettingsNavRow(Icons.Default.VideoLibrary, "Kütüphane & İçerik", "+18, gizlenen kategoriler, ana sayfa, VOD senkronu") { currentSection = "content" }
             SettingsNavRow(Icons.Default.Star, "Kütüphanem", "Favoriler, Sonra İzle, özel listeler") { currentSection = "library" }
             SettingsNavRow(Icons.Default.VolumeUp, "Oynatıcı", "Kalite, altyazı, çözücü, jestler") { currentSection = "player" }
+            SettingsNavRow(Icons.Default.Palette, "Görünüm & Cihaz", "Tema, vurgu rengi, yazı ölçeği, TV") { currentSection = "appearance" }
             SettingsNavRow(Icons.Default.Link, "Entegrasyonlar", "TMDB ve harici servisler") { currentSection = "integrations" }
             SettingsNavRow(Icons.Default.Person, "Hesap", "Profil ve hesap ayarları") { currentSection = "account" }
             SettingsNavRow(Icons.Default.VerifiedUser, "Gizlilik & Güvenlik", "Gizlilik anlaşması") { currentSection = "privacy" }
@@ -342,6 +348,7 @@ fun SettingsScreen(
             "content" -> "Kütüphane & İçerik"
             "library" -> "Kütüphanem"
             "player" -> "Oynatıcı"
+            "appearance" -> "Görünüm & Cihaz"
             "integrations" -> "Entegrasyonlar"
             "account" -> "Hesap"
             "privacy" -> "Gizlilik & Güvenlik"
@@ -1415,6 +1422,13 @@ fun SettingsScreen(
                     checked = settings.backgroundPlayback,
                     onCheckedChange = { vm.saveSettings(settings.copy(backgroundPlayback = it)) }
                 )
+                ToggleRow(
+                    icon = Icons.Default.Tv,
+                    title = "Kumanda Kanal Tuşları",
+                    desc = "Kanal +/- ve medya sonraki/önceki tuşlarıyla zapping (TV box)",
+                    checked = settings.remoteChannelKeys,
+                    onCheckedChange = { vm.saveSettings(settings.copy(remoteChannelKeys = it)) }
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -1719,6 +1733,85 @@ fun SettingsScreen(
                     steps = 23
                 )
                 Text("Ofset: ${timezoneOffset.toInt()} saat", style = MaterialTheme.typography.bodyLarge)
+            }
+            "appearance" -> {
+
+                Text("Tema", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "AMOLED modda arka plan tam siyahtır (OLED ekranlar için).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "system" to "Sistem",
+                        "light" to "Açık",
+                        "dark" to "Koyu",
+                        "amoled" to "AMOLED"
+                    ).forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.themeMode == key,
+                            onClick = { vm.saveSettings(settings.copy(themeMode = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                Text("Vurgu Rengi", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Ana aksan rengi; bileşenlerin seçili/kutucuk renklerini etkiler.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        0L to "Varsayılan",
+                        0xFF4FC3F7L to "Mavi",
+                        0xFF66BB6AL to "Yeşil",
+                        0xFFAB47BCL to "Mor",
+                        0xFFEF5350L to "Kırmızı",
+                        0xFFFFA726L to "Turuncu",
+                        0xFFFFCA28L to "Altın"
+                    ).forEach { (color, label) ->
+                        GlassChip(
+                            selected = settings.accentColor == color,
+                            onClick = { vm.saveSettings(settings.copy(accentColor = color)) },
+                            label = label
+                        )
+                    }
+                }
+
+                SliderSetting(
+                    icon = Icons.Default.TextFields,
+                    title = "Yazı Boyutu",
+                    description = "Arayüz yazı ölçeği (1.00 = varsayılan).",
+                    value = uiFontScale,
+                    valueRange = 0.85f..1.4f,
+                    steps = 10,
+                    valueText = "%.2f×".format(uiFontScale),
+                    onChange = {
+                        uiFontScale = it
+                        vm.saveSettings(settings.copy(uiFontScale = it))
+                    }
+                )
+
+                ToggleRow(
+                    icon = Icons.Default.PowerSettingsNew,
+                    title = "Cihaz Açılışında Başlat",
+                    desc = "TV box açılınca uygulama otomatik başlar (Açılışta Son Kanalı Oynat ile birlikte kullanılabilir)",
+                    checked = settings.startOnBoot,
+                    onCheckedChange = { vm.saveSettings(settings.copy(startOnBoot = it)) }
+                )
+
+                Text("Android TV", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Uygulama TV box launcher'larında görünür ve kumanda ile gezinilebilir. " +
+                        "Kanal +/- / medya tuşları zapping için kullanılır (Oynatıcı ayarlarından kapatılabilir).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             }
             "integrations" -> {
                 Text(
