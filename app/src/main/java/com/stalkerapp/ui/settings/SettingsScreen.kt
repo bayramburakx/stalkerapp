@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -59,6 +61,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -104,6 +107,7 @@ import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
+import com.stalkerapp.data.TraktManager
 import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.playback.PlaybackManager
@@ -211,6 +215,11 @@ fun SettingsScreen(
     // TMDB anahtar testi + görsel önbelleği.
     var tmdbTest by remember { mutableStateOf<String?>(null) }
     var testingTmdb by remember { mutableStateOf(false) }
+    // Trakt.tv bağlantı akışı.
+    var traktClientIdInput by remember(settings.traktClientId) { mutableStateOf(settings.traktClientId) }
+    var traktDialog by remember { mutableStateOf(false) }
+    var traktSyncing by remember { mutableStateOf(false) }
+    var traktSyncResult by remember { mutableStateOf<String?>(null) }
     // Hakkında: lisans diyaloğu.
     var showLicense by remember { mutableStateOf(false) }
     // Gizlilik bölümündeki PIN alanı (mevcut PIN ile başlar).
@@ -1478,6 +1487,29 @@ fun SettingsScreen(
                     onChange = { vm.saveSettings(settings.copy(playerPanelAlpha = it)) }
                 )
 
+                // ---- Multi View panel sayısı ----
+                Text("Multi View Panel Sayısı", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Canlı TV'deki Multi View butonu 2 veya 4 kanalı aynı anda oynatır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(2 to "2 Kanal", 4 to "4 Kanal").forEach { (n, label) ->
+                        val selected = settings.multiViewPanes == n
+                        Button(
+                            onClick = { vm.saveSettings(settings.copy(multiViewPanes = n)) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) { Text(label) }
+                    }
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                 // ---- Varsayılan ses/altyazı dili (ISO kodu) ----
@@ -1597,6 +1629,36 @@ fun SettingsScreen(
                     onChange = {
                         subtitleSize = it
                         vm.saveSettings(settings.copy(subtitleSize = it.toInt()))
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Text("Altyazı Türleri", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Kapalı altyazılar (CC) ve yayın altyazıları (DVB/PGS) ayrı ayrı kapatılabilir. " +
+                        "Kapatılan türler oynatıcıdaki altyazı listesinden de çıkar.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ToggleRow(
+                    icon = Icons.Default.Info,
+                    title = "Kapalı Altyazılar (CC)",
+                    desc = "CEA-608/708 — yayın içine gömülü kapalı altyazılar",
+                    checked = "cc" in settings.subtitleTypes,
+                    onCheckedChange = { on ->
+                        val s = if (on) settings.subtitleTypes + "cc" else settings.subtitleTypes - "cc"
+                        vm.saveSettings(settings.copy(subtitleTypes = s))
+                    }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Info,
+                    title = "Yayın Altyazıları (DVB/PGS)",
+                    desc = "DVB ve Blu-ray (PGS) gömülü altyazılar",
+                    checked = "dvbsub" in settings.subtitleTypes,
+                    onCheckedChange = { on ->
+                        val s = if (on) settings.subtitleTypes + "dvbsub" else settings.subtitleTypes - "dvbsub"
+                        vm.saveSettings(settings.copy(subtitleTypes = s))
                     }
                 )
 
@@ -1957,6 +2019,84 @@ fun SettingsScreen(
                     checked = settings.tmdbPeople,
                     onCheckedChange = { vm.saveSettings(settings.copy(tmdbPeople = it)) }
                 )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader(Icons.Default.Favorite, "Trakt.tv")
+                Text(
+                    "İzleme geçmişini Trakt.tv hesabına senkronize eder. Bağlamak için bir Trakt Client ID gerekir " +
+                        "(trakt.tv/settings/apps üzerinden ücretsiz uygulama oluşturup alınır).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = traktClientIdInput,
+                    onValueChange = { traktClientIdInput = it },
+                    label = { Text("Trakt Client ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        vm.saveSettings(settings.copy(traktClientId = traktClientIdInput.trim()))
+                        vm.showMessage("Trakt Client ID kaydedildi")
+                    },
+                    enabled = traktClientIdInput.trim().isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Client ID'yi Kaydet") }
+
+                if (settings.traktAccessToken.isBlank()) {
+                    OutlinedButton(
+                        onClick = { traktDialog = true },
+                        enabled = settings.traktClientId.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Trakt.tv ile Bağlan") }
+                } else {
+                    Text(
+                        "✓ Bağlı: @${settings.traktUsername.ifBlank { "?" }}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF2E7D32)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    traktSyncing = true
+                                    traktSyncResult = null
+                                    val movies = vm.store.loadVodProgress()
+                                        .filterValues { it.durationMs > 0 && it.positionMs >= it.durationMs * 0.85 }
+                                        .keys
+                                        .mapNotNull { vm.repository.findVodById(it)?.tmdbId?.takeIf { id -> id > 0 } }
+                                    val shows = vm.store.watchedEpisodes()
+                                        .mapNotNull { it.substringBefore(":").toLongOrNull() }
+                                        .mapNotNull { vm.repository.findVodById(it)?.tmdbId?.takeIf { id -> id > 0 } }
+                                    val err = TraktManager.syncWatched(
+                                        settings.traktClientId,
+                                        settings.traktAccessToken,
+                                        movies,
+                                        shows
+                                    )
+                                    traktSyncResult = err ?: "✓ ${movies.size + shows.size} öğe Trakt geçmişine eklendi"
+                                    traktSyncing = false
+                                }
+                            },
+                            enabled = !traktSyncing
+                        ) { Text(if (traktSyncing) "Senkronize ediliyor…" else "Geçmişi Senkronize Et") }
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                TraktManager.revoke(settings.traktClientId, settings.traktAccessToken)
+                                vm.saveSettings(settings.copy(traktAccessToken = "", traktUsername = ""))
+                                vm.showMessage("Trakt bağlantısı kaldırıldı")
+                            }
+                        }) { Text("Bağlantıyı Kaldır") }
+                    }
+                    if (traktSyncResult != null) {
+                        Text(
+                            traktSyncResult.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (traktSyncResult?.startsWith("✓") == true) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
             "account" -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2142,6 +2282,20 @@ fun SettingsScreen(
                                     "Açık kaynak bileşenler: ExoPlayer (media3), Coil, OkHttp, kotlinx.serialization."
                             )
                         }
+                    )
+                }
+
+                if (traktDialog) {
+                    TraktConnectDialog(
+                        clientId = settings.traktClientId,
+                        onDone = { token, username ->
+                            if (token.isNotBlank()) {
+                                vm.saveSettings(settings.copy(traktAccessToken = token, traktUsername = username))
+                                vm.showMessage("Trakt bağlantısı kuruldu ✓")
+                            }
+                            traktDialog = false
+                        },
+                        onDismiss = { traktDialog = false }
                     )
                 }
             }
@@ -2932,6 +3086,93 @@ private fun XtreamDialog(
                 OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Kullanıcı adı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Şifre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    )
+}
+
+/**
+ * Trakt.tv cihaz akışı bağlantı dialog'u.
+ * Kod alınır, kullanıcıya gösterilir, onaylanana dek yoklanır.
+ */
+@Composable
+private fun TraktConnectDialog(
+    clientId: String,
+    onDone: (token: String, username: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var devResult by remember { mutableStateOf<TraktManager.DeviceCodeResult?>(null) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var pollActive by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        status = "Kod alınıyor…"
+        val res = TraktManager.requestDeviceCode(clientId)
+        if (res.deviceCode.isBlank()) {
+            status = "Kod alınamadı. Client ID geçerli mi kontrol edin."
+            pollActive = false
+            return@LaunchedEffect
+        }
+        devResult = res
+        status = null
+        while (pollActive) {
+            val r = TraktManager.pollToken(clientId, res.deviceCode)
+            when {
+                r.startsWith("ok:") -> {
+                    val parts = r.removePrefix("ok:").split(":", limit = 2)
+                    onDone(parts[0], parts.getOrElse(1) { "" })
+                    return@LaunchedEffect
+                }
+                r == "pending" -> TraktManager.waitForNextPoll(res.intervalSec)
+                else -> {
+                    status = if (r == "expired") "Kodun süresi doldu — bağlantıyı yeniden deneyin."
+                    else "Bağlantı reddedildi veya süresi doldu."
+                    pollActive = false
+                }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            pollActive = false
+            onDismiss()
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                pollActive = false
+                onDismiss()
+            }) { Text("Kapat") }
+        },
+        title = { Text("Trakt.tv Bağlantısı") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (devResult == null) {
+                    Text(status ?: "…", style = MaterialTheme.typography.bodyMedium)
+                } else if (status != null) {
+                    Text(status.orEmpty(), style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Text(
+                        "trakt.tv/activate adresinde aşağıdaki kodu girin:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        devResult!!.userCode,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Adres: ${devResult!!.verificationUrl}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Onay bekleniyor… Pencere otomatik kapanır.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     )

@@ -17,11 +17,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,6 +58,7 @@ import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
+import com.stalkerapp.ui.multiview.MultiViewScreen
 import com.stalkerapp.playback.PlaybackManager
 import kotlinx.coroutines.launch
 
@@ -116,6 +119,7 @@ fun LiveTvScreen(
     var manageChannel by remember { mutableStateOf<Channel?>(null) }
     // Kanal adının altında gösterilecek "şu an oynayan" programlar (harici EPG).
     var nowPlaying by remember { mutableStateOf(emptyMap<Long, String>()) }
+    var multiView by remember { mutableStateOf(false) }
     val settings by vm.settings.collectAsStateWithLifecycle()
     val hiddenGroups = settings.hiddenChannelGroups.toSet()
 
@@ -151,7 +155,8 @@ fun LiveTvScreen(
         nowPlaying = runCatching { vm.repository.nowPlayingTitles(ch) }.getOrDefault(emptyMap())
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
         if (cooldown > 0) {
             Box(
                 modifier = Modifier
@@ -222,6 +227,18 @@ fun LiveTvScreen(
                         }
                         inner()
                     }
+                )
+            }
+
+            // Multi View butonu: 2/4 kanalı aynı anda izle (TiviMate tarzı).
+            IconButton(
+                onClick = { if (!channels.isNullOrEmpty()) multiView = true },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    Icons.Default.GridView,
+                    contentDescription = "Multi View",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -336,6 +353,28 @@ fun LiveTvScreen(
                     customVersion++
                 },
                 onDismiss = { manageChannel = null }
+            )
+        }
+        }
+
+        // Multi View: seçili listedeki kanallar 2/4 bölmeli ekranda aynı anda oynatılır.
+        if (multiView) {
+            MultiViewScreen(
+                channels = displayed,
+                profile = profile,
+                panes = settings.multiViewPanes,
+                onSelectChannel = { ch ->
+                    multiView = false
+                    scope.launch {
+                        val list = allChannels
+                        val idx = list.indexOfFirst { it.id == ch.id }
+                        if (idx >= 0) {
+                            PlaybackManager.playChannel(list, idx, profile)
+                            onOpenPlayer()
+                        }
+                    }
+                },
+                onClose = { multiView = false }
             )
         }
     }

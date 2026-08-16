@@ -335,7 +335,11 @@ object PlaybackManager {
                 .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
         }
 
-        val renderers = SyncRenderersFactory(appContext, passthrough = st.audioPassthrough)
+        val renderers = SyncRenderersFactory(
+            appContext,
+            passthrough = st.audioPassthrough,
+            subtitleTypes = st.subtitleTypes
+        )
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             // "hardware" sıkı modda HW başarısızsa yazılıma düşmez; auto/yazılımda
             // HW çökmesini önlemek için yazılım çözücüye geri düşülür (beyaz/kara ekran).

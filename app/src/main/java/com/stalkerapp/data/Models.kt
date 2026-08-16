@@ -163,6 +163,10 @@ data class Settings(
     val playerPanelAlpha: Float = 1f,
     /** Ana sayfada "Son İzlenen Kanallar" satırı gösterilsin mi? */
     val recentChannelsOnHome: Boolean = true,
+    /** Multi View panel sayısı (2 veya 4). */
+    val multiViewPanes: Int = 2,
+    /** Etkin altyazı türleri: "cc" (kapalı altyazı CEA-608/708), "dvbsub" (yayın DVB/PGS altyazıları). */
+    val subtitleTypes: Set<String> = setOf("cc", "dvbsub"),
 
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */
@@ -171,6 +175,12 @@ data class Settings(
     val tmdbTrailers: Boolean = true,
     /** Detay ekranında TMDB oyuncu fotoğrafları gösterilsin mi? */
     val tmdbPeople: Boolean = true,
+    /** Trakt.tv API client id (cihaz akışı bağlantısı için). */
+    val traktClientId: String = "",
+    /** Trakt.tv erişim belirteci (cihaz akışı sonrası). */
+    val traktAccessToken: String = "",
+    /** Trakt.tv kullanıcı adı (bağlantı sonrası). */
+    val traktUsername: String = "",
 
     // ---------- Gizlilik ----------
     /** Ayarlar girişi için 4 haneli PIN. Boşsa PIN kilidi kapalıdır. */
