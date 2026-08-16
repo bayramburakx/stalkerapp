@@ -13,6 +13,8 @@ coroutines = "1.9.0"
 coil = "2.7.0"
 androidxMedia = "1.7.0"
 splashscreen = "1.0.1"
+castFramework = "21.4.0"
+mediarouter = "1.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +39,9 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-media = { group = "androidx.media", name = "media", version.ref = "androidxMedia" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
+androidx-media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "media3" }
+google-play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "castFramework" }
+androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "mediarouter" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

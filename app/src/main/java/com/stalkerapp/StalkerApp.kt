@@ -8,6 +8,7 @@ import com.stalkerapp.data.TmdbClient
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.VodSyncManager
 import com.stalkerapp.ui.VodSyncService
+import com.stalkerapp.util.isWifiConnected
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,8 +52,14 @@ class StalkerApp : Application() {
                 scope.launch { runCatching { repository.connect(portal) } }
             }
             // Resume an interrupted sync (or run the first one) in the background.
+            // Kütüphane & İçerik ayarlarına saygı gösterilir: otomatik senkron
+            // kapalıysa ya da "yalnızca Wi-Fi" açıkken Wi-Fi yoksa başlatılmaz.
             if (needsSync(portalId)) {
-                repository.cachedProfile()?.let { VodSyncService.start(this) }
+                val s = store.settings()
+                val wifiOk = !s.wifiOnlySync || isWifiConnected()
+                if (s.autoSyncVod && wifiOk) {
+                    repository.cachedProfile()?.let { VodSyncService.start(this) }
+                }
             }
         }
     }

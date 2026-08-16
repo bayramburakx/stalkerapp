@@ -120,12 +120,17 @@ fun HomeDashboardScreen(
     var loadingChannels by remember { mutableStateOf(homeChannels == null) }
 
     LaunchedEffect(Unit) {
-        profile?.let {
-            vm.syncVodIfNeeded(it)
-            if (homeChannels == null) {
-                loadingChannels = true
-                vm.loadHomeChannels(it)
-            }
+        val kind = vm.enabledSourceKind()
+        if (kind == "m3u" || kind == "xtream") {
+            // M3U/Xtream: VOD kataloğu aktif kaynaktan kurulur, kanallar da
+            // aktif kaynaktan gelir (Stalker profili gerekmez).
+            vm.ensureExternalVodCatalog()
+        } else {
+            profile?.let { vm.syncVodIfNeeded(it) }
+        }
+        if (homeChannels == null) {
+            loadingChannels = true
+            vm.loadHomeChannels(profile)
         }
         loadingChannels = false
     }
@@ -184,11 +189,13 @@ fun HomeDashboardScreen(
         return !hidden && (settings.adultContentEnabled || !adult)
     }
 
-    val movies = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
-        catalog.allItems.filter { !catalog.isSeriesItem(it) && keepItem(it) }.take(20)
+    // Bölüm başına öğe sayısı (Kütüphane & İçerik → Ana Sayfa ayarları).
+    val sectionSize = settings.homeSectionSize.coerceIn(5, 50)
+    val movies = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories, sectionSize) {
+        catalog.allItems.filter { !catalog.isSeriesItem(it) && keepItem(it) }.take(sectionSize)
     }
-    val series = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
-        catalog.allItems.filter { catalog.isSeriesItem(it) && keepItem(it) }.take(20)
+    val series = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories, sectionSize) {
+        catalog.allItems.filter { catalog.isSeriesItem(it) && keepItem(it) }.take(sectionSize)
     }
     val featured = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
         (series.take(6) + movies.take(6)).shuffled()
@@ -215,7 +222,8 @@ fun HomeDashboardScreen(
             .fillMaxSize()
             .verticalScroll(scrollState)
     ) {
-        if (featured.isNotEmpty()) {
+        // Hero banner Kütüphane & İçerik ayarından kapatılabilir.
+        if (settings.heroEnabled && featured.isNotEmpty()) {
             HeroBanner(
                 items = featured,
                 baseUrl = profile?.baseUrl.orEmpty(),
@@ -321,7 +329,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(favChannels.take(20), key = { it.id }) { ch ->
+                            items(favChannels.take(sectionSize), key = { it.id }) { ch ->
                                 ChannelCard(
                                     channel = ch,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -365,7 +373,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(favVods.take(20), key = { it.id }) { item ->
+                            items(favVods.take(sectionSize), key = { it.id }) { item ->
                                 VodPoster(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),

@@ -145,15 +145,101 @@ class Store(private val context: Context) {
         runCatching { epgCacheFile().delete() }
     }
 
+    // ---------- Kullanıcı profilleri (çoklu profil) ----------
+
+    /**
+     * Tüm profiller. İlk çağrıda eski tek-profil verisi "default" kimliğiyle
+     * listeye taşınır (geriye dönük uyumluluk; mevcut veri kaybolmaz).
+     */
+    fun userProfiles(): List<UserProfile> {
+        val stored = runCatching {
+            json.decodeFromString(
+                ListSerializer(UserProfile.serializer()),
+                prefs.getString(KEY_USER_PROFILES, "").orEmpty()
+            )
+        }.getOrDefault(emptyList())
+        if (stored.isNotEmpty()) return stored
+        val legacy = runCatching {
+            json.decodeFromString(UserProfile.serializer(), prefs.getString(KEY_USER_PROFILE, "").orEmpty())
+        }.getOrDefault(UserProfile())
+        val list = listOf(if (legacy.id.isBlank()) legacy.copy(id = DEFAULT_PROFILE_ID) else legacy)
+        saveUserProfiles(list)
+        return list
+    }
+
+    fun saveUserProfiles(list: List<UserProfile>) {
+        prefs.edit().putString(
+            KEY_USER_PROFILES,
+            json.encodeToString(ListSerializer(UserProfile.serializer()), list)
+        ).apply()
+    }
+
+    fun activeProfileId(): String =
+        prefs.getString(KEY_ACTIVE_PROFILE, "").orEmpty().ifBlank { DEFAULT_PROFILE_ID }
+
+    fun setActiveProfileId(id: String) {
+        prefs.edit().putString(KEY_ACTIVE_PROFILE, id).apply()
+    }
+
+    /** Aktif profil. Liste boşsa (ilk kurulum) varsayılan profil döner. */
+    fun activeUserProfile(): UserProfile =
+        userProfiles().firstOrNull { it.id == activeProfileId() } ?: userProfiles().first()
+
+    /**
+     * Yeni profil oluşturur ve aktif yapar. İlk profil her zaman "default"
+     * kimliğini alır (eski veri anahtarlarıyla eşleşir); sonrakiler benzersiz id alır.
+     */
+    fun addProfile(name: String, avatar: String): UserProfile {
+        val id = if (userProfiles().none { it.id == DEFAULT_PROFILE_ID }) {
+            DEFAULT_PROFILE_ID
+        } else {
+            "p_" + System.currentTimeMillis().toString(36) + "_" + (name.hashCode() and 0xFFFF).toString(16)
+        }
+        val p = UserProfile(id = id, name = name.ifBlank { "İzleyici" }, avatar = avatar.ifBlank { "😀" })
+        val list = userProfiles().toMutableList()
+        list.add(p)
+        saveUserProfiles(list)
+        setActiveProfileId(id)
+        return p
+    }
+
+    fun switchProfile(id: String) {
+        if (userProfiles().any { it.id == id }) setActiveProfileId(id)
+    }
+
+    /** Profili siler; aktif profil silindiyse ilk kalan profile geçer (son profil silinemez). */
+    fun deleteProfile(id: String) {
+        val list = userProfiles().filterNot { it.id == id }
+        if (list.isEmpty()) return
+        saveUserProfiles(list)
+        if (activeProfileId() == id) setActiveProfileId(list.first().id)
+        // O profilin favori/geçmiş/liste verilerini de temizle (yetim anahtar kalmasın).
+        if (id != DEFAULT_PROFILE_ID) {
+            prefs.edit().apply {
+                PROFILE_SCOPED_BASES.forEach { base -> remove(base + "_p" + id) }
+            }.apply()
+        }
+    }
+
+    /**
+     * Profil bazlı veriler için SharedPreferences anahtarı. Aktif profil
+     * "default" (eski tek profil) ise anahtar değişmez; diğer profillerde
+     * "_p<id>" son eki eklenir → her profilin kendi favorileri/geçmişi olur.
+     */
+    private fun scoped(key: String): String {
+        val id = prefs.getString(KEY_ACTIVE_PROFILE, "").orEmpty()
+        return if (id.isBlank() || id == DEFAULT_PROFILE_ID) key else "${key}_p$id"
+    }
+
     // ---------- Yedekleme / geri yükleme ----------
 
     /** İzleme geçmişini (film/bölüm ilerlemeleri + izlendi işaretleri) temizler. */
     fun clearWatchHistory() {
         prefs.edit()
-            .remove(KEY_VOD_PROGRESS)
-            .remove(KEY_EPISODE_PROGRESS)
-            .remove(KEY_WATCHED_OVERRIDES)
-            .remove(KEY_WATCHED_EPISODES)
+            .remove(scoped(KEY_VOD_PROGRESS))
+            .remove(scoped(KEY_EPISODE_PROGRESS))
+            .remove(scoped(KEY_WATCHED_OVERRIDES))
+            .remove(scoped(KEY_WATCHED_EPISODES))
             .apply()
     }
 
@@ -179,6 +265,14 @@ class Store(private val context: Context) {
         PLAIN_BACKUP_KEYS.forEach { k ->
             prefs.getString(k, null)?.let { data[k] = JsonPrimitive(it) }
         }
+        // Profil bazlı (çoklu profil) veriler: "<temel>_p<id>" son ekli anahtarlar da yedeklenir.
+        prefs.all.keys
+            .filter { k -> PROFILE_SCOPED_BASES.any { k.startsWith("${it}_p") } }
+            .forEach { k ->
+                prefs.getString(k, null)?.let { raw ->
+                    runCatching { data[k] = json.parseToJsonElement(raw) }
+                }
+            }
         if (prefs.contains(KEY_ONBOARDING_DONE)) {
             data[KEY_ONBOARDING_DONE] = JsonPrimitive(prefs.getBoolean(KEY_ONBOARDING_DONE, false))
         }
@@ -203,20 +297,29 @@ class Store(private val context: Context) {
         true
     }.getOrDefault(false)
 
-    // ---------- Kullanıcı profili ----------
+    // ---------- Kullanıcı profili (eski tek-profil API'si, uyumluluk için korunur) ----------
 
-    fun userProfile(): UserProfile = runCatching {
-        json.decodeFromString(UserProfile.serializer(), prefs.getString(KEY_USER_PROFILE, "").orEmpty())
-    }.getOrDefault(UserProfile())
+    /** Aktif profil (eski API: artık çoklu profilin aktif olanını döndürür). */
+    fun userProfile(): UserProfile = activeUserProfile()
 
+    /**
+     * Profili kaydeder/üzerine yazar ve listeye yansıtır. Kimlik boşsa "default"
+     * kabul edilir. Tek profil varsa (ilk kurulum) otomatik aktif yapılır.
+     */
     fun saveUserProfile(profile: UserProfile) {
-        prefs.edit().putString(KEY_USER_PROFILE, json.encodeToString(UserProfile.serializer(), profile)).apply()
+        val withId = if (profile.id.isBlank()) profile.copy(id = DEFAULT_PROFILE_ID) else profile
+        val list = userProfiles().toMutableList()
+        val idx = list.indexOfFirst { it.id == withId.id }
+        if (idx >= 0) list[idx] = withId else list.add(withId)
+        saveUserProfiles(list)
+        prefs.edit().putString(KEY_USER_PROFILE, json.encodeToString(UserProfile.serializer(), withId)).apply()
+        if (list.size == 1) setActiveProfileId(withId.id)
     }
 
     // ---------- Sonra izle (Kütüphanem) ----------
 
     fun watchLater(): List<VodItem> = runCatching {
-        json.decodeFromString(ListSerializer(VodItem.serializer()), prefs.getString(KEY_WATCH_LATER, "[]").orEmpty())
+        json.decodeFromString(ListSerializer(VodItem.serializer()), prefs.getString(scoped(KEY_WATCH_LATER), "[]").orEmpty())
     }.getOrDefault(emptyList())
 
     fun isWatchLater(id: Long): Boolean = watchLater().any { it.id == id }
@@ -229,18 +332,18 @@ class Store(private val context: Context) {
         } else {
             list.add(0, vod); true
         }
-        prefs.edit().putString(KEY_WATCH_LATER, json.encodeToString(ListSerializer(VodItem.serializer()), list)).apply()
+        prefs.edit().putString(scoped(KEY_WATCH_LATER), json.encodeToString(ListSerializer(VodItem.serializer()), list)).apply()
         return added
     }
 
     // ---------- Özel listeler (Kütüphanem) ----------
 
     fun userLists(): List<UserList> = runCatching {
-        json.decodeFromString(ListSerializer(UserList.serializer()), prefs.getString(KEY_USER_LISTS, "[]").orEmpty())
+        json.decodeFromString(ListSerializer(UserList.serializer()), prefs.getString(scoped(KEY_USER_LISTS), "[]").orEmpty())
     }.getOrDefault(emptyList())
 
     fun saveUserLists(list: List<UserList>) {
-        prefs.edit().putString(KEY_USER_LISTS, json.encodeToString(ListSerializer(UserList.serializer()), list)).apply()
+        prefs.edit().putString(scoped(KEY_USER_LISTS), json.encodeToString(ListSerializer(UserList.serializer()), list)).apply()
     }
 
     fun addUserList(name: String): UserList {
@@ -276,24 +379,24 @@ class Store(private val context: Context) {
     fun isInUserList(listId: String, itemId: Long): Boolean =
         userLists().firstOrNull { it.id == listId }?.itemIds?.contains(itemId) == true
 
-    private fun favoritesKey(): String = prefs.getString(KEY_FAVORITES, "[]").orEmpty()
+    private fun favoritesKey(): String = prefs.getString(scoped(KEY_FAVORITES), "[]").orEmpty()
 
     fun favorites(): Set<String> = runCatching {
         json.decodeFromString(ListSerializer(String.serializer()), favoritesKey()).toSet()
     }.getOrDefault(emptySet())
 
     private fun saveFavorites(set: Set<String>) {
-        prefs.edit().putString(KEY_FAVORITES, json.encodeToString(ListSerializer(String.serializer()), set.toList())).apply()
+        prefs.edit().putString(scoped(KEY_FAVORITES), json.encodeToString(ListSerializer(String.serializer()), set.toList())).apply()
     }
 
     fun isFavorite(key: String): Boolean = key in favorites()
 
     fun favoriteChannels(): List<Channel> = runCatching {
-        json.decodeFromString(ListSerializer(Channel.serializer()), prefs.getString(KEY_FAVORITE_CHANNELS, "[]").orEmpty())
+        json.decodeFromString(ListSerializer(Channel.serializer()), prefs.getString(scoped(KEY_FAVORITE_CHANNELS), "[]").orEmpty())
     }.getOrDefault(emptyList())
 
     fun saveFavoriteChannels(list: List<Channel>) {
-        prefs.edit().putString(KEY_FAVORITE_CHANNELS, json.encodeToString(ListSerializer(Channel.serializer()), list)).apply()
+        prefs.edit().putString(scoped(KEY_FAVORITE_CHANNELS), json.encodeToString(ListSerializer(Channel.serializer()), list)).apply()
         val favKeys = favorites().filterNot { it.startsWith("ch:") }.toMutableSet()
         list.forEach { favKeys.add("ch:${it.id}") }
         saveFavorites(favKeys)
@@ -317,11 +420,11 @@ class Store(private val context: Context) {
     }
 
     fun favoriteVods(): List<VodItem> = runCatching {
-        json.decodeFromString(ListSerializer(VodItem.serializer()), prefs.getString(KEY_FAVORITE_VODS, "[]").orEmpty())
+        json.decodeFromString(ListSerializer(VodItem.serializer()), prefs.getString(scoped(KEY_FAVORITE_VODS), "[]").orEmpty())
     }.getOrDefault(emptyList())
 
     fun saveFavoriteVods(list: List<VodItem>) {
-        prefs.edit().putString(KEY_FAVORITE_VODS, json.encodeToString(ListSerializer(VodItem.serializer()), list)).apply()
+        prefs.edit().putString(scoped(KEY_FAVORITE_VODS), json.encodeToString(ListSerializer(VodItem.serializer()), list)).apply()
         val favKeys = favorites().filterNot { it.startsWith("vod:") }.toMutableSet()
         list.forEach { favKeys.add("vod:${it.id}") }
         saveFavorites(favKeys)
@@ -464,7 +567,7 @@ class Store(private val context: Context) {
 
     /** VOD'lar için elle "izlendi/izlenmedi" işaretleri (katalog id). */
     fun watchedOverrides(): Set<Long> = runCatching {
-        json.decodeFromString(ListSerializer(Long.serializer()), prefs.getString(KEY_WATCHED_OVERRIDES, "[]").orEmpty()).toSet()
+        json.decodeFromString(ListSerializer(Long.serializer()), prefs.getString(scoped(KEY_WATCHED_OVERRIDES), "[]").orEmpty()).toSet()
     }.getOrDefault(emptySet())
 
     fun isWatchedOverride(id: Long): Boolean = id in watchedOverrides()
@@ -477,7 +580,7 @@ class Store(private val context: Context) {
             set.add(id); true
         }
         prefs.edit().putString(
-            KEY_WATCHED_OVERRIDES,
+            scoped(KEY_WATCHED_OVERRIDES),
             json.encodeToString(ListSerializer(Long.serializer()), set.toList())
         ).apply()
         return added
@@ -485,7 +588,7 @@ class Store(private val context: Context) {
 
     /** İzlenen bölümler: "<vodId>:<sezon>:<bölümNo>" anahtarları. */
     fun watchedEpisodes(): Set<String> = runCatching {
-        json.decodeFromString(ListSerializer(String.serializer()), prefs.getString(KEY_WATCHED_EPISODES, "[]").orEmpty()).toSet()
+        json.decodeFromString(ListSerializer(String.serializer()), prefs.getString(scoped(KEY_WATCHED_EPISODES), "[]").orEmpty()).toSet()
     }.getOrDefault(emptySet())
 
     fun isEpisodeWatched(key: String): Boolean = key in watchedEpisodes()
@@ -494,7 +597,7 @@ class Store(private val context: Context) {
         val set = watchedEpisodes().toMutableSet()
         set.add(key)
         prefs.edit().putString(
-            KEY_WATCHED_EPISODES,
+            scoped(KEY_WATCHED_EPISODES),
             json.encodeToString(ListSerializer(String.serializer()), set.toList())
         ).apply()
     }
@@ -503,7 +606,7 @@ class Store(private val context: Context) {
         val set = watchedEpisodes().toMutableSet()
         if (set.remove(key)) {
             prefs.edit().putString(
-                KEY_WATCHED_EPISODES,
+                scoped(KEY_WATCHED_EPISODES),
                 json.encodeToString(ListSerializer(String.serializer()), set.toList())
             ).apply()
         }
@@ -513,7 +616,7 @@ class Store(private val context: Context) {
     fun episodeProgress(): Map<String, VodProgress> = runCatching {
         json.decodeFromString(
             MapSerializer(String.serializer(), VodProgress.serializer()),
-            prefs.getString(KEY_EPISODE_PROGRESS, "{}").orEmpty()
+            prefs.getString(scoped(KEY_EPISODE_PROGRESS), "{}").orEmpty()
         )
     }.getOrDefault(emptyMap())
 
@@ -521,7 +624,7 @@ class Store(private val context: Context) {
         val map = episodeProgress().toMutableMap()
         map[key] = VodProgress(positionMs, durationMs, System.currentTimeMillis())
         prefs.edit().putString(
-            KEY_EPISODE_PROGRESS,
+            scoped(KEY_EPISODE_PROGRESS),
             json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
         ).apply()
     }
@@ -530,7 +633,7 @@ class Store(private val context: Context) {
         val map = episodeProgress().toMutableMap()
         if (map.remove(key) != null) {
             prefs.edit().putString(
-                KEY_EPISODE_PROGRESS,
+                scoped(KEY_EPISODE_PROGRESS),
                 json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
             ).apply()
         }
@@ -540,7 +643,7 @@ class Store(private val context: Context) {
         val map = loadVodProgress().toMutableMap()
         map[id] = VodProgress(positionMs, durationMs, System.currentTimeMillis())
         prefs.edit().putString(
-            KEY_VOD_PROGRESS,
+            scoped(KEY_VOD_PROGRESS),
             json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), map)
         ).apply()
     }
@@ -548,7 +651,7 @@ class Store(private val context: Context) {
     fun loadVodProgress(): Map<Long, VodProgress> = runCatching {
         json.decodeFromString(
             MapSerializer(Long.serializer(), VodProgress.serializer()),
-            prefs.getString(KEY_VOD_PROGRESS, "{}").orEmpty()
+            prefs.getString(scoped(KEY_VOD_PROGRESS), "{}").orEmpty()
         )
     }.getOrDefault(emptyMap())
 
@@ -556,7 +659,7 @@ class Store(private val context: Context) {
         val map = loadVodProgress().toMutableMap()
         if (map.remove(id) != null) {
             prefs.edit().putString(
-                KEY_VOD_PROGRESS,
+                scoped(KEY_VOD_PROGRESS),
                 json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), map)
             ).apply()
         }
@@ -585,8 +688,20 @@ class Store(private val context: Context) {
         private const val KEY_ACTIVE_SOURCE_KIND = "active_source_kind"
         private const val KEY_ACTIVE_SOURCE_ID = "active_source_id"
         private const val KEY_USER_PROFILE = "user_profile"
+        private const val KEY_USER_PROFILES = "user_profiles"
+        private const val KEY_ACTIVE_PROFILE = "active_profile"
         private const val KEY_WATCH_LATER = "watch_later"
         private const val KEY_USER_LISTS = "user_lists"
+
+        /** Varsayılan profil kimliği (eski tek profil). Bu profilde veri anahtarları izole edilmez. */
+        const val DEFAULT_PROFILE_ID = "default"
+
+        /** Profil bazlı (çoklu profil) verilerin temel anahtarları. */
+        private val PROFILE_SCOPED_BASES = setOf(
+            KEY_FAVORITES, KEY_FAVORITE_CHANNELS, KEY_FAVORITE_VODS,
+            KEY_VOD_PROGRESS, KEY_EPISODE_PROGRESS, KEY_WATCHED_OVERRIDES,
+            KEY_WATCHED_EPISODES, KEY_WATCH_LATER, KEY_USER_LISTS
+        )
 
         /** Yedeklemeye dahil edilen tüm SharedPreferences anahtarları. */
         private val BACKUP_KEYS = setOf(
@@ -595,17 +710,19 @@ class Store(private val context: Context) {
             KEY_VOD_PROGRESS, KEY_WATCHED_OVERRIDES, KEY_WATCHED_EPISODES,
             KEY_EPISODE_PROGRESS, KEY_M3U_SOURCES, KEY_XTREAM_SOURCES,
             KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_USER_PROFILE,
+            KEY_USER_PROFILES, KEY_ACTIVE_PROFILE,
             KEY_WATCH_LATER, KEY_USER_LISTS
         )
 
         /** JSON olarak kodlanmış (putString + serialize) yedek anahtarları. */
         private val JSON_BACKUP_KEYS = BACKUP_KEYS - setOf(
-            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_ONBOARDING_DONE
+            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID,
+            KEY_ACTIVE_PROFILE, KEY_ONBOARDING_DONE
         )
 
         /** Düz metin olarak saklanan yedek anahtarları. */
         private val PLAIN_BACKUP_KEYS = setOf(
-            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID
+            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_ACTIVE_PROFILE
         )
     }
 }

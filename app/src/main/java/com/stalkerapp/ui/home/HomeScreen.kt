@@ -55,13 +55,18 @@ fun HomeScreen(
     onOpenPlayer: () -> Unit,
     onOpenVod: (Long, Boolean) -> Unit,
     onOpenSearch: () -> Unit = {},
-    onOpenGuide: () -> Unit = {}
+    onOpenGuide: () -> Unit = {},
+    onOpenOnboarding: () -> Unit = {}
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     var profile by remember { mutableStateOf(vm.repository.cachedProfile()) }
 
-    var tab by remember { mutableIntStateOf(0) }
+    // Açılış sekmesi Kütüphane & İçerik ayarından değiştirilebilir
+    // (0=Ana Sayfa, 1=Canlı TV, 2=Filmler, 3=Diziler).
+    var tab by remember {
+        mutableIntStateOf(vm.store.settings().defaultTab.coerceIn(0, 3))
+    }
     val gotoTab: (Int) -> Unit = { tab = it }
     // Sekmeler arası geçişte her ekranın durumu (pager sayfası, kaydırma
     // konumu, arama/ filtre girişleri) korunur — sıfırdan kurulmadığı için
@@ -163,7 +168,8 @@ fun HomeScreen(
                     },
                     onOpenLibrary = { tab = 5 },
                     // Telefon geri tuşu ayarlardan çıkarken uygulamayı kapatmasın.
-                    onBack = { gotoTab(0) }
+                    onBack = { gotoTab(0) },
+                    onRestartSetup = onOpenOnboarding
                 )
                 5 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
             }

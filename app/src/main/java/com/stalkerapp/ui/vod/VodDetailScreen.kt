@@ -208,7 +208,9 @@ fun VodDetailScreen(
         loading = true
         error = null
         try {
-            val p = profile ?: return@LaunchedEffect
+            val p = profile
+            val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
+            if (p == null && !externalSource) return@LaunchedEffect
             // This portal ignores the single-item fetch (vod_id), so rely on the
             // already-loaded catalog item keyed by id — otherwise every title would
             // resolve to the same (first) item.
@@ -216,7 +218,7 @@ fun VodDetailScreen(
             val deadline = System.currentTimeMillis() + 60_000L
             while (base == null && System.currentTimeMillis() < deadline) {
                 base = vm.vodCatalog.value.byId[vodId]
-                    ?: runCatching { vm.repository.vodById(p, vodId) }.getOrNull()
+                    ?: if (p != null) runCatching { vm.repository.vodById(p, vodId) }.getOrNull() else null
                 if (base == null) delay(400)
             }
             if (base == null) {
@@ -224,7 +226,9 @@ fun VodDetailScreen(
                 return@LaunchedEffect
             }
             // Enrich with detailed info (actors, full director, etc.) when available.
-            val info = runCatching { vm.repository.vodInfo(p, vodId) }.getOrNull()
+            val info = if (p != null) {
+                runCatching { vm.repository.vodInfo(p, vodId) }.getOrNull()
+            } else null
             item = if (info != null) {
                 base.copy(
                     actors = info.actors.ifBlank { base.actors },
@@ -239,8 +243,8 @@ fun VodDetailScreen(
                 )
             } else base
             val merged = item
-            if ((merged?.isSeries == true || isSeriesHint) && profile != null) {
-                seasons = vm.repository.loadSeasons(profile, vodId)
+            if ((merged?.isSeries == true || isSeriesHint) && (p != null || externalSource)) {
+                seasons = vm.repository.loadSeasons(p, vodId)
                 selectedSeason = seasons.firstOrNull()?.id
             }
         } catch (e: Exception) {
@@ -321,7 +325,9 @@ fun VodDetailScreen(
 
     /** Bir sezonun tüm bölümlerini izlendi/izlenmedi işaretler (uzun basma). */
     fun toggleSeasonWatched(seasonId: Long) {
-        val p = profile ?: return
+        val p = profile
+        val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
+        if (p == null && !externalSource) return
         scope.launch {
             val nums = runCatching { vm.repository.seasonEpisodeNumbers(p, it.id, seasonId) }
                 .getOrDefault(emptyList())
@@ -340,12 +346,27 @@ fun VodDetailScreen(
 
     /** Kaldığı yerden devam: kayıtlı konum varsa direkt oradan başlar (sormaz). */
     fun play(episode: Episode? = null) {
-        val p = profile ?: return
+        // M3U/Xtream kaynaklarında profil yoktur; URL aktif kaynağa göre çözülür.
+        val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
+        val p = profile
+        if (p == null && !externalSource) {
+            vm.showMessage("Portal bağlı değil")
+            return
+        }
         scope.launch {
             playing = true
             try {
                 val allEps = episodes.orEmpty()
                 if (isSeries && allEps.isEmpty()) {
+                    if (seasons.isEmpty()) {
+                        // Tek dosyalı "dizi" (M3U grubu): sezon/bölüm yapısı yok —
+                        // dosyayı doğrudan oynat (aksi halde hiç oynatılamazdı).
+                        val url = vm.repository.vodStreamUrl(it, p, null)
+                        PlaybackManager.currentVodId = it.id
+                        PlaybackManager.play(url, it.name, it.poster)
+                        onOpenPlayer()
+                        return@launch
+                    }
                     vm.showMessage("Bu dizi için bölüm bulunamadı")
                     return@launch
                 }
@@ -409,7 +430,9 @@ fun VodDetailScreen(
         val it = item ?: return@LaunchedEffect
         val sid = selectedSeason ?: return@LaunchedEffect
         if (!it.isSeries && !isSeriesHint) return@LaunchedEffect
-        val p = profile ?: return@LaunchedEffect
+        val p = profile
+        val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
+        if (p == null && !externalSource) return@LaunchedEffect
         loadingEpisodes = true
         episodes = null
         try {
@@ -688,7 +711,8 @@ fun VodDetailScreen(
             }
 
             // ---------- Dizi: sezon posterleri + S1B1 bölüm kartları ----------
-            if (isSeries) {
+            // Sezon yapısı olmayan "dizi"lerde (M3U tek dosya) bu bölüm gizlenir.
+            if (isSeries && seasons.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         Text(

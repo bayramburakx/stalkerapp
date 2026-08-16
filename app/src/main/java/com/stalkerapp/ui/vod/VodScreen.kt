@@ -72,11 +72,14 @@ fun VodScreen(
     val vm: MainViewModel = rememberMainViewModel(app)
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    // M3U/Xtream kaynaklarında Stalker profili olmayabilir; bu durumda katalog
+    // aktif kaynaktan (dış katalog) gelir ve profil gerekmez.
+    val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
 
-    if (profile == null) {
+    if (profile == null && !externalSource) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal ekleyebilirsin.",
+                "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal, M3U listesi veya Xtream Codes ekleyebilirsin.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(24.dp)
@@ -107,7 +110,12 @@ fun VodScreen(
     }
 
     LaunchedEffect(profile) {
-        vm.syncVodIfNeeded(profile)
+        val kind = vm.enabledSourceKind()
+        if (kind == "m3u" || kind == "xtream") {
+            vm.ensureExternalVodCatalog()
+        } else {
+            profile?.let { vm.syncVodIfNeeded(it) }
+        }
     }
 
     // Kategori/arama değişince paging baştan başlar.
@@ -272,7 +280,7 @@ fun VodScreen(
                         val isSeries = filterIsSeries == true || catalog.isSeriesItem(item)
                         VodPoster(
                             item = item,
-                            baseUrl = profile.baseUrl,
+                            baseUrl = profile?.baseUrl.orEmpty(),
                             isSeries = isSeries,
                             watched = isWatched(item),
                             onLongPress = { quickActionItem = item },

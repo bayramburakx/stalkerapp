@@ -61,13 +61,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.C
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.Player
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -92,8 +93,8 @@ import android.os.BatteryManager
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import kotlin.math.abs
-import android.widget.Toast
 import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
@@ -105,6 +106,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Tv
 import com.stalkerapp.StalkerApp
+import com.stalkerapp.cast.CastManager
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Profile
 import androidx.compose.material3.Slider
@@ -113,6 +115,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import com.stalkerapp.playback.ChannelQueue
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.playback.VodQueue
+import com.stalkerapp.ui.cast.CastDialog
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.resolveUrl
@@ -155,6 +158,11 @@ fun PlayerScreen(navController: NavHostController) {
     var seeking by remember { mutableStateOf(false) }
     val isLive = !PlaybackManager.isVod()
 
+    // Chromecast durumu ve keşfedilen yayın cihazları.
+    var isCasting by remember { mutableStateOf(PlaybackManager.isCasting()) }
+    var castDialogVisible by remember { mutableStateOf(false) }
+    val castRoutes by CastManager.routes.collectAsStateWithLifecycle()
+
     val audioManager = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     }
@@ -194,12 +202,12 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     DisposableEffect(Unit) {
-        val listener: (ExoPlayer?) -> Unit = { p ->
+        val listener: (Player?) -> Unit = { p ->
             playerView.player = p
             currentChannel = ChannelQueue.current
         }
         PlaybackManager.addPlayerListener(listener)
-        playerView.player = PlaybackManager.player
+        playerView.player = PlaybackManager.displayPlayer()
         onDispose {
             PlaybackManager.removePlayerListener(listener)
         }
@@ -218,6 +226,21 @@ fun PlayerScreen(navController: NavHostController) {
         val el: (String?) -> Unit = { error = it }
         PlaybackManager.addErrorListener(el)
         onDispose { PlaybackManager.removeErrorListener(el) }
+    }
+
+    DisposableEffect(Unit) {
+        val cl: (Boolean) -> Unit = { isCasting = it }
+        PlaybackManager.addCastListener(cl)
+        onDispose { PlaybackManager.removeCastListener(cl) }
+    }
+
+    // Yayın dialog'u açıkken cihaz ara; kapandığında taramayı durdur (pil tasarrufu).
+    LaunchedEffect(castDialogVisible) {
+        if (castDialogVisible) {
+            CastManager.startDiscovery()
+        } else {
+            CastManager.stopDiscovery()
+        }
     }
 
     fun exitPlayer() {
@@ -260,8 +283,14 @@ fun PlayerScreen(navController: NavHostController) {
         }
     }
 
+    // Oynatıcı yönü (Oynatıcı ayarları): otomatik (sensör yatay) / sabit yatay / serbest.
+    val orientationMode = remember { app.store.settings().playerOrientation }
     DisposableEffect(Unit) {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        activity?.requestedOrientation = when (orientationMode) {
+            "landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            "sensor" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -278,9 +307,13 @@ fun PlayerScreen(navController: NavHostController) {
         }
     }
 
+    // Kontrol gizleme süresi (Oynatıcı ayarları → 3/5/10 sn).
+    val controlsTimeoutMs = remember {
+        app.store.settings().controlsTimeoutSec.coerceIn(3, 10) * 1000L
+    }
     LaunchedEffect(overlayVisible) {
         if (overlayVisible && !locked) {
-            delay(5000)
+            delay(controlsTimeoutMs)
             overlayVisible = false
         }
     }
@@ -315,7 +348,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     LaunchedEffect(Unit) {
         while (true) {
-            val p = PlaybackManager.player
+            val p = PlaybackManager.displayPlayer()
             if (!seeking && p != null) {
                 position = p.currentPosition
                 duration = if (p.duration > 0) p.duration else 0L
@@ -327,7 +360,7 @@ fun PlayerScreen(navController: NavHostController) {
     LaunchedEffect(Unit) {
         while (true) {
             delay(5000)
-            val p = PlaybackManager.player
+            val p = PlaybackManager.displayPlayer()
             if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
                 val pos = p.currentPosition
                 val dur = p.duration
@@ -349,7 +382,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     DisposableEffect(Unit) {
         onDispose {
-            val p = PlaybackManager.player
+            val p = PlaybackManager.displayPlayer()
             if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
                 val pos = p.currentPosition
                 val dur = p.duration
@@ -391,9 +424,10 @@ fun PlayerScreen(navController: NavHostController) {
                     onTap = { if (!locked) overlayVisible = !overlayVisible },
                     onDoubleTap = { offset ->
                         if (!locked && !isLive && settings.gesturesEnabled) {
+                            val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
                             when {
-                                offset.x < size.width / 3 -> PlaybackManager.seekBack(10_000L)
-                                offset.x > size.width * 2 / 3 -> PlaybackManager.seekForward(10_000L)
+                                offset.x < size.width / 3 -> PlaybackManager.seekBack(seekMs)
+                                offset.x > size.width * 2 / 3 -> PlaybackManager.seekForward(seekMs)
                                 else -> PlaybackManager.togglePlayPause()
                             }
                         }
@@ -405,12 +439,12 @@ fun PlayerScreen(navController: NavHostController) {
                 detectDragGestures(
                     onDragStart = {
                         gestureMode = null
-                        gestureStartPos = PlaybackManager.player?.currentPosition ?: 0L
+                        gestureStartPos = PlaybackManager.displayPlayer()?.currentPosition ?: 0L
                     },
                     onDrag = { change, dragAmount ->
                         if (locked) return@detectDragGestures
                         change.consume()
-                        val p = PlaybackManager.player ?: return@detectDragGestures
+                        val p = PlaybackManager.displayPlayer() ?: return@detectDragGestures
                         val dur = if (p.duration > 0) p.duration else 0L
                         if (gestureMode == null) {
                             val horizontal = abs(dragAmount.x) > abs(dragAmount.y)
@@ -476,6 +510,40 @@ fun PlayerScreen(navController: NavHostController) {
             }
     ) {
         AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
+
+        // Yayın (Chromecast) sırasında yerel ekran boş kalmasın — başlık + durum göster.
+        if (isCasting) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.CastConnected,
+                    contentDescription = null,
+                    tint = Color(0xFF4FC3F7),
+                    modifier = Modifier.size(56.dp)
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = PlaybackManager.currentTitle.ifBlank { "Yayınlanıyor…" },
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "TV'de yayınlanıyor",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
 
         if (gestureText != null) {
             Box(
@@ -583,10 +651,15 @@ fun PlayerScreen(navController: NavHostController) {
                             }
                         }
                         IconButton(
-                            onClick = { Toast.makeText(context, "Chromecast yakında", Toast.LENGTH_SHORT).show() },
+                            onClick = { castDialogVisible = true },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.Cast, contentDescription = "Chromecast", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(
+                                imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
+                                contentDescription = "Chromecast",
+                                tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                         IconButton(
                             onClick = {
@@ -954,6 +1027,16 @@ fun PlayerScreen(navController: NavHostController) {
         onClose = { showChannels = false },
         onSelect = { idx -> switchTo(idx); showChannels = false }
     )
+
+    if (castDialogVisible) {
+        CastDialog(
+            routes = castRoutes,
+            isCasting = isCasting,
+            onConnect = { CastManager.connect(it) },
+            onDisconnect = { CastManager.disconnect() },
+            onDismiss = { castDialogVisible = false }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1151,7 +1234,7 @@ fun PlayerInfoSheet(
     val rows = remember { mutableStateListOf<Pair<String, String>>() }
 
     fun rebuild() {
-        val p = PlaybackManager.player
+        val p = PlaybackManager.displayPlayer()
         val v = p?.videoFormat
         val a = p?.audioFormat
         val url = PlaybackManager.currentStreamUrl

@@ -69,6 +69,8 @@ class PortalRepository(
     // episode numbers. Cache them so loadEpisodes can build playable episodes.
     private val seriesSeasonsCache = mutableMapOf<Long, List<Pair<Long, List<Int>>>>()
     private val seriesSeasonsListCache = mutableMapOf<Long, List<Season>>()
+    // Xtream dizileri: get_series_info sonucu (kaynakId:seriesId -> sezonlar).
+    private val xtreamSeriesInfoCache = mutableMapOf<String, List<XtreamSeasonInfo>>()
     private val vodCache = mutableMapOf<String, MutableMap<String, List<VodItem>>>()
     private val vodTotals = mutableMapOf<String, Int>()
     private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
@@ -120,6 +122,21 @@ class PortalRepository(
 
     private fun vodKey(categoryId: Long, search: String): String =
         "$categoryId|${search.trim().lowercase()}"
+
+    // ---------- Non-Stalker (M3U / Xtream) yardımcıları ----------
+
+    private fun activeXtreamSource(): XtreamSource? =
+        if (store.activeSourceKind() == "xtream")
+            store.xtreamSources().firstOrNull { it.id == store.activeSourceId() }
+        else null
+
+    private suspend fun xtreamSeasons(src: XtreamSource, seriesId: Long): List<XtreamSeasonInfo> {
+        val key = "${src.id}:$seriesId"
+        xtreamSeriesInfoCache[key]?.let { return it }
+        val seasons = XtreamClient().seriesInfo(src, seriesId)
+        xtreamSeriesInfoCache[key] = seasons
+        return seasons
+    }
 
     private val _status = MutableStateFlow<PortalStatus>(PortalStatus.Idle)
     val status: StateFlow<PortalStatus> = _status
@@ -241,7 +258,7 @@ class PortalRepository(
         return store.favoriteVods().firstOrNull { it.id == id }
     }
 
-    suspend fun connect(portal: Portal): Profile {
+    suspend fun connect(portal: Portal, activate: Boolean = true): Profile {
         _status.value = PortalStatus.Connecting(portal.name)
         return try {
             val base = StalkerClient.normalizeBase(portal.url)
@@ -308,7 +325,10 @@ class PortalRepository(
             profiles[portal.id] = profile
             store.saveProfile(profile)
             store.savePortal(portal.copy(mac = mac))
-            store.setActivePortalId(portal.id)
+            // Test amaçlı bağlantıda ([activate]=false) aktif portal değişmez —
+            // aksi halde "Tüm Kaynakları Test Et" her seferinde aktif portalı
+            // sessizce değiştirip uygulamayı bozuk duruma sokuyordu.
+            if (activate) store.setActivePortalId(portal.id)
             _status.value = PortalStatus.Connected(profile)
             profile
         } catch (e: Exception) {
@@ -1176,6 +1196,7 @@ class PortalRepository(
         vodTotals.clear()
         vodItemsById.clear()
         epgCache.clear()
+        xtreamSeriesInfoCache.clear()
         vodCategoryParam = null
         vodPageParam = null
         vodPageSize = 0
@@ -1435,15 +1456,24 @@ class PortalRepository(
      * with `movie_id=<seriesId>` (each season item carries its episode numbers in
      * the `series` array). Tries the standard call first, then the fallback.
      */
-    suspend fun loadSeasons(profile: Profile, vodId: Long): List<Season> {
+    suspend fun loadSeasons(profile: Profile?, vodId: Long): List<Season> {
+        // Xtream dizisi: get_series_info'dan sezonlar (profil gerekmez).
+        activeXtreamSource()?.let { src ->
+            if (ExternalVod.isXtreamSeries(vodId)) {
+                return xtreamSeasons(src, ExternalVod.realId(vodId)).map { s ->
+                    Season(id = s.number.toLong(), name = s.name, poster = "")
+                }
+            }
+        }
+        val p = profile ?: return emptyList()
         val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
         seriesSeasonsListCache[realId]?.let { return it }
         val standard = runCatching {
             val resp = client.request(
-                profile.baseUrl,
+                p.baseUrl,
                 "portal.php?type=vod&action=get_season_list",
                 "POST",
-                tokenFor(profile),
+                tokenFor(p),
                 mapOf("movie_id" to vodId.toString())
             )
             parseSeasons(resp)
@@ -1452,10 +1482,10 @@ class PortalRepository(
 
         // Fallback for the separate type=series library.
         val resp = client.request(
-            profile.baseUrl,
+            p.baseUrl,
             "portal.php?type=series&action=get_ordered_list",
             "POST",
-            tokenFor(profile),
+            tokenFor(p),
             mapOf("movie_id" to realId.toString())
         )
         val collected = mutableListOf<Pair<Long, List<Int>>>()
@@ -1490,14 +1520,34 @@ class PortalRepository(
      * numbers (cached by [loadSeasons]) and stream via a create_link cmd built
      * from `{"series_id":..,"season_num":..,"episode_num":..,"type":"series"}`.
      */
-    suspend fun loadEpisodes(profile: Profile, vodId: Long, seasonId: Long): List<Episode> {
+    suspend fun loadEpisodes(profile: Profile?, vodId: Long, seasonId: Long): List<Episode> {
+        // Xtream dizisi: bölümler get_series_info'dan; her bölümün cmd'i doğrudan
+        // oynatılabilir URL taşır (create_link gerekmez).
+        activeXtreamSource()?.let { src ->
+            if (ExternalVod.isXtreamSeries(vodId)) {
+                val real = ExternalVod.realId(vodId)
+                val season = xtreamSeasons(src, real).firstOrNull { it.number.toLong() == seasonId }
+                    ?: return emptyList()
+                val client = XtreamClient()
+                return season.episodes.map { ep ->
+                    Episode(
+                        id = ep.id,
+                        name = ep.name,
+                        episodeNumber = ep.number,
+                        thumb = ep.thumb,
+                        cmd = client.episodePlayUrl(src, real, seasonId, ep.number, ep.container)
+                    )
+                }
+            }
+        }
+        val p = profile ?: return emptyList()
         val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
         val standard = runCatching {
             val resp = client.request(
-                profile.baseUrl,
+                p.baseUrl,
                 "portal.php?type=vod&action=get_episodes",
                 "POST",
-                tokenFor(profile),
+                tokenFor(p),
                 mapOf("movie_id" to vodId.toString(), "season_id" to seasonId.toString())
             )
             parseEpisodes(resp)
@@ -1525,11 +1575,20 @@ class PortalRepository(
      * listesini önbelleğe alır; eksikse önce sezonlar yüklenir (ağ isteği).
      * "Sezonu izlendi işaretle" gibi işlemler için kullanılır.
      */
-    suspend fun seasonEpisodeNumbers(profile: Profile, vodId: Long, seasonId: Long): List<Int> {
+    suspend fun seasonEpisodeNumbers(profile: Profile?, vodId: Long, seasonId: Long): List<Int> {
+        // Xtream dizisi: bölüm numaraları get_series_info'dan.
+        activeXtreamSource()?.let { src ->
+            if (ExternalVod.isXtreamSeries(vodId)) {
+                return xtreamSeasons(src, ExternalVod.realId(vodId))
+                    .firstOrNull { it.number.toLong() == seasonId }
+                    ?.episodes?.map { it.number }.orEmpty()
+            }
+        }
+        val p = profile ?: return emptyList()
         val realId = realSeriesId(vodId).takeIf { it > 0 } ?: vodId
         val cached = seriesSeasonsCache[realId]?.firstOrNull { it.first == seasonId }?.second
         if (cached != null) return cached
-        loadSeasons(profile, vodId)
+        loadSeasons(p, vodId)
         return seriesSeasonsCache[realId]?.firstOrNull { it.first == seasonId }?.second.orEmpty()
     }
 
@@ -1539,7 +1598,32 @@ class PortalRepository(
         return Base64.encodeToString(payload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
     }
 
+    /**
+     * VOD akış URL'sini aktif kaynağa göre çözer:
+     *  - M3U / Xtream: doğrudan oynatılabilir URL (profil gerekmez).
+     *  - Stalker: create_link (profil zorunlu).
+     */
     suspend fun vodStreamUrl(
+        item: VodItem,
+        profile: Profile?,
+        episode: Episode? = null
+    ): String {
+        return when (store.activeSourceKind()) {
+            "m3u" -> item.cmd.ifBlank { throw StalkerException("Akış URL'si boş") }
+            "xtream" -> {
+                // Dizi bölümü: URL bölüm üzerinde taşınır (get_series_info'dan).
+                episode?.cmd?.takeIf { it.isNotBlank() }?.let { return it }
+                item.cmd.ifBlank { throw StalkerException("Akış URL'si boş") }
+            }
+            else -> stalkerVodStreamUrl(
+                item,
+                profile ?: throw StalkerException("Portal bağlı değil"),
+                episode
+            )
+        }
+    }
+
+    private suspend fun stalkerVodStreamUrl(
         item: VodItem,
         profile: Profile,
         episode: Episode? = null

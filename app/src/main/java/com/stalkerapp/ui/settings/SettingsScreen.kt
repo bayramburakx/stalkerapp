@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -92,6 +95,7 @@ import com.stalkerapp.data.Portal
 import com.stalkerapp.data.UpdateChecker
 import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.data.UserProfile
+import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
@@ -122,12 +126,14 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onPortalsChanged: () -> Unit = {},
     onOpenLibrary: () -> Unit = {},
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onRestartSetup: () -> Unit = {}
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val profile by vm.userProfile.collectAsStateWithLifecycle()
+    val profiles by vm.profiles.collectAsStateWithLifecycle()
     val sourcesVersion by vm.sourcesVersion.collectAsStateWithLifecycle()
     val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
     val userLists by vm.userLists.collectAsStateWithLifecycle()
@@ -149,6 +155,8 @@ fun SettingsScreen(
 
     var tmdbKey by remember(settings.tmdbApiKey) { mutableStateOf(settings.tmdbApiKey) }
     var epgUrl by remember(settings.epgUrl) { mutableStateOf(settings.epgUrl) }
+    var prefAudioLang by remember(settings.preferredAudioLang) { mutableStateOf(settings.preferredAudioLang) }
+    var prefSubtitleLang by remember(settings.preferredSubtitleLang) { mutableStateOf(settings.preferredSubtitleLang) }
     var updateDialog by remember { mutableStateOf<UpdateInfo?>(null) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
@@ -156,7 +164,7 @@ fun SettingsScreen(
     // Dialog'lar
     var showPortalDialog by remember { mutableStateOf(false) }
     var editingPortal by remember { mutableStateOf<Portal?>(null) }
-    var showSwitch by remember { mutableStateOf(false) }
+    var showProfiles by remember { mutableStateOf(false) }
     var showM3uDialog by remember { mutableStateOf(false) }
     var editingM3u by remember { mutableStateOf<M3uSource?>(null) }
     var showXtreamDialog by remember { mutableStateOf(false) }
@@ -294,7 +302,7 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             SettingsNavRow(Icons.Default.Tv, "Playlist & Kaynaklar", "Stalker portal, M3U ve Xtream kaynakları") { currentSection = "playlist" }
-            SettingsNavRow(Icons.Default.VideoLibrary, "Kütüphane & İçerik", "+18, gizlenen gruplar, ana sayfa düzeni") { currentSection = "content" }
+            SettingsNavRow(Icons.Default.VideoLibrary, "Kütüphane & İçerik", "+18, gizlenen kategoriler, ana sayfa, VOD senkronu") { currentSection = "content" }
             SettingsNavRow(Icons.Default.Star, "Kütüphanem", "Favoriler, Sonra İzle, özel listeler") { currentSection = "library" }
             SettingsNavRow(Icons.Default.VolumeUp, "Oynatıcı", "Kalite, altyazı, çözücü, jestler") { currentSection = "player" }
             SettingsNavRow(Icons.Default.Link, "Entegrasyonlar", "TMDB ve harici servisler") { currentSection = "integrations" }
@@ -324,22 +332,127 @@ fun SettingsScreen(
     ) {
         when (currentSection) {
             "playlist" -> {
-                // Kaynak başına kanal sayısı (M3U içeriğinden / Xtream önbelleğinden).
-                val sourceCounts = remember(sourcesVersion) { mutableStateMapOf<String, Int>() }
+                // Kaynak başına istatistik: canlı kanal / film / dizi sayısı.
+                data class SourceStats(val live: Int = 0, val movies: Int = 0, val series: Int = 0)
+                val sourceStats = remember(sourcesVersion) { mutableStateMapOf<String, SourceStats>() }
                 LaunchedEffect(sourcesVersion, m3uSources, xtreamSources) {
                     m3uSources.forEach { s ->
-                        sourceCounts[s.id] = runCatching { M3uParser.parse(s.content, s.id).size }.getOrDefault(0)
+                        val live = runCatching { M3uParser.parse(s.content, s.id).size }.getOrDefault(0)
+                        val (_, items) = runCatching { M3uParser.parseVod(s.content, s.id) }
+                            .getOrDefault(emptyList<Genre>() to emptyList<VodItem>())
+                        sourceStats[s.id] = SourceStats(
+                            live = live,
+                            movies = items.count { !it.isSeries },
+                            series = items.count { it.isSeries }
+                        )
                     }
                     xtreamSources.forEach { s ->
-                        sourceCounts[s.id] = runCatching { withContext(Dispatchers.IO) { vm.loadXtreamChannels(s) }.second.size }.getOrDefault(0)
+                        val live = runCatching { withContext(Dispatchers.IO) { vm.loadXtreamChannels(s) }.second.size }.getOrDefault(0)
+                        // VOD istatistiği yalnızca AKTİF kaynak için çekilir (ağır
+                        // istekler); pasif Xtream kaynaklarında kanal sayısı yeterli.
+                        var movies = 0
+                        var series = 0
+                        if (activeKind == "xtream" && activeSourceId == s.id) {
+                            val (_, items) = runCatching { withContext(Dispatchers.IO) { vm.loadXtreamVod(s) } }
+                                .getOrDefault(emptyList<Genre>() to emptyList<VodItem>())
+                            movies = items.count { !it.isSeries }
+                            series = items.count { it.isSeries }
+                        }
+                        sourceStats[s.id] = SourceStats(live, movies, series)
                     }
                 }
                 Text(
                     "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını buradan yönetirsin. " +
-                        "Kapatılan kaynak türü Canlı TV ve kütüphanede kullanılmaz.",
+                        "Kapatılan kaynak türü Canlı TV, Filmler ve Dizilerde kullanılmaz.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // ---- Aktif kaynak özeti ----
+                val activeSourceName = when (activeKind) {
+                    "m3u" -> m3uSources.firstOrNull { it.id == activeSourceId }?.name
+                        ?: "M3U listesi"
+                    "xtream" -> xtreamSources.firstOrNull { it.id == activeSourceId }?.name
+                        ?: "Xtream kaynağı"
+                    else -> portals.firstOrNull { it.id == activeId }?.name
+                        ?: appProfile?.portal?.name ?: "—"
+                }
+                val activeKindLabel = when (activeKind) {
+                    "m3u" -> "M3U"
+                    "xtream" -> "Xtream"
+                    else -> "Stalker"
+                }
+                val activeStats = when (activeKind) {
+                    "m3u" -> m3uSources.firstOrNull { it.id == activeSourceId }?.let { sourceStats[it.id] }
+                    "xtream" -> xtreamSources.firstOrNull { it.id == activeSourceId }?.let { sourceStats[it.id] }
+                    else -> null
+                }
+                SectionHeader(Icons.Default.Tv, "Aktif Kaynak")
+                Text(
+                    activeSourceName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Tür: $activeKindLabel" + if (activeStats != null) {
+                        "  •  Canlı: ${activeStats.live}  •  Film: ${activeStats.movies}  •  Dizi: ${activeStats.series}"
+                    } else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // Stalker dışı aktif kaynakta katalog boşsa yeniden çekme kısayolu.
+                if (activeKind == "m3u" || activeKind == "xtream") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { scope.launch { vm.ensureExternalVodCatalog(force = true) } }
+                        ) { Text("Film & Dizileri Yenile") }
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch { vm.loadChannelsForActiveSource(appProfile) }
+                                vm.showMessage("Kanal listesi yenileniyor")
+                            }
+                        ) { Text("Kanal Listesini Yenile") }
+                    }
+                }
+
+                // ---- Hızlı kaynak değiştirici ----
+                if (portals.isNotEmpty() || m3uSources.isNotEmpty() || xtreamSources.isNotEmpty()) {
+                    Text("Hızlı Kaynak Değiştir", style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        portals.forEach { p ->
+                            val sel = activeKind == "stalker" && p.id == activeId
+                            GlassChip(
+                                selected = sel,
+                                onClick = {
+                                    vm.setActiveSource("stalker", null)
+                                    vm.launchSwitch(p) { onPortalsChanged() }
+                                },
+                                label = p.name.ifBlank { p.url }
+                            )
+                        }
+                        m3uSources.forEach { s ->
+                            val sel = activeKind == "m3u" && activeSourceId == s.id
+                            GlassChip(
+                                selected = sel,
+                                onClick = { vm.setActiveSource("m3u", s.id) },
+                                label = "M3U • ${s.name.ifBlank { s.url }}"
+                            )
+                        }
+                        xtreamSources.forEach { s ->
+                            val sel = activeKind == "xtream" && activeSourceId == s.id
+                            GlassChip(
+                                selected = sel,
+                                onClick = { vm.setActiveSource("xtream", s.id) },
+                                label = "XT • ${s.name.ifBlank { s.server }}"
+                            )
+                        }
+                    }
+                }
 
                 // ---- Kaynak türü anahtarları ----
                 ToggleRow(
@@ -416,14 +529,23 @@ fun SettingsScreen(
                         Text("Kayıtlı M3U kaynağı yok", style = MaterialTheme.typography.bodyMedium)
                     } else {
                         m3uSources.forEach { s ->
+                            val st = sourceStats[s.id]
                             SourceRow(
                                 name = s.name.ifBlank { s.url },
-                                subtitle = "${s.url} • ${sourceCounts[s.id] ?: 0} kanal",
+                                subtitle = buildString {
+                                    append(s.url)
+                                    st?.let {
+                                        append("  •  ${it.live} kanal")
+                                        if (it.movies > 0) append("  •  ${it.movies} film")
+                                        if (it.series > 0) append("  •  ${it.series} dizi")
+                                    }
+                                },
                                 isActive = activeKind == "m3u" && activeSourceId == s.id,
                                 onActivate = { vm.setActiveSource("m3u", s.id) },
                                 onEdit = { editingM3u = s; showM3uDialog = true },
                                 onDelete = { vm.deleteM3uSource(s.id) },
-                                onTest = { vm.testM3u(s) }
+                                onTest = { vm.testM3u(s) },
+                                onRefresh = { vm.refreshM3u(s) }
                             )
                         }
                     }
@@ -445,14 +567,24 @@ fun SettingsScreen(
                         Text("Kayıtlı Xtream kaynağı yok", style = MaterialTheme.typography.bodyMedium)
                     } else {
                         xtreamSources.forEach { s ->
+                            val st = sourceStats[s.id]
                             SourceRow(
                                 name = s.name.ifBlank { s.server },
-                                subtitle = "${s.server} • ${s.username} • ${sourceCounts[s.id] ?: 0} kanal",
+                                subtitle = buildString {
+                                    append(s.server)
+                                    append("  •  ${s.username}")
+                                    st?.let {
+                                        append("  •  ${it.live} kanal")
+                                        if (it.movies > 0) append("  •  ${it.movies} film")
+                                        if (it.series > 0) append("  •  ${it.series} dizi")
+                                    }
+                                },
                                 isActive = activeKind == "xtream" && activeSourceId == s.id,
                                 onActivate = { vm.setActiveSource("xtream", s.id) },
                                 onEdit = { editingXtream = s; showXtreamDialog = true },
                                 onDelete = { vm.deleteXtreamSource(s.id) },
-                                onTest = { vm.testXtream(s) }
+                                onTest = { vm.testXtream(s) },
+                                onRefresh = { vm.refreshXtream(s) }
                             )
                         }
                     }
@@ -623,14 +755,56 @@ fun SettingsScreen(
                         text = { Text("Tüm ilerlemeler ve izlendi işaretleri silinir. Bu işlem geri alınamaz.") }
                     )
                 }
-                if (settings.hiddenCategories.isNotEmpty()) {
-                    OutlinedButton(
-                        onClick = {
+                // ---- Gizlenen VOD kategorileri (tek tek aç/kapat) ----
+                Text("Gizlenen Kategoriler", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "İstemediğin kategorileri tek tek kapat — Filmler/Diziler listelerinde ve ana sayfada görünmez.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val allCats = catalog.categories.filter { it.id != 0L }
+                val hiddenCatSet = remember(settings.hiddenCategories) { settings.hiddenCategories.toSet() }
+                if (allCats.isEmpty()) {
+                    Text(
+                        "Katalog yüklenince kategoriler burada listelenir (VOD senkronu bekleniyor).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    allCats.forEach { c ->
+                        val hidden = c.title in hiddenCatSet
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    val newHidden = if (hidden) settings.hiddenCategories - c.title
+                                    else settings.hiddenCategories + c.title
+                                    vm.saveSettings(settings.copy(hiddenCategories = newHidden))
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                c.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(checked = !hidden, onCheckedChange = {
+                                val newHidden = if (it) settings.hiddenCategories - c.title
+                                else settings.hiddenCategories + c.title
+                                vm.saveSettings(settings.copy(hiddenCategories = newHidden))
+                            })
+                        }
+                    }
+                    if (hiddenCatSet.isNotEmpty()) {
+                        TextButton(onClick = {
                             vm.saveSettings(settings.copy(hiddenCategories = emptyList()))
                             vm.showMessage("Gizlenen kategoriler tekrar gösteriliyor")
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Gizlenen Kategorileri Göster (${settings.hiddenCategories.size})") }
+                        }) { Text("Hepsini Göster (${hiddenCatSet.size})") }
+                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -642,6 +816,45 @@ fun SettingsScreen(
                         GlassChip(
                             selected = settings.homeLayout == key,
                             onClick = { vm.saveSettings(settings.copy(homeLayout = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                // ---- Ana sayfa görünümü: hero + bölüm boyutu + açılış sekmesi ----
+                ToggleRow(
+                    icon = Icons.Default.Home,
+                    title = "Hero Tanıtım Banner",
+                    desc = "Ana sayfanın üstündeki büyük kaydırmalı tanıtım",
+                    checked = settings.heroEnabled,
+                    onCheckedChange = { vm.saveSettings(settings.copy(heroEnabled = it)) }
+                )
+                Text("Bölüm Başına Öğe Sayısı", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Popüler Filmler/Diziler ve favori bölümlerinde gösterilecek öğe sayısı.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(10 to "10", 20 to "20", 30 to "30").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.homeSectionSize == key,
+                            onClick = { vm.saveSettings(settings.copy(homeSectionSize = key)) },
+                            label = label
+                        )
+                    }
+                }
+                Text("Açılış Sekmesi", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Uygulama açıldığında hangi sekme gösterilsin.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Ana Sayfa", 1 to "Canlı TV", 2 to "Filmler", 3 to "Diziler").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.defaultTab == key,
+                            onClick = { vm.saveSettings(settings.copy(defaultTab = key)) },
                             label = label
                         )
                     }
@@ -770,6 +983,20 @@ fun SettingsScreen(
                 // ---- VOD senkron ----
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 SectionHeader(Icons.Default.Refresh, "VOD Senkronizasyonu")
+                ToggleRow(
+                    icon = Icons.Default.Refresh,
+                    title = "Otomatik Senkron",
+                    desc = "Uygulama açılışında katalog arka planda otomatik senkronlanır",
+                    checked = settings.autoSyncVod,
+                    onCheckedChange = { vm.saveSettings(settings.copy(autoSyncVod = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Wifi,
+                    title = "Yalnızca Wi-Fi'da Senkronla",
+                    desc = "Mobil veride büyük katalog indirilmez (manuel \"Şimdi Senkronize Et\" yine çalışır)",
+                    checked = settings.wifiOnlySync,
+                    onCheckedChange = { vm.saveSettings(settings.copy(wifiOnlySync = it)) }
+                )
                 when (catalog.status) {
                     VodCatalogStatus.Syncing -> {
                         val ratio = if (catalog.totalCategories > 0) catalog.doneCategories.toFloat() / catalog.totalCategories else 0f
@@ -928,6 +1155,110 @@ fun SettingsScreen(
                     checked = settings.keepScreenOn,
                     onCheckedChange = { vm.saveSettings(settings.copy(keepScreenOn = it)) }
                 )
+                ToggleRow(
+                    icon = Icons.Default.Forward10,
+                    title = "Kanal Ön Yükleme (Zapping)",
+                    desc = "Sıradaki kanal önceden tamponlanır — kanal değiştirme hızlanır",
+                    checked = settings.zappingPrefetch,
+                    onCheckedChange = { vm.saveSettings(settings.copy(zappingPrefetch = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Arka Planda Oynatmaya Devam Et",
+                    desc = "PiP dışında uygulama arka plana geçince oynatma duraklatılır",
+                    checked = settings.backgroundPlayback,
+                    onCheckedChange = { vm.saveSettings(settings.copy(backgroundPlayback = it)) }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ---- Varsayılan ses/altyazı dili (ISO kodu) ----
+                Text("Varsayılan Ses Dili", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "ISO kodu (ör. tr, en, de). Boş bırakılırsa otomatik seçilir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = prefAudioLang,
+                    onValueChange = { if (it.length <= 8 && it.all { c -> c.isLetter() || c == '-' }) prefAudioLang = it },
+                    label = { Text("Ses dili kodu (örn. tr)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedButton(
+                    onClick = {
+                        vm.saveSettings(settings.copy(preferredAudioLang = prefAudioLang.trim().lowercase()))
+                        vm.showMessage("Varsayılan ses dili kaydedildi")
+                    },
+                    enabled = prefAudioLang != settings.preferredAudioLang,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Ses Dili Kaydet") }
+
+                Text("Varsayılan Altyazı Dili", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "ISO kodu (ör. tr, en). Boş bırakılırsa otomatik seçilir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = prefSubtitleLang,
+                    onValueChange = { if (it.length <= 8 && it.all { c -> c.isLetter() || c == '-' }) prefSubtitleLang = it },
+                    label = { Text("Altyazı dili kodu (örn. tr)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedButton(
+                    onClick = {
+                        vm.saveSettings(settings.copy(preferredSubtitleLang = prefSubtitleLang.trim().lowercase()))
+                        vm.showMessage("Varsayılan altyazı dili kaydedildi")
+                    },
+                    enabled = prefSubtitleLang != settings.preferredSubtitleLang,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Altyazı Dili Kaydet") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ---- Oynatıcı yönü / kontrol süreleri ----
+                Text("Oynatıcı Yönü", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "auto" to "Otomatik",
+                        "landscape" to "Sabit Yatay",
+                        "sensor" to "Serbest"
+                    ).forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.playerOrientation == key,
+                            onClick = { vm.saveSettings(settings.copy(playerOrientation = key)) },
+                            label = label
+                        )
+                    }
+                }
+                Text("Kontrol Gizleme Süresi", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(3 to "3 sn", 5 to "5 sn", 10 to "10 sn").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.controlsTimeoutSec == key,
+                            onClick = { vm.saveSettings(settings.copy(controlsTimeoutSec = key)) },
+                            label = label
+                        )
+                    }
+                }
+                Text("Çift Dokunma Atlama", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Sol/sağ yarıya çift dokununca ileri-geri atlama miktarı.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(10 to "10 sn", 20 to "20 sn", 30 to "30 sn").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.doubleTapSeekSec == key,
+                            onClick = { vm.saveSettings(settings.copy(doubleTapSeekSec = key)) },
+                            label = label
+                        )
+                    }
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -1153,10 +1484,14 @@ fun SettingsScreen(
                     OutlinedButton(onClick = { showProfileEdit = true }) {
                         Text("Profili Düzenle")
                     }
-                    OutlinedButton(
-                        onClick = { showSwitch = true },
-                        enabled = portals.isNotEmpty()                    ) { Text("Profil Değiştir") }
+                    OutlinedButton(onClick = { showProfiles = true }) {
+                        Text("Profiller (${profiles.size})")
+                    }
                 }
+                OutlinedButton(
+                    onClick = onRestartSetup,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Kurulumu Yeniden Aç") }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 SectionHeader(Icons.Default.Star, "İstatistikler")
@@ -1320,6 +1655,9 @@ fun SettingsScreen(
                 vm.savePortal(portal)
                 showPortalDialog = false
                 if (vm.store.activePortalId() == null) {
+                    // İlk portal ekleniyor: M3U/Xtream aktifken bile uygulama yeni
+                    // portala geçmeli (kaynak türü Stalker yapılır, sonra bağlanılır).
+                    vm.setActiveSource("stalker", null)
                     vm.launchSwitch(portal) { onPortalsChanged() }
                 }
                 onPortalsChanged()
@@ -1357,16 +1695,20 @@ fun SettingsScreen(
         )
     }
 
-    if (showSwitch) {
-        ProfileSwitchDialog(
-            portals = portals,
-            activeId = activeId,
-            onDismiss = { showSwitch = false },
-            onSwitch = { p ->
-                showSwitch = false
-                vm.setActiveSource("stalker", null)
-                vm.launchSwitch(p) { onPortalsChanged() }
-            }
+    if (showProfiles) {
+        MultiProfileDialog(
+            profiles = profiles,
+            activeId = profile.id.ifBlank { com.stalkerapp.data.Store.DEFAULT_PROFILE_ID },
+            onDismiss = { showProfiles = false },
+            onSwitch = { id ->
+                showProfiles = false
+                vm.switchProfile(id)
+            },
+            onAdd = { n, a ->
+                showProfiles = false
+                vm.addProfile(n, a)
+            },
+            onDelete = { id -> vm.deleteProfile(id) }
         )
     }
 
@@ -1644,7 +1986,8 @@ private fun SourceRow(
     onActivate: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onTest: (suspend () -> String?)? = null
+    onTest: (suspend () -> String?)? = null,
+    onRefresh: (suspend () -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1666,12 +2009,11 @@ private fun SourceRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
-    // Test durumu: başarılı/başarısız göstergesi (Test butonundan sonra dolar).
-    var testState by remember { mutableStateOf<String?>(null) } // null=boş, "ok", hata mesajı
-    var testing by remember { mutableStateOf(false) }
-    // rememberCoroutineScope composable bağlamda bir kez alınır (onClick içinde değil).
-    val scope = rememberCoroutineScope()
-    if (testing) {
+        // Test durumu: başarılı/başarısız göstergesi (Test butonundan sonra dolar).
+        var testState by remember { mutableStateOf<String?>(null) } // null=boş, "ok", hata mesajı
+        var testing by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        if (testing) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                 Text("Test ediliyor…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1684,6 +2026,7 @@ private fun SourceRow(
                 color = if (ok) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
             )
         }
+        // 1. satır: etkinleştir + yenile (varsa).
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1693,6 +2036,30 @@ private fun SourceRow(
                     Text("Aktif Yap")
                 }
             }
+            if (onRefresh != null) {
+                var refreshing by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            refreshing = true
+                            onRefresh()
+                            refreshing = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !refreshing
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (refreshing) "…" else "Yenile")
+                }
+            }
+        }
+        // 2. satır: test + düzenle + sil.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             if (onTest != null) {
                 OutlinedButton(
                     onClick = {
@@ -1752,7 +2119,7 @@ private fun ProfileEditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSave(UserProfile(name = name.trim().ifBlank { "İzleyici" }, avatar = avatar)) }) {
+            TextButton(onClick = { onSave(UserProfile(id = initial.id, name = name.trim().ifBlank { "İzleyici" }, avatar = avatar)) }) {
                 Text("Kaydet")
             }
         },
@@ -1816,31 +2183,91 @@ private fun PrivacyDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ProfileSwitchDialog(
-    portals: List<Portal>,
-    activeId: String?,
+private fun MultiProfileDialog(
+    profiles: List<UserProfile>,
+    activeId: String,
     onDismiss: () -> Unit,
-    onSwitch: (Portal) -> Unit
+    onSwitch: (String) -> Unit,
+    onAdd: (String, String) -> Unit,
+    onDelete: (String) -> Unit
 ) {
+    var adding by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var newAvatar by remember { mutableStateOf(AVATARS.first()) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
-        title = { Text("Portal Değiştir") },
+        title = { Text("Profiller") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (portals.isEmpty()) {
-                    Text("Kayıtlı portal yok.")
-                } else {
-                    portals.forEach { p ->
-                        val isActive = p.id == activeId
-                        OutlinedButton(
-                            onClick = { onSwitch(p) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !isActive
-                        ) {
-                            Text(if (isActive) "● ${p.name.ifBlank { p.url }}" else p.name.ifBlank { p.url })
+                profiles.forEach { p ->
+                    val isActive = p.id == activeId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else Color.Transparent
+                            )
+                            .clickable { if (!isActive) onSwitch(p.id) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(p.avatar, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(p.name.ifBlank { "İzleyici" }, style = MaterialTheme.typography.bodyLarge)
+                            if (isActive) {
+                                Text("Aktif", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        if (profiles.size > 1) {
+                            IconButton(onClick = { onDelete(p.id) }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Profili sil",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
+                }
+                HorizontalDivider()
+                if (adding) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it.take(24) },
+                        label = { Text("Yeni profil adı") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        AVATARS.take(8).forEach { emoji ->
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (emoji == newAvatar) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                        else Color.White.copy(alpha = 0.08f)
+                                    )
+                                    .clickable { newAvatar = emoji },
+                                contentAlignment = Alignment.Center
+                            ) { Text(emoji) }
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            onAdd(newName.trim().ifBlank { "İzleyici" }, newAvatar)
+                            adding = false
+                            newName = ""
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Profili Ekle") }
+                } else {
+                    TextButton(onClick = { adding = true }) { Text("+ Yeni Profil") }
                 }
             }
         }
@@ -1902,6 +2329,7 @@ private fun M3uDialog(
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var url by remember { mutableStateOf(initial?.url ?: "") }
+    var content by remember { mutableStateOf(initial?.content ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -1911,7 +2339,14 @@ private fun M3uDialog(
                 val trimmed = url.trim()
                 if (!trimmed.startsWith("http")) { error = "Geçerli bir http(s) URL girin"; return@TextButton }
                 val id = initial?.id ?: ("m3u_" + trimmed.hashCode().toString() + System.currentTimeMillis().toString().takeLast(4))
-                onSave(M3uSource(id = id, name = name.ifBlank { trimmed }, url = trimmed))
+                onSave(
+                    M3uSource(
+                        id = id,
+                        name = name.ifBlank { trimmed },
+                        url = trimmed,
+                        content = content.trim()
+                    )
+                )
             }) { Text("Kaydet") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } },
@@ -1919,11 +2354,21 @@ private fun M3uDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "M3U listesinin adresini girin (#EXTM3U içeren dosya). Kanal kategorileri group-title'dan gelir.",
+                    "M3U listesinin adresini girin (#EXTM3U içeren dosya). Kanal kategorileri group-title'dan; " +
+                        "\"dizi/series\" grubu Diziler, diğerleri Filmler sekmesinde görünür. İstersen listeyi " +
+                        "doğrudan İçerik alanına da yapıştırabilirsin (URL boşsa bu içerik kullanılır).",
                     style = MaterialTheme.typography.bodySmall
                 )
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("İsim") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("M3U URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("İçerik (isteğe bağlı — #EXTM3U metni)") },
+                    minLines = 3,
+                    maxLines = 6,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }

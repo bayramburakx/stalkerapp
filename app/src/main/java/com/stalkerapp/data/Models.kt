@@ -15,6 +15,12 @@ data class Portal(
 
 @Serializable
 data class UserProfile(
+    /**
+     * Profil kimliği. Boşsa/eski sürümse ilk profil "default" (eski tek profil)
+     * kimliğiyle kaydedilir — böylece mevcut kullanıcıların favori/geçmiş verisi
+     * olduğu gibi kalır (profil bazlı anahtar izolasyonu yalnızca diğer profillere uygulanır).
+     */
+    val id: String = "",
     val name: String = "",
     /** Profil avatarı olarak gösterilen emoji (ör. "😀"). */
     val avatar: String = "😀"
@@ -67,6 +73,16 @@ data class Settings(
     val homeLayout: String = "rows",
     /** Ana sayfa bölüm sırası (HomeDashboardScreen bölüm adları). */
     val homeSectionOrder: List<String> = emptyList(),
+    /** Ana sayfada üstteki büyük kaydırmalı tanıtım (hero) gösterilsin mi? */
+    val heroEnabled: Boolean = true,
+    /** Ana sayfa bölümlerinde (Popüler Filmler/Diziler vb.) gösterilecek öğe sayısı. */
+    val homeSectionSize: Int = 20,
+    /** Uygulama açılışında hangi sekme açılsın: 0=Ana, 1=Canlı, 2=Film, 3=Dizi. */
+    val defaultTab: Int = 0,
+    /** Uygulama açılınca VOD kataloğu arka planda otomatik senkronlansın mı? */
+    val autoSyncVod: Boolean = true,
+    /** VOD kataloğu senkronu yalnızca Wi-Fi (veya kablolu) bağlantıda çalışsın mı? */
+    val wifiOnlySync: Boolean = false,
 
     // ---------- Oynatıcı ----------
     /** Varsayılan video kalitesi ("auto", "2160p", "1080p", "720p", "480p"). */
@@ -85,6 +101,20 @@ data class Settings(
     val autoRetryLive: Boolean = true,
     /** Oynatıcı açıkken ekran uyusun mu (false = ekran açık kalır)? */
     val keepScreenOn: Boolean = true,
+    /** Sonraki kanal ön yüklemesi (zapping gecikmesini azaltır) açık mı? */
+    val zappingPrefetch: Boolean = true,
+    /** Uygulama arka plana geçince (PiP değilken) oynatmaya devam edilsin mi? */
+    val backgroundPlayback: Boolean = true,
+    /** Oynatıcı yönü: "auto" (sensör yatay), "landscape" (sabit yatay), "sensor" (serbest). */
+    val playerOrientation: String = "auto",
+    /** Oynatıcı kontrolleri kaç saniye sonra gizlensin? (3/5/10) */
+    val controlsTimeoutSec: Int = 5,
+    /** Çift dokunma ile ileri/geri atlama miktarı (saniye). */
+    val doubleTapSeekSec: Int = 10,
+    /** Varsayılan ses dili (ISO kodu, ör. "tr"). Boş = otomatik. */
+    val preferredAudioLang: String = "",
+    /** Varsayılan altyazı dili (ISO kodu, ör. "tr"). Boş = otomatik. */
+    val preferredSubtitleLang: String = "",
     /** Varsayılan oynatma hızı (0.75, 1.0, 1.25, 1.5, 2.0). */
     val playbackSpeed: Float = 1f,
     /** Altyazı yazı boyutu (dp). */

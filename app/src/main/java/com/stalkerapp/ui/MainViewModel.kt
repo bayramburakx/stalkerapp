@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.ExternalVod
 import com.stalkerapp.data.Genre
 import com.stalkerapp.data.M3uParser
 import com.stalkerapp.data.M3uSource
@@ -23,6 +24,7 @@ import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
+import com.stalkerapp.util.isWifiConnected
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -100,7 +102,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _favoriteVods.value = store.favoriteVods()
         _watchLater.value = store.watchLater()
         _userLists.value = store.userLists()
-        _userProfile.value = store.userProfile()
+        _profiles.value = store.userProfiles()
+        _userProfile.value = store.activeUserProfile()
         _watchedVersion.value++
     }
 
@@ -125,21 +128,57 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         _watchedVersion.value++
     }
 
-    suspend fun loadHomeChannels(profile: Profile) {
+    suspend fun loadHomeChannels(profile: Profile?) {
         if (_homeChannels.value == null) {
+            // M3U/Xtream aktifken profil null olabilir; kanallar aktif kaynaktan
+            // yüklenir (Stalker, M3U veya Xtream fark etmez).
             _homeChannels.value =
-                runCatching { repository.loadChannels(profile, 0).take(30) }.getOrNull()
+                runCatching { loadChannelsForActiveSource(profile)?.second?.take(30) }.getOrNull()
         }
     }
 
-    // ---------- Kullanıcı profili ----------
+    // ---------- Kullanıcı profilleri (çoklu profil) ----------
 
-    private val _userProfile = MutableStateFlow(store.userProfile())
+    private val _profiles = MutableStateFlow(store.userProfiles())
+    val profiles: StateFlow<List<UserProfile>> = _profiles
+
+    private val _userProfile = MutableStateFlow(store.activeUserProfile())
     val userProfile: StateFlow<UserProfile> = _userProfile
 
     fun saveUserProfile(profile: UserProfile) {
         store.saveUserProfile(profile)
-        _userProfile.value = profile
+        _userProfile.value = store.activeUserProfile()
+        _profiles.value = store.userProfiles()
+    }
+
+    /** Yeni profil oluşturur ve aktif yapar. */
+    fun addProfile(name: String, avatar: String) {
+        store.addProfile(name, avatar)
+        refreshProfileFlows()
+    }
+
+    /** Aktif profili değiştirir; favoriler/geçmiş o profilin verilerine geçer. */
+    fun switchProfile(id: String) {
+        store.switchProfile(id)
+        refreshProfileFlows()
+    }
+
+    /** Profili siler; aktifse ilk kalan profile döner. */
+    fun deleteProfile(id: String) {
+        store.deleteProfile(id)
+        refreshProfileFlows()
+    }
+
+    /** Profil değişince profil bazlı tüm akışları (favoriler, geçmiş, listeler) tazeler. */
+    private fun refreshProfileFlows() {
+        _profiles.value = store.userProfiles()
+        _userProfile.value = store.activeUserProfile()
+        _favorites.value = store.favorites()
+        _favoriteChannels.value = store.favoriteChannels()
+        _favoriteVods.value = store.favoriteVods()
+        _watchLater.value = store.watchLater()
+        _userLists.value = store.userLists()
+        _watchedVersion.value++
     }
 
     // ---------- Sonra izle / özel listeler (Kütüphanem) ----------
@@ -204,12 +243,21 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     }
 
     fun setActiveSource(kind: String, id: String?) {
+        val prevKind = store.activeSourceKind()
+        val prevId = store.activeSourceId()
         store.setActiveSource(kind, id)
         _sourcesVersion.value++
         if (kind != "stalker") {
             _homeChannels.value = null
             // Stalker dışı kaynağa geçişte eski Stalker VOD katalogunu sıfırla.
             StalkerApp.instance.vodSyncManager.reset()
+            // Farklı bir M3U/Xtream kaynağına geçildiyse eski dış kataloğu
+            // temizle — aksi halde önceki kaynağın içeriği gösterilir (bayat).
+            if (prevKind != kind || prevId != id) {
+                _externalCatalog.value = VodCatalogState()
+            }
+            // M3U/Xtream kataloğunu arka planda kur (Filmler/Diziler anında dolu olsun).
+            viewModelScope.launch { ensureExternalVodCatalog() }
         }
     }
 
@@ -219,14 +267,17 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (idx >= 0) list[idx] = source else list.add(source)
         store.saveM3uSources(list)
         m3uCache.remove(source.id)
+        m3uVodCache.remove(source.id)
         _sourcesVersion.value++
     }
 
     fun deleteM3uSource(id: String) {
         store.saveM3uSources(store.m3uSources().filterNot { it.id == id })
         m3uCache.remove(id)
+        m3uVodCache.remove(id)
         if (store.activeSourceKind() == "m3u" && store.activeSourceId() == id) {
-            store.setActiveSource("stalker", null)
+            // Aktif kaynak silindiyse Stalker'a dön (katalog akışını da tazeler).
+            setActiveSource("stalker", null)
         }
         _sourcesVersion.value++
     }
@@ -237,14 +288,17 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (idx >= 0) list[idx] = source else list.add(source)
         store.saveXtreamSources(list)
         xtreamCache.remove(source.id)
+        xtreamVodCache.remove(source.id)
         _sourcesVersion.value++
     }
 
     fun deleteXtreamSource(id: String) {
         store.saveXtreamSources(store.xtreamSources().filterNot { it.id == id })
         xtreamCache.remove(id)
+        xtreamVodCache.remove(id)
         if (store.activeSourceKind() == "xtream" && store.activeSourceId() == id) {
-            store.setActiveSource("stalker", null)
+            // Aktif kaynak silindiyse Stalker'a dön (katalog akışını da tazeler).
+            setActiveSource("stalker", null)
         }
         _sourcesVersion.value++
     }
@@ -253,7 +307,10 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     /** Stalker portal bağlantısını dener; başarılıysa null, hata mesajı varsa döner. */
     suspend fun testPortal(portal: Portal): String? {
-        return runCatching { repository.connect(portal) }
+        // activate=false: test aktif portalı değiştirmez — aksi halde "Tüm
+        // Kaynakları Test Et" uygulamayı sessizce son test edilen portala
+        // geçirip katalogu sıfırlıyordu.
+        return runCatching { repository.connect(portal, activate = false) }
             .fold(
                 onSuccess = { null },
                 onFailure = { it.message ?: it::class.simpleName ?: "Bilinmeyen hata" }
@@ -268,6 +325,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         val count = M3uParser.parse(content, source.id).size
         if (count == 0) return "Kanal bulunamadı (geçerli M3U değil?)"
         saveM3uSource(source.copy(content = content))
+        // İçerik değişti: kaynak aktifse dış katalog bayat kalmasın (bir sonraki
+        // açılışta yeniden kurulur).
+        if (store.activeSourceKind() == "m3u" && store.activeSourceId() == source.id) {
+            _externalCatalog.value = VodCatalogState()
+        }
         return null
     }
 
@@ -312,6 +374,96 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         return result
     }
 
+    // ---------- M3U / Xtream VOD kataloğu ----------
+
+    private val m3uVodCache = mutableMapOf<String, Pair<List<Genre>, List<VodItem>>>()
+    private val xtreamVodCache = mutableMapOf<String, Pair<List<Genre>, List<VodItem>>>()
+
+    /** M3U kaynağının film/dizi kataloğunu yükler (gerekirse içeriği indirir). */
+    suspend fun loadM3uVod(source: M3uSource): Pair<List<Genre>, List<VodItem>> {
+        m3uVodCache[source.id]?.let { return it }
+        var content = source.content
+        if (content.isBlank() && source.url.isNotBlank()) {
+            content = M3uParser.fetch(source.url).orEmpty()
+            if (content.isNotBlank()) {
+                saveM3uSource(source.copy(content = content))
+            }
+        }
+        val result = M3uParser.parseVod(content, source.id)
+        m3uVodCache[source.id] = result
+        return result
+    }
+
+    /** Xtream kaynağının film + dizi kataloğunu yükler. */
+    suspend fun loadXtreamVod(source: XtreamSource): Pair<List<Genre>, List<VodItem>> {
+        xtreamVodCache[source.id]?.let { return it }
+        val client = XtreamClient()
+        val vcats = client.vodCategories(source)
+        val scats = client.seriesCategories(source)
+        val vods = client.vodStreams(source)
+        val series = client.seriesStreams(source)
+        val genres = listOf(Genre(0, "Tümü")) +
+            vcats +
+            scats.map { it.copy(id = ExternalVod.seriesCatId(it.id)) }
+        val result = genres to (vods + series)
+        xtreamVodCache[source.id] = result
+        return result
+    }
+
+    /**
+     * Aktif M3U/Xtream kaynağı için VOD kataloğunu kurup arayüze yayınlar.
+     * Filmler/Diziler sekmeleri ve ana sayfa bölümleri bu akışı okur.
+     */
+    suspend fun ensureExternalVodCatalog(force: Boolean = false) {
+        val kind = enabledSourceKind()
+        if (kind != "m3u" && kind != "xtream") return
+        val ready = _externalCatalog.value.status == VodCatalogStatus.Ready &&
+            _externalCatalog.value.loadedCount > 0
+        if (!force && ready) return
+        val id = store.activeSourceId() ?: return
+        _externalCatalog.value = _externalCatalog.value.copy(status = VodCatalogStatus.Syncing)
+        try {
+            val (genres, items) = when (kind) {
+                "m3u" -> store.m3uSources().firstOrNull { it.id == id }?.let { loadM3uVod(it) }
+                "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamVod(it) }
+                else -> null
+            } ?: (emptyList<Genre>() to emptyList<VodItem>())
+            _externalCatalog.value = VodCatalogState.of(
+                status = VodCatalogStatus.Ready,
+                doneCategories = genres.size,
+                totalCategories = genres.size,
+                loadedCount = items.size,
+                allItems = items,
+                categories = genres,
+                lastSync = System.currentTimeMillis()
+            )
+        } catch (e: Exception) {
+            _externalCatalog.value = _externalCatalog.value.copy(status = VodCatalogStatus.Error)
+        }
+    }
+
+    /** M3U kaynağının içeriğini yeniden indirir ve katalogları tazeler. */
+    fun refreshM3u(source: M3uSource) {
+        viewModelScope.launch {
+            val fresh = if (source.url.isNotBlank()) M3uParser.fetch(source.url) else null
+            if (fresh != null) {
+                saveM3uSource(source.copy(content = fresh))
+            }
+            m3uCache.remove(source.id)
+            m3uVodCache.remove(source.id)
+            ensureExternalVodCatalog(force = true)
+        }
+    }
+
+    /** Xtream kaynağının önbelleklerini temizleyip katalogları yeniden çeker. */
+    fun refreshXtream(source: XtreamSource) {
+        viewModelScope.launch {
+            xtreamCache.remove(source.id)
+            xtreamVodCache.remove(source.id)
+            ensureExternalVodCatalog(force = true)
+        }
+    }
+
     /** Aktif kaynağın kanallarını yükler (Stalker profil veya m3u/xtream). */
     suspend fun loadChannelsForActiveSource(profile: Profile?): Pair<List<Genre>, List<Channel>>? {
         val kind = enabledSourceKind() ?: return null
@@ -329,9 +481,18 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     }
 
     // ---------- VOD catalog (background sync) ----------
-    // The sync is owned by the app-lifetime VodSyncManager so it keeps running
-    // while the app is backgrounded and resumes from a checkpoint after a restart.
-    val vodCatalog: StateFlow<VodCatalogState> = StalkerApp.instance.vodSyncManager.progress
+    // Stalker kataloğu, uygulama ömrü boyunca yaşayan VodSyncManager'a aittir;
+    // M3U/Xtream kataloğu ise aktif kaynağa göre burada kurulur. [vodCatalog]
+    // aktif kaynak türüne göre doğru akışı döndürür; ekranlar bunu her zaman
+    // koleksiyonlar — böylece Filmler/Diziler sekmeleri M3U ve Xtream'de de dolu olur.
+    private val _externalCatalog = MutableStateFlow(VodCatalogState())
+    val externalCatalog: StateFlow<VodCatalogState> = _externalCatalog
+
+    val vodCatalog: StateFlow<VodCatalogState>
+        get() = when (enabledSourceKind()) {
+            "m3u", "xtream" -> _externalCatalog
+            else -> StalkerApp.instance.vodSyncManager.progress
+        }
 
     fun syncVodCatalog(profile: Profile, force: Boolean = false) {
         StalkerApp.instance.vodSyncManager.ensureSynced(profile, force)
@@ -357,8 +518,20 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             StalkerApp.instance.vodSyncManager.publishCached(profile)
             return
         }
+        // Kütüphane & İçerik ayarları: otomatik senkron kapalıysa ya da
+        // "yalnızca Wi-Fi" açıkken Wi-Fi yoksa arka plan senkronu başlatılmaz
+        // (kullanıcı isterse "Şimdi Senkronize Et" ile manuel başlatır).
+        if (!shouldAutoSyncVod()) return
         StalkerApp.instance.vodSyncManager.ensureSynced(profile, force = staleCatalog)
         VodSyncService.start(app)
+    }
+
+    /** VOD otomatik senkronu şu an çalışabilir mi? (autoSyncVod + wifiOnlySync) */
+    fun shouldAutoSyncVod(): Boolean {
+        val s = store.settings()
+        if (!s.autoSyncVod) return false
+        if (s.wifiOnlySync && !app.isWifiConnected()) return false
+        return true
     }
 
     fun resetVodCatalog() {
@@ -397,9 +570,19 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     /** Switches the active portal, reconnects, and re-syncs the VOD catalog. */
     suspend fun switchPortal(portal: Portal): Result<Unit> = runCatching {
+        val prevId = store.activePortalId()
         store.setActivePortalId(portal.id)
         repository.clearCaches()
-        repository.connect(portal)
+        try {
+            repository.connect(portal)
+        } catch (e: Exception) {
+            // Bağlantı başarısızsa önceki portalı geri yükle — aksi halde uygulama
+            // aktif portalı bozuk/erişilemez birine sabitler ve her şey boş görünür.
+            store.setActivePortalId(prevId)
+            repository.clearCaches()
+            repository.restoreProfileFromDisk()
+            throw e
+        }
         resetVodCatalog()
         repository.cachedProfile()?.let { syncVodIfNeeded(it) }
     }

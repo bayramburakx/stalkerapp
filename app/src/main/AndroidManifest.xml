@@ -19,6 +19,11 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.StalkerApp.Starting">
 
+        <!-- Chromecast: CastPlayer (media3-cast) için alıcı uygulama kimliği ayarları. -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.stalkerapp.cast.CastOptionsProvider" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

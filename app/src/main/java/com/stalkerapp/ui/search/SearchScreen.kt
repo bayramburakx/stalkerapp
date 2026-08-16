@@ -80,8 +80,9 @@ fun SearchScreen(
     var vodMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        if (profile != null && allChannels == null) {
-            runCatching { allChannels = vm.repository.loadChannels(profile, 0) }
+        if (allChannels == null) {
+            // Aktif kaynağa göre kanalları yükle (Stalker / M3U / Xtream fark etmez).
+            runCatching { allChannels = vm.loadChannelsForActiveSource(profile)?.second }
         }
     }
 

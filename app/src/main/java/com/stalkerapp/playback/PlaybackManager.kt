@@ -18,6 +18,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
+import androidx.media3.cast.CastPlayer
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -28,7 +29,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.TsExtractor
+import com.google.android.gms.cast.framework.CastContext
 import com.stalkerapp.R
+import com.stalkerapp.cast.CastManager
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Episode
 import com.stalkerapp.data.PortalRepository
@@ -86,6 +89,16 @@ object PlaybackManager {
     private var activePlayer: ExoPlayer? = null
     private var standbyPlayer: ExoPlayer? = null
 
+    // Chromecast: CastPlayer (media3-cast) içeriği TV'ye gönderir. Google Play
+    // servisleri yoksa kurulamaz ve null kalır (yayın özelliği kapalı olur).
+    private var castPlayer: CastPlayer? = null
+    private val castListeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
+    // stop() sırasında yayın kesilirken yerel oynatıcıyı yeniden başlatmayı önler.
+    private var stopping = false
+
+    // Son oynatılan içeriğin kapak görseli — yayına aktarılırken tekrar kurulur.
+    private var currentArtwork: String = ""
+
     private var vodPlayback: Boolean = false
     fun isVod(): Boolean = vodPlayback
 
@@ -93,9 +106,52 @@ object PlaybackManager {
     // Kullanıcı kanal değiştirdiğinde sıfırlanır; peş peşe en fazla 3 deneme.
     private var liveRetryCount = 0
 
-    private val playerListeners = CopyOnWriteArrayList<(ExoPlayer?) -> Unit>()
+    private val playerListeners = CopyOnWriteArrayList<(Player?) -> Unit>()
     private var stateListeners = CopyOnWriteArrayList<(Boolean, Boolean) -> Unit>()
     private val errorListeners = CopyOnWriteArrayList<(String?) -> Unit>()
+
+    /**
+     * CastPlayer (media3-cast) dinleyicisi: oturum bağlanınca aktif içeriği
+     * TV'ye aktarır, bağlantı kesilince telefon oynatıcısı kaldığı yerden sürer.
+     */
+    private val castListener = object : Player.Listener {
+        override fun onIsCastingChanged(isCasting: Boolean) {
+            if (isCasting) {
+                // Aktif içeriği TV'ye gönder; telefondaki oynatmayı duraklat
+                // (aksi halde iki cihazdan aynı anda ses çıkar).
+                if (currentStreamUrl.isNotBlank()) {
+                    val item = mediaItem(currentStreamUrl, currentTitle, currentArtwork)
+                    val pos = activePlayer?.currentPosition ?: 0L
+                    castPlayer?.setMediaItem(item, pos)
+                    castPlayer?.prepare()
+                    castPlayer?.play()
+                }
+                activePlayer?.pause()
+            } else if (!stopping) {
+                // Yayın bitti/kesildi: telefon oynatıcısı kaldığı yerden sürsün.
+                val pos = castPlayer?.currentPosition ?: 0L
+                activePlayer?.let { p ->
+                    if (pos > 0) p.seekTo(pos)
+                    p.play()
+                }
+            }
+            notifyCastChanged()
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            notifyStateChanged()
+            if (playbackState == Player.STATE_ENDED && vodPlayback) {
+                markCurrentEpisodeWatched()
+                if (store.settings().bingeMode && VodQueue.hasNext) {
+                    playNextEpisode(auto = false)
+                }
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            updateNotification()
+        }
+    }
 
     fun addErrorListener(l: (String?) -> Unit) {
         errorListeners.add(l)
@@ -130,6 +186,14 @@ object PlaybackManager {
         this.store = store
         this.repository = repository
         createNotificationChannel()
+        CastManager.init(appContext)
+        // Chromecast: CastPlayer'ı kur (Google Play servisleri/uyumlu cihaz
+        // yoksa sessizce null kalır; yayın özelliği devre dışı olur).
+        castPlayer = runCatching {
+            CastPlayer(CastContext.getSharedInstance(appContext)).apply {
+                addListener(castListener)
+            }
+        }.getOrNull()
         // Bölüm %85 izlendiğinde otomatik "izlendi" işareti (ekran arka planda
         // olsa da, PiP/arka plan oynatmada bile) — 5 sn'de bir kontrol edilir.
         scope.launch {
@@ -236,6 +300,20 @@ object PlaybackManager {
                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                         .build()
                 }
+                // Varsayılan ses/altyazı dili (Oynatıcı ayarları): ISO kodu
+                // verilmişse o dil öncelikli seçilir, boşsa otomatik kalır.
+                if (st.preferredAudioLang.isNotBlank()) {
+                    trackSelectionParameters = trackSelectionParameters
+                        .buildUpon()
+                        .setPreferredAudioLanguage(st.preferredAudioLang)
+                        .build()
+                }
+                if (st.preferredSubtitleLang.isNotBlank()) {
+                    trackSelectionParameters = trackSelectionParameters
+                        .buildUpon()
+                        .setPreferredTextLanguage(st.preferredSubtitleLang)
+                        .build()
+                }
             }
     }
 
@@ -303,12 +381,29 @@ object PlaybackManager {
         startPositionMs: Long = 0
     ) {
         setError(null)
+        stopping = false
         vodPlayback = isVod
         currentStreamUrl = url
         currentTitle = title
         currentSubtitle = subtitle
-        val p = ensureActivePlayer()
+        currentArtwork = artwork
         val item = mediaItem(url, title, artwork)
+        // Yayın oturumu bağlıysa içerik doğrudan TV'ye gönderilir.
+        if (isCasting()) {
+            val cp = castPlayer
+            if (cp != null) {
+                cp.setMediaItem(item)
+                cp.prepare()
+                cp.playWhenReady = true
+                cp.seekTo(startPositionMs.coerceAtLeast(0))
+                cp.setPlaybackSpeed(store.settings().playbackSpeed.coerceIn(0.5f, 2f))
+                activePlayer?.pause()
+                startService()
+                updateNotification()
+                return
+            }
+        }
+        val p = ensureActivePlayer()
         p.setMediaItem(item)
         p.prepare()
         p.playWhenReady = true
@@ -325,7 +420,7 @@ object PlaybackManager {
      */
     fun playEpisode(
         item: VodItem,
-        profile: Profile,
+        profile: Profile?,
         episodes: List<Episode>,
         season: Long,
         index: Int,
@@ -363,7 +458,9 @@ object PlaybackManager {
         if (auto) markCurrentEpisodeWatched()
         VodQueue.index++
         val item = VodQueue.item ?: return false
-        val profile = VodQueue.profile ?: return false
+        // Profil M3U/Xtream kaynaklarında null olabilir — URL'yi repository
+        // aktif kaynağa göre çözer (Stalker dışı kaynaklar profil istemez).
+        val profile = VodQueue.profile
         val ep = VodQueue.current ?: return false
         scope.launch {
             val url = try {
@@ -392,18 +489,18 @@ object PlaybackManager {
     }
 
     fun seekTo(positionMs: Long) {
-        activePlayer?.seekTo(positionMs)
+        displayPlayer()?.seekTo(positionMs)
     }
 
     fun seekForward(ms: Long = 10_000L) {
-        val p = activePlayer ?: return
+        val p = displayPlayer() ?: return
         val dur = if (p.duration > 0) p.duration else Long.MAX_VALUE
         val newPos = (p.currentPosition + ms).coerceAtMost(dur)
         p.seekTo(newPos)
     }
 
     fun seekBack(ms: Long = 10_000L) {
-        val p = activePlayer ?: return
+        val p = displayPlayer() ?: return
         val newPos = (p.currentPosition - ms).coerceAtLeast(0L)
         p.seekTo(newPos)
     }
@@ -446,6 +543,9 @@ object PlaybackManager {
      * sarılır; hazırlanamazsa sessizce yok sayılır (normal akış etkilenmez).
      */
     private fun prepareNextChannelForZapping() {
+        // Ayardan kapatılabilir (Oynatıcı → Kanal Ön Yükleme). Kapalıyken sıradaki
+        // kanal önceden hazırlanmaz; kanal değişince normal akışla açılır.
+        if (!store.settings().zappingPrefetch) return
         val next = ChannelQueue.next ?: return
         val queue = ChannelQueue.channels
         scope.launch {
@@ -488,24 +588,61 @@ object PlaybackManager {
     }
 
     fun togglePlayPause() {
-        val p = activePlayer ?: return
+        val p = displayPlayer() ?: return
         p.playWhenReady = !p.playWhenReady
     }
 
     fun setPlaybackSpeed(speed: Float) {
-        activePlayer?.setPlaybackSpeed(speed)
+        displayPlayer()?.setPlaybackSpeed(speed)
     }
 
-    fun isPlaying(): Boolean = activePlayer?.playWhenReady == true
+    fun isPlaying(): Boolean = displayPlayer()?.playWhenReady == true
 
     fun pause() {
-        activePlayer?.pause()
+        displayPlayer()?.pause()
     }
+
+    // ---------- Chromecast ----------
+
+    /** Yayın oturumu bağlı mı? (İçerik TV'de oynatılıyor.) */
+    fun isCasting(): Boolean = castPlayer?.isCastSessionConnected == true
+
+    /**
+     * UI'nin izlemesi gereken oynatıcı: yayın sırasında CastPlayer, aksi halde
+     * yerel ExoPlayer. Durum/ilerleme/kontroller bu oynatıcıya bağlanmalıdır.
+     */
+    fun displayPlayer(): Player? = if (isCasting()) castPlayer else activePlayer
+
+    fun addCastListener(listener: (Boolean) -> Unit) {
+        castListeners.add(listener)
+        listener(isCasting())
+    }
+
+    fun removeCastListener(listener: (Boolean) -> Unit) {
+        castListeners.remove(listener)
+    }
+
+    private fun notifyCastChanged() {
+        val casting = isCasting()
+        castListeners.forEach { it(casting) }
+        // UI'nin bağladığı oynatıcı değişti (yerel ↔ TV): tüm dinleyicileri uyar.
+        notifyPlayerChanged()
+        notifyStateChanged()
+    }
+
+    /** "Arka planda oynatmaya devam et" ayarı (MainActivity.onStop tarafından okunur). */
+    fun isBackgroundPlaybackEnabled(): Boolean = store.settings().backgroundPlayback
 
     fun stop() {
         // Oynatıcıdan çıkılırken son konum %85+ ise bölüm izlendi işaretlenir
         // (5 sn'lik döngü henüz çalışmadan çıkılmış olabilir; stop konumu sıfırlar).
         checkAutoWatched()
+        stopping = true
+        // Yayın varsa TV'deki oynatmayı da durdur (bağlantıyı kes).
+        if (isCasting()) {
+            CastManager.disconnect()
+            castPlayer?.stop()
+        }
         activePlayer?.stop()
         standbyPlayer?.stop()
         stopService()
@@ -579,6 +716,12 @@ object PlaybackManager {
         if (activity == null) return
         // PiP ayardan kapatılmışsa devreye girmez (Ayarlar → Oynatıcı).
         if (!store.settings().pipEnabled) return
+        // PiP YALNIZCA içerik gerçekten oynatılırken girilir: aktif oynatıcı
+        // yoksa, oynatma duraklatılmışsa ya da medya hazır değilse uygulama
+        // alta alınsa bile PiP'e geçilmez (önceden boş ekran PiP'e alıyordu).
+        val p = activePlayer ?: return
+        if (!p.playWhenReady) return
+        if (p.playbackState != Player.STATE_READY && p.playbackState != Player.STATE_BUFFERING) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity.isInPictureInPictureMode.not()) {
             runCatching {
                 activity.enterPictureInPictureMode(
@@ -616,7 +759,7 @@ object PlaybackManager {
 
     fun updateNotification() {
         val s = service ?: return
-        val p = activePlayer ?: return
+        val p = displayPlayer() ?: return
         val metadata = p.mediaMetadata
         val notif = buildNotification(
             s,
@@ -645,7 +788,7 @@ object PlaybackManager {
             NotificationCompat.Action(icon, name, pi)
         }
 
-        val isPlaying = activePlayer?.playWhenReady == true
+        val isPlaying = displayPlayer()?.playWhenReady == true
         val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
         val smallIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
 
@@ -732,12 +875,12 @@ object PlaybackManager {
         })
     }
 
-    fun addPlayerListener(listener: (ExoPlayer?) -> Unit) {
+    fun addPlayerListener(listener: (Player?) -> Unit) {
         playerListeners.add(listener)
-        listener(activePlayer)
+        listener(displayPlayer())
     }
 
-    fun removePlayerListener(listener: (ExoPlayer?) -> Unit) {
+    fun removePlayerListener(listener: (Player?) -> Unit) {
         playerListeners.remove(listener)
     }
 
@@ -750,11 +893,11 @@ object PlaybackManager {
     }
 
     private fun notifyPlayerChanged() {
-        playerListeners.forEach { it(activePlayer) }
+        playerListeners.forEach { it(displayPlayer()) }
     }
 
     private fun notifyStateChanged() {
-        val p = activePlayer
+        val p = displayPlayer()
         val isPlaying = p?.playWhenReady == true && p.playbackState == Player.STATE_READY
         val buffering = p?.playbackState == Player.STATE_BUFFERING
         stateListeners.forEach { it(isPlaying, buffering) }

@@ -29,7 +29,6 @@ import com.stalkerapp.ui.PlayerScreen
 import com.stalkerapp.ui.favorites.FavoritesScreen
 import com.stalkerapp.ui.home.HomeScreen
 import com.stalkerapp.ui.live.EpgGuideScreen
-import com.stalkerapp.ui.login.LoginScreen
 import com.stalkerapp.ui.onboarding.OnboardingScreen
 import com.stalkerapp.ui.person.PersonScreen
 import com.stalkerapp.ui.search.SearchScreen
@@ -55,6 +54,16 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         PlaybackManager.enterPip(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // "Arka Planda Oynatmaya Devam Et" kapalıysa ve PiP'te değilsek (örn.
+        // ev tuşuyla çıkış) oynatmayı duraklat — medya sessizce çalıp durmasın.
+        // Yayın (Chromecast) sırasında atlanır: TV'deki oynatma etkilenmemeli.
+        if (!isInPictureInPictureMode && !PlaybackManager.isCasting() && !PlaybackManager.isBackgroundPlaybackEnabled()) {
+            PlaybackManager.pause()
+        }
     }
 }
 
@@ -93,7 +102,6 @@ private fun AppNav() {
                 navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
             })
         }
-        composable("login") { LoginScreen(onConnected = { navController.navigate("home") { popUpTo("login") { inclusive = true } } }) }
         composable("favorites") {
             FavoritesScreen(
                 profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
@@ -107,7 +115,13 @@ private fun AppNav() {
                 onOpenPlayer = { navController.navigate("player") },
                 onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
                 onOpenSearch = { navController.navigate("search") },
-                onOpenGuide = { navController.navigate("epg") }
+                onOpenGuide = { navController.navigate("epg") },
+                onOpenOnboarding = {
+                    navController.navigate("onboarding") {
+                        popUpTo("home") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }
             )
         }
         composable("epg") {
