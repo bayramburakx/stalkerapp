@@ -323,19 +323,20 @@ fun LiveTvScreen(
                 }
             }
         }
-    }
 
-    manageChannel?.let { ch ->
-        ChannelManageDialog(
-            channel = ch,
-            customization = customization,
-            groupChannels = displayed,
-            onAction = { updated ->
-                app.store.saveChannelCustomization(updated)
-                customVersion++
-            },
-            onDismiss = { manageChannel = null }
-        )
+        // Kanal yönetimi dialog'u (Column kapsamındaki özelleştirme/sıra ile çalışır).
+        manageChannel?.let { ch ->
+            ChannelManageDialog(
+                channel = ch,
+                customization = customization,
+                groupChannels = displayed,
+                onAction = { updated ->
+                    app.store.saveChannelCustomization(updated)
+                    customVersion++
+                },
+                onDismiss = { manageChannel = null }
+            )
+        }
     }
 }
 
