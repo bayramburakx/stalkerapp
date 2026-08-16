@@ -10,7 +10,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,7 +27,7 @@ import java.util.concurrent.TimeUnit
 object TraktManager {
 
     private const val API = "https://api.trakt.tv"
-    private val JSON = MediaType.Companion.toMediaType("application/json")
+    private val JSON = "application/json".toMediaType()
 
     private val okHttp = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
