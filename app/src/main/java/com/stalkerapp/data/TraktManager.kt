@@ -6,7 +6,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -27,10 +26,7 @@ import java.util.concurrent.TimeUnit
  * belirteci dönene dek yoklanır. [syncWatched] izlenen filmleri/dizileri
  * Trakt geçmişine yazar.
  */
-/** JsonElement → JsonPrimitive güvenli dönüşüm (PortalRepository ile aynı helper). */
-private fun JsonElement?.asJsonPrimitiveOrNull(): JsonPrimitive? = this as? JsonPrimitive
-
-/** JsonElement → JsonObject güvenli dönüşüm. */
+/** JsonElement → JsonObject güvenli dönüşüm (asJsonPrimitiveOrNull PortalRepository'de tanımlı). */
 private fun JsonElement?.asJsonObjectOrNull(): JsonObject? = this as? JsonObject
 
 object TraktManager {
