@@ -156,6 +156,39 @@ fun LiveTvScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        // Kanal yönetimi özelleştirmeleri (özel gruplar / sıralama / ad / logo).
+        // Veri hesapları Column dışında tutulur çünkü Multi View overlay'i de bu kapsamı kullanır.
+        val customization = remember(customVersion) { app.store.channelCustomization() }
+
+        // Kanal yönetimi uygulanmış liste: ad düzenleyici + özel logo + özel grup.
+        val rawChannels = channels.orEmpty()
+        val customGroups = customization.customGroups.filter { g ->
+            rawChannels.any { customization.channelGroup[it.id.toString()] == g.name }
+        }
+        val genreList = (
+            ChannelCustomizer.sortedGenres(
+                genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups },
+                customization
+            ) +
+            customGroups.map { Genre(0, it.name) }
+        ).distinctBy { it.title }
+        val allChannels = rawChannels
+            .map { ChannelCustomizer.apply(it, customization) }
+            .filter { it.tvGenreTitle !in hiddenGroups }
+        // Kategori filtresi tür başlığına göre yapılır (Stalker/M3U/Xtream hepsinde çalışır).
+        val activeGenreTitle = genreList.firstOrNull { it.id == selectedGenre }?.title
+        val filtered = allChannels.filter { ch ->
+            val inGenre = selectedGenre <= 0L || ch.tvGenreTitle == activeGenreTitle || ch.tvGenreId == selectedGenre
+            val inCustom = selectedCustomGroup == null || ch.tvGenreTitle == selectedCustomGroup
+            inGenre && inCustom &&
+                (query.isBlank() || ch.name.contains(query.trim(), ignoreCase = true))
+        }
+        // Seçili grupta manuel sıralama (Ayarlar → Kanal Yönetimi / uzun bas → taşı).
+        val sortGroup = selectedCustomGroup ?: if (selectedGenre > 0L) activeGenreTitle else null
+        val displayed = if (sortGroup != null) {
+            ChannelCustomizer.sortedChannels(filtered, sortGroup, customization)
+        } else filtered
+
         Column(modifier = Modifier.fillMaxSize()) {
         if (cooldown > 0) {
             Box(
@@ -243,21 +276,6 @@ fun LiveTvScreen(
             }
         }
 
-        // Kanal yönetimi özelleştirmeleri (özel gruplar / sıralama / ad / logo).
-        val customization = remember(customVersion) { app.store.channelCustomization() }
-
-        // Kanal yönetimi uygulanmış liste: ad düzenleyici + özel logo + özel grup.
-        val rawChannels = channels.orEmpty()
-        val customGroups = customization.customGroups.filter { g ->
-            rawChannels.any { customization.channelGroup[it.id.toString()] == g.name }
-        }
-        val genreList = (
-            ChannelCustomizer.sortedGenres(
-                genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups },
-                customization
-            ) +
-            customGroups.map { Genre(0, it.name) }
-        ).distinctBy { it.title }
         if (genreList.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -288,23 +306,6 @@ fun LiveTvScreen(
                 }
             }
         }
-
-        val allChannels = rawChannels
-            .map { ChannelCustomizer.apply(it, customization) }
-            .filter { it.tvGenreTitle !in hiddenGroups }
-        // Kategori filtresi tür başlığına göre yapılır (Stalker/M3U/Xtream hepsinde çalışır).
-        val activeGenreTitle = genreList.firstOrNull { it.id == selectedGenre }?.title
-        val filtered = allChannels.filter { ch ->
-            val inGenre = selectedGenre <= 0L || ch.tvGenreTitle == activeGenreTitle || ch.tvGenreId == selectedGenre
-            val inCustom = selectedCustomGroup == null || ch.tvGenreTitle == selectedCustomGroup
-            inGenre && inCustom &&
-                (query.isBlank() || ch.name.contains(query.trim(), ignoreCase = true))
-        }
-        // Seçili grupta manuel sıralama (Ayarlar → Kanal Yönetimi / uzun bas → taşı).
-        val sortGroup = selectedCustomGroup ?: if (selectedGenre > 0L) activeGenreTitle else null
-        val displayed = if (sortGroup != null) {
-            ChannelCustomizer.sortedChannels(filtered, sortGroup, customization)
-        } else filtered
 
         when {
             loading && channels == null -> LoadingBox()
