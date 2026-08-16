@@ -1,7 +1,6 @@
 package com.stalkerapp.cast
 
 import android.content.Context
-import androidx.mediarouter.media.MediaRouteDiscoveryRequest
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import androidx.mediarouter.media.MediaRouter.RouteInfo
@@ -33,14 +32,9 @@ object CastManager {
 
     private var router: MediaRouter? = null
 
-    private val discoveryRequest by lazy {
-        MediaRouteDiscoveryRequest(
-            MediaRouteSelector.Builder()
-                .addControlCategory(CAST_CATEGORY)
-                .build(),
-            /* activeScan = */ true
-        )
-    }
+    private val selector = MediaRouteSelector.Builder()
+        .addControlCategory(CAST_CATEGORY)
+        .build()
 
     private val _routes = MutableStateFlow<List<CastRoute>>(emptyList())
     val routes: StateFlow<List<CastRoute>> = _routes.asStateFlow()
@@ -61,8 +55,9 @@ object CastManager {
     /** Yayın cihazı aramayı başlatır (aktif tarama). Dialog açıkken çağrılır. */
     fun startDiscovery() {
         val r = router ?: return
-        r.addCallback(discoveryRequest.selector, callback, MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN)
-        r.setDiscoveryRequest(discoveryRequest)
+        // Modern androidx.mediarouter'da keşif addCallback bayraklarıyla yapılır
+        // (eski setDiscoveryRequest API'si kaldırıldı).
+        r.addCallback(selector, callback, MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN)
         refresh()
     }
 
@@ -70,7 +65,6 @@ object CastManager {
     fun stopDiscovery() {
         val r = router ?: return
         r.removeCallback(callback)
-        r.setDiscoveryRequest(null)
         _routes.value = emptyList()
     }
 
@@ -87,7 +81,7 @@ object CastManager {
     private fun refresh() {
         val r = router ?: return
         _routes.value = r.routes
-            .filter { it.matchesSelector(discoveryRequest.selector) && it.name?.isNotBlank() == true }
+            .filter { it.matchesSelector(selector) && it.name?.isNotBlank() == true }
             .map { CastRoute(it.id, it.name.toString(), it.isSelected, it.isConnecting, it) }
     }
 }
