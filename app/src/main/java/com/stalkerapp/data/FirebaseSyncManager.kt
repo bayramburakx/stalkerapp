@@ -102,17 +102,27 @@ class FirebaseSyncManager(private val context: Context) {
     private fun backupDoc(uid: String) = firestore.collection("users").document(uid).collection("backup").document("main")
 
     /**
-     * Giriş sonrası senkron: bulutta veri varsa geri yükle (yereli değiştirir),
-     * yoksa mevcut yerel veriyi buluta yaz. Sonuç: "synced" / "restored" / "pushed".
+     * Giriş sonrası senkron:
+     *  1. Hesap deposuna geçilir (setAccount) — her hesabın kendi verisi olur.
+     *  2. Bulutta veri varsa geri yükle ("kaldığı yerden devam").
+     *  3. Yoksa: giriş öncesi misafir depodaki veri (varsa) hesaba taşınır ve buluta yazılır.
      */
     suspend fun syncAfterLogin(store: Store): SyncResult = withContext(Dispatchers.IO) {
         val uid = auth.currentUser?.uid ?: return@withContext SyncResult.NotSignedIn
         runCatching {
+            // Misafir depodaki veriyi al (henüz hesaba geçmeden).
+            val guestJson = store.backupJson()
+            val guestHasData = store.guestHasData()
+
+            // Hesap deposuna geç.
+            store.setAccount(uid)
+
             val doc = backupDoc(uid).get().await()
             val cloudJson = doc?.getString("json")
             if (cloudJson.isNullOrBlank()) {
-                // İlk giriş: yerel veriyi buluta yükle.
-                val json = store.backupJson()
+                // İlk giriş: misafir veri varsa hesaba taşı, yoksa boş başla.
+                val json = if (guestHasData) guestJson else store.backupJson()
+                if (guestHasData) store.restoreJson(guestJson)
                 backupDoc(uid).set(
                     mapOf(
                         "json" to json,

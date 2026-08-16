@@ -54,6 +54,10 @@ class StalkerApp : Application() {
         RecordingManager.init(this)
         firebase = FirebaseSyncManager.init(this)
         instance = this
+        // Oturum açıksa veri deposunu o hesaba bağla (her hesabın kendi verisi).
+        if (firebase.isSignedIn) {
+            store.setAccount(firebase.currentUser.value?.uid)
+        }
         // Zamanlanmış görevler: 30 sn'de bir kontrol edilir — EPG program
         // hatırlatıcıları (başlama vaktine yaklaşınca bildirim) ve planlı
         // kayıtlar (başlama/bitiş zamanında akış indirme).

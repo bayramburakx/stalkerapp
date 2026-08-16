@@ -2159,7 +2159,14 @@ fun SettingsScreen(
                     }
                     OutlinedButton(
                         onClick = {
-                            firebase.signOut()
+                            scope.launch {
+                                // Önce bu hesabın son verisini buluta yaz, sonra çık.
+                                firebase.pushBackup(vm.store)
+                                firebase.signOut()
+                                // Misafir depoya dön (oturum kapalıyken görünen veri temiz kalır).
+                                vm.store.setAccount(null)
+                                vm.refreshFlows()
+                            }
                             vm.showMessage("Çıkış yapıldı")
                             onRestartSetup()
                         },

@@ -13,9 +13,39 @@ import kotlinx.serialization.json.contentOrNull
 
 class Store(private val context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("stalker_app_prefs", Context.MODE_PRIVATE)
+    /**
+     * Aktif hesabın UID'si. Boş/null = misafir (giriş yapılmamış) depo.
+     * Farklı hesapların verileri ayrı SharedPreferences dosyalarında tutulur
+     * (Stremio tarzı: her hesabın kendi profilleri/favorileri/geçmişi olur).
+     * Hesap değişince [setAccount] çağrılmalı; ardından akışlar tazelenmeli.
+     */
+    private var accountUid: String? = null
+
+    private val prefs: SharedPreferences
+        get() = context.getSharedPreferences(
+            accountUid?.let { "stalker_app_prefs_$it" } ?: "stalker_app_prefs",
+            Context.MODE_PRIVATE
+        )
     private val json = Json { ignoreUnknownKeys = true }
+
+    /** Aktif hesap UID'si (null = misafir). */
+    fun currentAccount(): String? = accountUid
+
+    /** Veri deposunu hesaba bağlar; null = misafir depoya döner. */
+    fun setAccount(uid: String?) {
+        accountUid = uid
+    }
+
+    /** Hesap bağımsız global depo (onboarding bayrağı vb. cihaz seviyesi veriler). */
+    private val globalPrefs: SharedPreferences by lazy {
+        context.getSharedPreferences("stalker_app_global", Context.MODE_PRIVATE)
+    }
+
+    /** Misafir (hesaba bağlı olmayan) veri deposu boş mu? İlk girişte taşınacak veri var mı diye bakılır. */
+    fun guestHasData(): Boolean {
+        val guest = context.getSharedPreferences("stalker_app_prefs", Context.MODE_PRIVATE)
+        return guest.all.isNotEmpty()
+    }
 
     fun portals(): List<Portal> = runCatching {
         json.decodeFromString(
@@ -80,10 +110,11 @@ class Store(private val context: Context) {
             .apply()
     }
 
-    fun isOnboardingDone(): Boolean = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
+    /** Onboarding bayrağı cihaz seviyesinde global tutulur (hesaptan bağımsız). */
+    fun isOnboardingDone(): Boolean = globalPrefs.getBoolean(KEY_ONBOARDING_DONE, false)
 
     fun setOnboardingDone(done: Boolean) {
-        prefs.edit().putBoolean(KEY_ONBOARDING_DONE, done).apply()
+        globalPrefs.edit().putBoolean(KEY_ONBOARDING_DONE, done).apply()
     }
 
     /** Persists the last connected profile so the app can start straight into Home
