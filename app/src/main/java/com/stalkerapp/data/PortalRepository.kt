@@ -424,7 +424,7 @@ class PortalRepository(
     private suspend fun portalEpg(
         profile: Profile,
         channel: Channel,
-        zone: String,
+        zone: ZoneId?,
         now: Long,
         from: Long,
         to: Long
