@@ -119,6 +119,16 @@ data class Settings(
     val playbackSpeed: Float = 1f,
     /** Altyazı yazı boyutu (dp). */
     val subtitleSize: Int = 16,
+    /** A/V senkron: ses gecikmesi (ms). Pozitif = ses videoya göre gecikir. */
+    val audioDelayMs: Int = 0,
+    /** Akış formatı zorlama: "auto", "hls" (M3U8), "ts" (MPEG-TS). */
+    val streamFormat: String = "auto",
+    /** Auto Frame Rate: "off", "match" (içerik kare hızına uy) veya "24"/"25"/"30"/"50"/"60". */
+    val afrMode: String = "off",
+    /** Audio passthrough (AC3/EAC3/DTS ham bitstream geçişi) açık mı? */
+    val audioPassthrough: Boolean = true,
+    /** Varsayılan oynatıcı: "builtin" (yerleşik ExoPlayer) veya "external" (sistem oynatıcısı). */
+    val defaultPlayer: String = "builtin",
 
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */

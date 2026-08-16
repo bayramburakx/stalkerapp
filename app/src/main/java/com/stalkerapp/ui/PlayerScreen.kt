@@ -44,9 +44,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -119,6 +121,7 @@ import com.stalkerapp.ui.cast.CastDialog
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.resolveUrl
+import com.stalkerapp.util.Afr
 import kotlinx.coroutines.delay
 
 private enum class GestureMode { BRIGHTNESS, VOLUME, SEEK }
@@ -251,6 +254,36 @@ fun PlayerScreen(navController: NavHostController) {
                 launchSingleTop = true
             }
         }
+    }
+
+    // Varsayılan oynatıcı "Harici" ise içerik sistem oynatıcısında açılır; bu
+    // ekran yalnızca akış çözülürken açık kalır, içerik gönderilince kapanır.
+    LaunchedEffect(Unit) {
+        if (app.store.settings().defaultPlayer == "external") {
+            var waited = 0
+            while (waited < 8000 && !PlaybackManager.hasExternalLaunch()) {
+                delay(100)
+                waited += 100
+            }
+            if (PlaybackManager.consumeExternalLaunch()) {
+                exitPlayer()
+            }
+        }
+    }
+
+    // Auto Frame Rate (AFR): içerik kare hızına göre ekran yenileme modunu
+    // ayarlar (Ayarlar → Oynatıcı). Çıkışta varsayılan moda döner.
+    LaunchedEffect(settings.afrMode) {
+        while (true) {
+            val p = PlaybackManager.player
+            val fps = p?.videoFormat?.frameRate ?: 0f
+            Afr.apply(activity, settings.afrMode, fps)
+            delay(2000)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { Afr.clear(activity) }
     }
 
     BackHandler(enabled = true) {
@@ -1014,9 +1047,11 @@ fun PlayerScreen(navController: NavHostController) {
             currentSpeed = playbackSpeed,
             currentAspect = aspectMode,
             binge = settings.bingeMode,
+            audioDelayMs = settings.audioDelayMs,
             onSpeed = { playbackSpeed = it; showPlayerSettings = false },
             onAspect = { aspectMode = it; showPlayerSettings = false },
             onBinge = { vm.saveSettings(settings.copy(bingeMode = it)) },
+            onDelay = { PlaybackManager.setAudioDelayMs(it) },
             onDismiss = { showPlayerSettings = false }
         )
     }
@@ -1329,9 +1364,11 @@ fun PlayerSettingsSheet(
     currentSpeed: Float,
     currentAspect: Int,
     binge: Boolean,
+    audioDelayMs: Int,
     onSpeed: (Float) -> Unit,
     onAspect: (Int) -> Unit,
     onBinge: (Boolean) -> Unit,
+    onDelay: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     val speeds = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
@@ -1363,6 +1400,41 @@ fun PlayerSettingsSheet(
                     modifier = Modifier.clickable { onAspect(mode) }
                 )
             }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Text(
+                "A/V Senkron (Ses Gecikmesi)",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp)
+            )
+            Text(
+                "Pozitif = ses gecikir, negatif = ses öne alınır.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                OutlinedButton(onClick = { onDelay((audioDelayMs - 50).coerceIn(-500, 500)) }) {
+                    Text("−50 ms")
+                }
+                Text(
+                    "${if (audioDelayMs > 0) "+" else ""}$audioDelayMs ms",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                OutlinedButton(onClick = { onDelay((audioDelayMs + 50).coerceIn(-500, 500)) }) {
+                    Text("+50 ms")
+                }
+            }
+            TextButton(
+                onClick = { onDelay(0) },
+                enabled = audioDelayMs != 0,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) { Text("Sıfırla (0 ms)") }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             ListItem(
                 headlineContent = { Text("Binge Modu") },

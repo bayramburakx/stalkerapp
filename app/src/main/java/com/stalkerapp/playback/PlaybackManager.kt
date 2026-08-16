@@ -26,7 +26,9 @@ import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.TsExtractor
@@ -101,6 +103,15 @@ object PlaybackManager {
 
     // Son oynatılan içeriğin kapak görseli — yayına aktarılırken tekrar kurulur.
     private var currentArtwork: String = ""
+
+    // Yapısal oynatıcı ayarları (çözücü, akış formatı, passthrough, tampon)
+    // değişince oyuncu yeniden kurulur; aksi halde yeni değerler uygulanmazdı
+    // (media source factory / renderer'lar kurulumda sabitlenir).
+    private var lastPlayerConfig: String = ""
+
+    // Varsayılan oynatıcı "harici" olduğunda içerik sistem oynatıcısına gönderilir;
+    // PlayerScreen bu bayrağı görünce kendini kapatır (boş ekranda kalmaz).
+    @Volatile private var externalPlaybackLaunched = false
 
     private var vodPlayback: Boolean = false
     fun isVod(): Boolean = vodPlayback
@@ -246,21 +257,43 @@ object PlaybackManager {
         get() = activePlayer
 
     private fun ensureActivePlayer(): ExoPlayer {
-        activePlayer?.let { return it }
+        val key = playerConfigKey()
+        val existing = activePlayer
+        if (existing != null) {
+            if (key == lastPlayerConfig) return existing
+            // Yapısal ayarlar değişti: oyuncuyu yeni ayarlarla yeniden kur.
+            existing.release()
+            activePlayer = null
+            notifyPlayerChanged()
+        }
         val p = buildPlayer()
         activePlayer = p
+        lastPlayerConfig = key
         attachListener(p)
         notifyPlayerChanged()
         return p
     }
 
+    /** Oynatıcıyı yeniden kurmayı gerektiren ayarların özeti (değişirse rebuild). */
+    private fun playerConfigKey(): String {
+        val st = store.settings()
+        return buildString {
+            append(st.decoder).append('|')
+            append(st.streamFormat).append('|')
+            append(st.audioPassthrough).append('|')
+            append(st.maxBufferMs)
+        }
+    }
+
     private fun buildPlayer(): ExoPlayer {
+        val st = store.settings()
+
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
             .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
 
-        val bufferMs = store.settings().maxBufferMs.coerceAtMost(30_000)
+        val bufferMs = st.maxBufferMs.coerceAtMost(30_000)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 5_000,
@@ -278,11 +311,19 @@ object PlaybackManager {
 
         val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpDataSourceFactory)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+        // Akış formatı zorlama (Ayarlar → Oynatıcı): bazı sağlayıcılarda kanal
+        // açılmıyorsa veya catch-up'ta sıçramada sorun varsa akış zorla HLS ya da
+        // MPEG-TS olarak çözülür. "auto" türe göre otomatik algılar.
+        val mediaSourceFactory = when (st.streamFormat) {
+            "hls" -> HlsMediaSource.Factory(dataSourceFactory)
+                .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+            "ts" -> ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
+                .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+            else -> DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
+                .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+        }
 
-        val st = store.settings()
-        val renderers = DefaultRenderersFactory(appContext)
+        val renderers = SyncRenderersFactory(appContext, passthrough = st.audioPassthrough)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             // "hardware" sıkı modda HW başarısızsa yazılıma düşmez; auto/yazılımda
             // HW çökmesini önlemek için yazılım çözücüye geri düşülür (beyaz/kara ekran).
@@ -295,6 +336,9 @@ object PlaybackManager {
             .build()
             .apply {
                 playWhenReady = true
+                // A/V senkron: oyuncu kurulurken son ayardan başlatılır; oynatıcı
+                // içinden de değiştirilebilir (anında uygulanır).
+                AudioSyncState.delayUs = st.audioDelayMs * 1000L
                 // Varsayılan kalite (Ayarlar → Oynatıcı): çözünürlük üst sınırı olarak uygulanır.
                 val maxRes = when (st.defaultQuality) {
                     "1080p" -> 1920 to 1080
@@ -396,6 +440,26 @@ object PlaybackManager {
         startPositionMs: Long = 0
     ) {
         setError(null)
+        // Varsayılan oynatıcı "Harici" ise içerik sistem oynatıcısında açılır
+        // (Ayarlar → Oynatıcı → Varsayılan Oynatıcı). PlayerScreen bu bayrağı
+        // görüp kendini kapatır; yerel oynatma başlatılmaz.
+        if (store.settings().defaultPlayer == "external") {
+            externalPlaybackLaunched = runCatching {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    setType("video/*")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                appContext.startActivity(intent)
+            }.isSuccess
+            if (!externalPlaybackLaunched) {
+                setError("Harici oynatıcı bulunamadı (video desteği olan bir uygulama yükleyin)")
+            }
+            stopping = true
+            activePlayer?.stop()
+            standbyPlayer?.stop()
+            stopService()
+            return
+        }
         stopping = false
         vodPlayback = isVod
         currentStreamUrl = url
@@ -617,6 +681,28 @@ object PlaybackManager {
         displayPlayer()?.pause()
     }
 
+    /**
+     * A/V senkron: ses gecikmesini (ms) anında uygular ve ayarlara kaydeder.
+     * Pozitif = ses videoya göre gecikir. (-500..+500 ms)
+     */
+    fun setAudioDelayMs(ms: Int) {
+        AudioSyncState.delayUs = ms * 1000L
+        val st = store.settings()
+        if (st.audioDelayMs != ms) {
+            store.saveSettings(st.copy(audioDelayMs = ms.coerceIn(-500, 500)))
+        }
+    }
+
+    /** Harici oynatıcıya içerik gönderildi mi? (PlayerScreen bu bayrağı izler.) */
+    fun hasExternalLaunch(): Boolean = externalPlaybackLaunched
+
+    /** Harici oynatma bayrağını okuyup temizler (tek seferlik). */
+    fun consumeExternalLaunch(): Boolean {
+        if (!externalPlaybackLaunched) return false
+        externalPlaybackLaunched = false
+        return true
+    }
+
     // ---------- Chromecast ----------
 
     /** Yayın oturumu bağlı mı? (İçerik TV'de oynatılıyor.) */
@@ -653,6 +739,7 @@ object PlaybackManager {
         // (5 sn'lik döngü henüz çalışmadan çıkılmış olabilir; stop konumu sıfırlar).
         checkAutoWatched()
         stopping = true
+        externalPlaybackLaunched = false
         // Yayın varsa TV'deki oynatmayı da durdur (bağlantıyı kes).
         if (isCasting()) {
             CastManager.disconnect()

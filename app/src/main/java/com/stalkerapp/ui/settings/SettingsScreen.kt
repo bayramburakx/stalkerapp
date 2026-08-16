@@ -1318,6 +1318,105 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                Text("Akış Formatı (Zorla)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Kanal açılmıyorsa veya takılıyorsa akışı zorla HLS ya da MPEG-TS olarak çözmeyi dener.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("auto" to "Otomatik", "hls" to "HLS", "ts" to "MPEG-TS").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.streamFormat == key,
+                            onClick = { vm.saveSettings(settings.copy(streamFormat = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                ToggleRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = "Audio Passthrough",
+                    desc = "AC3/EAC3/DTS sesi AV alıcıya ham geçirir. Kapalıyken ses cihazda çözülür.",
+                    checked = settings.audioPassthrough,
+                    onCheckedChange = { vm.saveSettings(settings.copy(audioPassthrough = it)) }
+                )
+
+                Text("Auto Frame Rate (AFR)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "İçerik kare hızına göre ekran yenileme modunu ayarlar (TV box'larda akıcılık).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "off" to "Kapalı",
+                        "match" to "İçeriğe Uy",
+                        "24" to "24 Hz",
+                        "25" to "25 Hz",
+                        "30" to "30 Hz",
+                        "50" to "50 Hz",
+                        "60" to "60 Hz"
+                    ).forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.afrMode == key,
+                            onClick = { vm.saveSettings(settings.copy(afrMode = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                Text("A/V Senkron (Ses Gecikmesi)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Sesin videoya göre gecikmesi (ms). Pozitif = ses gecikir. Oynatıcı içinden de ayarlanır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassChip(
+                        selected = false,
+                        onClick = { vm.saveSettings(settings.copy(audioDelayMs = (settings.audioDelayMs - 50).coerceIn(-500, 500))) },
+                        label = "−50 ms"
+                    )
+                    Text(
+                        "${if (settings.audioDelayMs > 0) "+" else ""}${settings.audioDelayMs} ms",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    GlassChip(
+                        selected = false,
+                        onClick = { vm.saveSettings(settings.copy(audioDelayMs = (settings.audioDelayMs + 50).coerceIn(-500, 500))) },
+                        label = "+50 ms"
+                    )
+                    if (settings.audioDelayMs != 0) {
+                        GlassChip(
+                            selected = false,
+                            onClick = { vm.saveSettings(settings.copy(audioDelayMs = 0)) },
+                            label = "Sıfırla"
+                        )
+                    }
+                }
+
+                Text("Varsayılan Oynatıcı", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "\"Harici\" seçilirse içerikler sistem oynatıcısında (MXPlayer/VLC vb.) açılır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("builtin" to "Yerleşik (ExoPlayer)", "external" to "Harici Oynatıcı").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.defaultPlayer == key,
+                            onClick = { vm.saveSettings(settings.copy(defaultPlayer = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                 SliderSetting(
                     icon = Icons.Default.Speed,
                     title = "İstek Aralığı (Rate Limit)",
