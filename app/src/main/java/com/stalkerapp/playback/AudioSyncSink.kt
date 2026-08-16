@@ -39,7 +39,7 @@ class AudioSyncSink(
  */
 class SyncRenderersFactory(
     context: Context,
-    passthrough: Boolean
+    private val passthrough: Boolean
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(
