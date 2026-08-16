@@ -4,6 +4,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.asJsonObjectOrNull
+import kotlinx.serialization.json.asJsonPrimitiveOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -57,11 +59,11 @@ object TraktManager {
                     Json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject
                 }.getOrNull() ?: return@use DeviceCodeResult()
                 DeviceCodeResult(
-                    deviceCode = o["device_code"]?.contentOrNull.orEmpty(),
-                    userCode = o["user_code"]?.contentOrNull.orEmpty(),
-                    verificationUrl = o["verification_url"]?.contentOrNull
+                    deviceCode = o["device_code"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                    userCode = o["user_code"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                    verificationUrl = o["verification_url"]?.asJsonPrimitiveOrNull()?.contentOrNull
                         ?: "https://trakt.tv/activate",
-                    intervalSec = o["interval"]?.contentOrNull?.toIntOrNull() ?: 5
+                    intervalSec = o["interval"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 5
                 )
             }
         }.getOrDefault(DeviceCodeResult())
@@ -91,8 +93,8 @@ object TraktManager {
                 val o = runCatching {
                     Json.parseToJsonElement(text).jsonObject
                 }.getOrNull() ?: return@use "expired"
-                val token = o["access_token"]?.contentOrNull.orEmpty()
-                val username = o["user"]?.jsonObject?.get("username")?.contentOrNull.orEmpty()
+                val token = o["access_token"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+                val username = o["user"]?.asJsonObjectOrNull()?.get("username")?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
                 if (token.isBlank()) "expired" else "ok:$token:$username"
             }
         }.getOrDefault("expired")
@@ -132,16 +134,7 @@ object TraktManager {
                 .header("Authorization", "Bearer $accessToken")
                 .build()
             okHttp.newCall(req).execute().use { r ->
-                if (r.isSuccessful) {
-                    val o = runCatching {
-                        Json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject
-                    }.getOrNull()
-                    val added = o?.get("added")?.jsonObject?.get("movies")?.contentOrNull
-                        ?: o?.get("added")?.jsonObject?.get("shows")?.contentOrNull
-                    null
-                } else {
-                    "Trakt hatası (${r.code})"
-                }
+                if (r.isSuccessful) null else "Trakt hatası (${r.code})"
             }
         }.getOrNull()
     }
