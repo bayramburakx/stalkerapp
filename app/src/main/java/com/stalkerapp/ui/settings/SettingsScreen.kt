@@ -1083,9 +1083,66 @@ fun SettingsScreen(
                     ) { Text("Kaydet") }
                     OutlinedButton(onClick = {
                         vm.repository.clearEpgCache()
-                        vm.showMessage("EPG önbelleği temizlendi")
-                    }) { Text("Temizle") }
+                        vm.showMessage("EPG önbelleği temizlendi (bir sonraki rehber görünümünde yeniden çekilir)")
+                    }) { Text("Önbelleği Temizle") }
                 }
+
+                Text("Güncelleme Sıklığı", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Harici XMLTV ne sıklıkta yeniden indirilsin (saat).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(1 to "1 saat", 6 to "6 saat", 12 to "12 saat", 24 to "24 saat").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.epgRefreshHours == key,
+                            onClick = { vm.saveSettings(settings.copy(epgRefreshHours = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                Text("Geçmiş Gün Sayısı", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Rehberde bugünden önceki kaç günün programları gösterilsin (catch-up rehberi).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Yok", 1 to "1 gün", 3 to "3 gün", 7 to "7 gün").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.epgPastDays == key,
+                            onClick = { vm.saveSettings(settings.copy(epgPastDays = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                Text("EPG Kaynak Önceliği", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "\"Önce Harici\": portal EPG'si eksik/hatalıysa XMLTV önce denenir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("portal" to "Önce Portal", "external" to "Önce Harici").forEach { (key, label) ->
+                        GlassChip(
+                            selected = settings.epgSourcePriority == key,
+                            onClick = { vm.saveSettings(settings.copy(epgSourcePriority = key)) },
+                            label = label
+                        )
+                    }
+                }
+
+                ToggleRow(
+                    icon = Icons.Default.Info,
+                    title = "Program Açıklamalarını Sakla",
+                    desc = "Kapalıyken açıklama (desc) metinleri bellekte/önbellekte tutulmaz",
+                    checked = settings.epgKeepDescriptions,
+                    onCheckedChange = { vm.saveSettings(settings.copy(epgKeepDescriptions = it)) }
+                )
+
                 Text("Zaman Dilimi (hızlı seçim)", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0, 1, 2, 3, -3).forEach { off ->

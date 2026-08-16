@@ -389,13 +389,47 @@ class PortalRepository(
         epgCache[channelId]?.let { cached ->
             if (cached.none { it.isDefault }) return cached
         }
+        val st = store.settings()
         val zone = portalZone(profile)
         val now = System.currentTimeMillis() / 1000
-        val from = now - 3 * 3600
+        // Geçmiş gün sayısı (Ayarlar → EPG): programlar bugünden önceki N güne
+        // kadar çekilir (catch-up rehberi için).
+        val from = now - st.epgPastDays.coerceIn(0, 14) * 86400L
         val to = now + 24 * 3600
-        var programs = emptyList<EpgProgram>()
-        // Portalın kendi EPG'si. Başarısız olursa (cooldown / portal hatası)
-        // exception fırlatmaz — harici EPG'ye ve varsayılana düşülür.
+        // Kaynak önceliği: "external" seçilirse harici XMLTV önce denenir
+        // (portal EPG'si eksik/hatalıysa faydalıdır).
+        val externalFirst = st.epgSourcePriority == "external"
+        var programs = if (externalFirst) externalEpgFor(profile, channel) else emptyList()
+        if (programs.isEmpty()) {
+            programs = portalEpg(profile, channel, zone, now, from, to)
+        }
+        if (programs.isEmpty() && !externalFirst) {
+            programs = externalEpgFor(profile, channel)
+        }
+        if (programs.isEmpty()) {
+            programs = defaultEpg(profile, channel)
+        }
+        // "Açıklamaları sakla" kapalıysa desc alanı boşaltılır (bellek tasarrufu).
+        if (!st.epgKeepDescriptions && programs.any { it.desc.isNotEmpty() }) {
+            programs = programs.map { it.copy(desc = "") }
+        }
+        // Varsayılan programlar önbelleğe alınmaz (harici EPG eklenebilir).
+        if (programs.none { it.isDefault }) {
+            epgCache[channelId] = programs
+        }
+        return programs
+    }
+
+    /** Portalın kendi EPG'sini çeker (get_epg_info). Hata olursa boş döner. */
+    private suspend fun portalEpg(
+        profile: Profile,
+        channel: Channel,
+        zone: String,
+        now: Long,
+        from: Long,
+        to: Long
+    ): List<EpgProgram> {
+        val channelId = channel.id
         val resp = runCatching {
             client.request(
                 profile.baseUrl,
@@ -409,53 +443,38 @@ class PortalRepository(
                     "to" to to.toString()
                 )
             )
-        }.getOrNull()
+        }.getOrNull() ?: return emptyList()
         val offsetHours = store.settings().timezoneOffset
-        if (resp != null) {
-            val data: List<JsonObject> = when (val d = (resp as? JsonObject)?.get("data")) {
-                is JsonArray -> d.mapNotNull { it as? JsonObject }
-                is JsonObject ->
-                    // get_epg_info, data alanını kanal id'sine göre anahtarlar:
-                    // data["<chId>"] = [programlar].
-                    (d[channelId.toString()] as? JsonArray ?: d.values.firstOrNull() as? JsonArray)
-                        ?.mapNotNull { it as? JsonObject } ?: emptyList()
-                else -> emptyList()
-            }
-            programs = data.mapNotNull { p ->
-                val o = p.jsonObject
-                val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
-                val stopStr = o["stop"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
-                if (startStr.isEmpty()) return@mapNotNull null
-                val startTs = epgToEpoch(startStr, zone)
-                val stopTs = epgToEpoch(stopStr, zone)
-                EpgProgram(
-                    chId = o["ch_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: channelId,
-                    name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
-                    start = startStr,
-                    stop = stopStr,
-                    desc = o["descr"]?.asJsonPrimitiveOrNull()?.contentOrNull
-                        ?: o["desc"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                    category = o["category"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                    startTs = startTs + offsetHours * 3600,
-                    stopTs = stopTs + offsetHours * 3600,
-                    isCurrent = startTs <= System.currentTimeMillis() / 1000 &&
-                        System.currentTimeMillis() / 1000 < stopTs
-                )
-            }
+        val data: List<JsonObject> = when (val d = (resp as? JsonObject)?.get("data")) {
+            is JsonArray -> d.mapNotNull { it as? JsonObject }
+            is JsonObject ->
+                // get_epg_info, data alanını kanal id'sine göre anahtarlar:
+                // data["<chId>"] = [programlar].
+                (d[channelId.toString()] as? JsonArray ?: d.values.firstOrNull() as? JsonArray)
+                    ?.mapNotNull { it as? JsonObject } ?: emptyList()
+            else -> emptyList()
         }
-        // Sıra: portalın kendi EPG'si → harici XMLTV (Ayarlar'da URL varsa) →
-        // varsayılan (kanalın adı). Böylece rehber hiçbir zaman boş kalmaz.
-        if (programs.isEmpty()) {
-            programs = externalEpgFor(profile, channel)
+        return data.mapNotNull { p ->
+            val o = p.jsonObject
+            val startStr = o["start"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            val stopStr = o["stop"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            if (startStr.isEmpty()) return@mapNotNull null
+            val startTs = epgToEpoch(startStr, zone)
+            val stopTs = epgToEpoch(stopStr, zone)
+            EpgProgram(
+                chId = o["ch_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: channelId,
+                name = o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
+                start = startStr,
+                stop = stopStr,
+                desc = o["descr"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                    ?: o["desc"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                category = o["category"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                startTs = startTs + offsetHours * 3600,
+                stopTs = stopTs + offsetHours * 3600,
+                isCurrent = startTs <= System.currentTimeMillis() / 1000 &&
+                    System.currentTimeMillis() / 1000 < stopTs
+            )
         }
-        if (programs.isEmpty()) {
-            programs = defaultEpg(profile, channel)
-        }
-        // Varsayılan programlar önbelleğe alınmaz (harici EPG eklenebilir).
-        if (programs.none { it.isDefault }) {
-            epgCache[channelId] = programs
-        }
-        return programs
     }
 
     /**
@@ -467,7 +486,13 @@ class PortalRepository(
         val url = store.settings().epgUrl.trim()
         if (url.isBlank()) return emptyList()
         ensureExternalEpg(url)
-        // 1) Öncelik: portalın verdiği xmltv_id ile birebir eşleşme.
+        // 0) Öncelik: kanal başına manuel EPG eşleştirme (Kanal Yönetimi → uzun bas
+        //    ile atanan xmltv_id). Boşsa portalın verdiği xmltv_id kullanılır.
+        val overrideId = store.channelCustomization().channelEpgIds[channel.id.toString()]?.trim()
+        if (!overrideId.isNullOrBlank()) {
+            externalEpg[overrideId]?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        // 1) Portalın verdiği xmltv_id ile birebir eşleşme.
         val xmltvId = channel.xmltvId.ifBlank {
             // Kanal önbellekte değilse (örn. ana sayfadan doğrudan oynatılan
             // favori kanal) kanal listesinden bul.
@@ -542,17 +567,19 @@ class PortalRepository(
      * uygulama yeniden açılınca EPG yeniden indirilmez.
      */
     private suspend fun ensureExternalEpg(url: String) {
+        // Yenileme aralığı (Ayarlar → EPG → Güncelleme Sıklığı).
+        val refreshMs = store.settings().epgRefreshHours.coerceIn(1, 72) * 3600_000L
         val stale = externalEpgUrl != url ||
-            System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
+            System.currentTimeMillis() - externalEpgAt > refreshMs ||
             externalEpg.isEmpty()
         if (!stale) return
         externalEpgMutex.withLock {
             val staleAgain = externalEpgUrl != url ||
-                System.currentTimeMillis() - externalEpgAt > 6 * 3600_000L ||
+                System.currentTimeMillis() - externalEpgAt > refreshMs ||
                 externalEpg.isEmpty()
             if (!staleAgain) return@withLock
             val disk = loadEpgFromDisk(url)
-            if (disk != null && System.currentTimeMillis() - disk.at < 6 * 3600_000L) {
+            if (disk != null && System.currentTimeMillis() - disk.at < refreshMs) {
                 // Disk önbelleği hâlâ taze: ağdan beklemeden anında kullan.
                 applyExternalEpg(disk.programs, disk.names, url, disk.at)
                 return@withLock

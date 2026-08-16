@@ -357,6 +357,7 @@ private fun ChannelManageDialog(
     val inCustomGroup = customization.customGroups.any { it.name == currentGroup }
     val customLogos = customization.customLogos
     var logoUrl by remember(key) { mutableStateOf(customLogos[key].orEmpty()) }
+    var epgId by remember(key) { mutableStateOf(customization.channelEpgIds[key].orEmpty()) }
     var newGroup by remember { mutableStateOf("") }
 
     // Geçerli grubun sıralaması: kayıtlı manuel sıralama yoksa özgün sıra.
@@ -386,6 +387,29 @@ private fun ChannelManageDialog(
                     Button(onClick = {
                         val updated = customization.copy(
                             customLogos = if (logoUrl.isBlank()) customLogos - key else customLogos + (key to logoUrl.trim())
+                        )
+                        onAction(updated)
+                    }) { Text("Uygula") }
+                }
+
+                Text("EPG Eşleştirme (xmltv_id)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Harici EPG'deki kanal kimliği ile manuel eşleştir (boş = otomatik).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = epgId,
+                        onValueChange = { epgId = it.take(60) },
+                        label = { Text("xmltv_id (örn. TRT1.tr)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(onClick = {
+                        val updated = customization.copy(
+                            channelEpgIds = if (epgId.isBlank()) customization.channelEpgIds - key
+                            else customization.channelEpgIds + (key to epgId.trim())
                         )
                         onAction(updated)
                     }) { Text("Uygula") }

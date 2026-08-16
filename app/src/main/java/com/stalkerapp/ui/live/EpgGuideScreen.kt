@@ -3,11 +3,13 @@ package com.stalkerapp.ui.live
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.EpgProgram
@@ -84,6 +88,8 @@ fun EpgGuideScreen(
     var query by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Liste / Izgara (TiviMate tarzı kanal × zaman) görünümü.
+    var gridMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(profile) {
         runCatching { vm.repository.loadGenres(profile) }
@@ -208,6 +214,25 @@ fun EpgGuideScreen(
                 }
             }
 
+            // Görünüm: Liste / Izgara.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                GlassChip(
+                    selected = !gridMode,
+                    onClick = { gridMode = false },
+                    label = "Liste"
+                )
+                GlassChip(
+                    selected = gridMode,
+                    onClick = { gridMode = true },
+                    label = "Izgara"
+                )
+            }
+
             val list = channels.orEmpty()
             val filtered = if (query.isBlank()) list
             else list.filter { it.name.contains(query.trim(), ignoreCase = true) }
@@ -216,6 +241,18 @@ fun EpgGuideScreen(
                 loading && channels == null -> LoadingBox()
                 error != null && channels == null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
                 filtered.isEmpty() -> EmptyState("Kanal bulunamadı")
+                gridMode -> EpgGridView(
+                    channels = filtered,
+                    epg = epg,
+                    baseUrl = profile.baseUrl,
+                    onPlay = { ch ->
+                        val idx = list.indexOfFirst { it.id == ch.id }
+                        if (idx >= 0) {
+                            PlaybackManager.playChannel(list, idx, profile)
+                            onOpenPlayer()
+                        }
+                    }
+                )
                 else -> LazyColumn(
                     contentPadding = PaddingValues(bottom = 96.dp)
                 ) {
@@ -326,6 +363,133 @@ fun EpgGuideScreen(
                         HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * TiviMate tarzı ızgara EPG: solda sabit kanal etiketi, sağda kanal × zaman
+ * şeritleri (programlar süreye göre orantılı genişlikte). Yatay kaydırma üst
+ * zaman ekseni ve tüm kanal şeritlerinde senkron çalışır (paylaşılan ScrollState).
+ */
+@Composable
+private fun EpgGridView(
+    channels: List<Channel>,
+    epg: Map<Long, List<EpgProgram>>,
+    baseUrl: String,
+    onPlay: (Channel) -> Unit
+) {
+    val hourWidthDp = 110f
+    val rowHeight = 56.dp
+    val hScroll = rememberScrollState()
+    val now = System.currentTimeMillis() / 1000
+    val dayStart = now - (now % 86400)
+    val totalWidthDp = (hourWidthDp * 24).dp
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Üst zaman ekseni: 00:00 - 23:00 arası, her saat 110dp.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(hScroll)
+                .background(Color(0xFF101418))
+                .height(26.dp)
+        ) {
+            Box(modifier = Modifier.width(totalWidthDp).height(26.dp)) {
+                for (h in 0 until 24) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = (h * hourWidthDp).dp)
+                            .width(hourWidthDp.dp)
+                            .height(26.dp)
+                    ) {
+                        Text(
+                            text = "%02d:00".format(h),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 5.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
+            items(channels, key = { it.id }) { ch ->
+                val programs = epg[ch.id].orEmpty()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(rowHeight),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Sabit sol sütun: kanal logosu + adı.
+                    Row(
+                        modifier = Modifier
+                            .width(148.dp)
+                            .height(rowHeight)
+                            .background(Color(0xFF0C0F12))
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ChannelLogo(logo = resolveUrl(ch.logo, baseUrl), modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = ch.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 11.sp
+                        )
+                    }
+                    // Zaman şeridi: programlar süreye göre konumlandırılır.
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .horizontalScroll(hScroll)
+                    ) {
+                        Box(modifier = Modifier.width(totalWidthDp).height(rowHeight)) {
+                            programs.forEach { p ->
+                                val startTs = maxOf(p.startTs, dayStart)
+                                val stopTs = minOf(p.stopTs, dayStart + 86400)
+                                if (stopTs > startTs) {
+                                    val left = (startTs - dayStart) / 3600f * hourWidthDp
+                                    val width = (stopTs - startTs) / 3600f * hourWidthDp
+                                    if (width >= 6f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .offset(x = left.dp, y = 3.dp)
+                                                .width(width.dp)
+                                                .height(rowHeight - 6.dp)
+                                                .clip(RoundedCornerShape(5.dp))
+                                                .background(
+                                                    if (p.isCurrent) Color(0xFF1E3A8A).copy(alpha = 0.85f)
+                                                    else Color.White.copy(alpha = 0.10f)
+                                                )
+                                                .clickable { onPlay(ch) }
+                                                .padding(horizontal = 5.dp, vertical = 2.dp),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            Text(
+                                                text = p.name.ifBlank { "—" },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (p.isCurrent) Color.White else Color.White.copy(alpha = 0.75f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
             }
         }
     }

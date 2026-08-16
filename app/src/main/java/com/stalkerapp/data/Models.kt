@@ -132,6 +132,16 @@ data class Settings(
     /** Uygulama açılınca son izlenen canlı kanal otomatik oynatılsın mı? */
     val resumeLastChannel: Boolean = false,
 
+    // ---------- EPG ----------
+    /** Harici EPG (XMLTV) yeniden indirme aralığı (saat). */
+    val epgRefreshHours: Int = 6,
+    /** EPG geçmiş gün sayısı (bugünden önceki günlerin programları). */
+    val epgPastDays: Int = 3,
+    /** EPG kaynak önceliği: "portal" (önce portal EPG) veya "external" (önce XMLTV). */
+    val epgSourcePriority: String = "portal",
+    /** Program açıklamaları (desc) tutulsun mu? Kapalıyken bellek/önbellekten atılır. */
+    val epgKeepDescriptions: Boolean = true,
+
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */
     val tmdbLanguage: String = "tr",
@@ -271,7 +281,9 @@ data class ChannelCustomization(
     /** Ad düzenleyici: silinecek sonekler (ör. " HD", " FHD"). */
     val stripSuffixes: List<String> = emptyList(),
     /** Kanal başına özel logo (kanal id -> logo URL). */
-    val customLogos: Map<String, String> = emptyMap()
+    val customLogos: Map<String, String> = emptyMap(),
+    /** Kanal başına EPG eşleştirme (kanal id -> xmltv_id). Boşsa ad/xmltv_id ile otomatik eşleşir. */
+    val channelEpgIds: Map<String, String> = emptyMap()
 )
 
 @Serializable
