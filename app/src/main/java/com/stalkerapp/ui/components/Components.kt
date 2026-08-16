@@ -91,6 +91,7 @@ fun ChannelRow(
     baseUrl: String,
     modifier: Modifier = Modifier,
     highlight: Boolean = false,
+    hideNumber: Boolean = false,
     isFavorite: Boolean = false,
     nowPlaying: String? = null,
     onToggleFavorite: (() -> Unit)? = null,
@@ -115,12 +116,14 @@ fun ChannelRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = channel.number.toString(),
-            color = if (highlight) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.size(28.dp)
-        )
+        if (!hideNumber) {
+            Text(
+                text = channel.number.toString(),
+                color = if (highlight) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.size(28.dp)
+            )
+        }
         ChannelLogo(logo = resolveUrl(channel.logo, baseUrl))
         Column(modifier = Modifier.weight(1f)) {
             Text(

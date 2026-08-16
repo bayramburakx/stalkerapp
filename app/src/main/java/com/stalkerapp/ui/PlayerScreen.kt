@@ -62,15 +62,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -490,11 +491,11 @@ fun PlayerScreen(navController: NavHostController) {
             .onKeyEvent { ev ->
                 if (ev.type != KeyEventType.KeyDown || !settings.remoteChannelKeys) return@onKeyEvent false
                 when (ev.key) {
-                    Key.ChannelsUp -> {
+                    Key.ChannelUp -> {
                         if (ChannelQueue.index > 0) switchTo(ChannelQueue.index - 1)
                         true
                     }
-                    Key.ChannelsDown -> {
+                    Key.ChannelDown -> {
                         if (ChannelQueue.index + 1 < ChannelQueue.channels.size) switchTo(ChannelQueue.index + 1)
                         true
                     }
@@ -665,7 +666,7 @@ fun PlayerScreen(navController: NavHostController) {
                     .align(Alignment.TopCenter)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
+                            listOf(Color.Black.copy(alpha = 0.85f * settings.playerPanelAlpha), Color.Transparent)
                         )
                     )
                     .statusBarsPadding()
@@ -823,7 +824,7 @@ fun PlayerScreen(navController: NavHostController) {
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f * settings.playerPanelAlpha))
                         )
                     )
                     .padding(horizontal = 16.dp, vertical = 12.dp)

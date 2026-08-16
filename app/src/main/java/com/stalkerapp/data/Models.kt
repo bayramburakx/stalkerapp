@@ -155,6 +155,14 @@ data class Settings(
     val remoteChannelKeys: Boolean = true,
     /** Arayüz dili: "tr" veya "en" (kısmi çeviri — ana menü ve ayar başlıkları). */
     val language: String = "tr",
+    /** Yetişkin içerik listeleri PIN ile kilitlensin mi? (Gizlilik PIN'i kullanılır.) */
+    val lockAdultWithPin: Boolean = false,
+    /** Kanal listelerinde kanal numaraları gösterilmesin. */
+    val hideChannelNumbers: Boolean = false,
+    /** Oynatıcı kontrol panellerinin saydamlığı (0.6 - 1.0). */
+    val playerPanelAlpha: Float = 1f,
+    /** Ana sayfada "Son İzlenen Kanallar" satırı gösterilsin mi? */
+    val recentChannelsOnHome: Boolean = true,
 
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */

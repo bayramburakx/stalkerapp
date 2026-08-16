@@ -33,14 +33,17 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.TextFields
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -664,6 +668,34 @@ fun SettingsScreen(
                     desc = "Yetişkin içerikli kategorileri göster",
                     checked = settings.adultContentEnabled,
                     onCheckedChange = { vm.saveSettings(settings.copy(adultContentEnabled = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Pin,
+                    title = "+18'i PIN ile Kilitle",
+                    desc = "Yetişkin içerikler, Gizlilik & Güvenlik'teki PIN girilmeden görünmez (oturumluk açılır)",
+                    checked = settings.lockAdultWithPin,
+                    onCheckedChange = {
+                        if (it && settings.pin.isBlank()) {
+                            vm.showMessage("Önce Gizlilik & Güvenlik bölümünden bir PIN belirlemelisin")
+                        } else {
+                            vm.saveSettings(settings.copy(lockAdultWithPin = it))
+                            if (!it) vm.lockAdult()
+                        }
+                    }
+                )
+                ToggleRow(
+                    icon = Icons.Default.Tag,
+                    title = "Kanal Numaraları",
+                    desc = "Kanal listelerinde kanal numarası rozetlerini göster/gizle",
+                    checked = !settings.hideChannelNumbers,
+                    onCheckedChange = { vm.saveSettings(settings.copy(hideChannelNumbers = !it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.History,
+                    title = "Son İzlenen Kanallar (Ana Sayfa)",
+                    desc = "Ana sayfada son izlenen canlı kanalların bulunduğu satır gösterilsin",
+                    checked = settings.recentChannelsOnHome,
+                    onCheckedChange = { vm.saveSettings(settings.copy(recentChannelsOnHome = it)) }
                 )
 
                 // ---- Gizlenen canlı TV grupları ----
@@ -1432,6 +1464,18 @@ fun SettingsScreen(
                     desc = "Kanal +/- ve medya sonraki/önceki tuşlarıyla zapping (TV box)",
                     checked = settings.remoteChannelKeys,
                     onCheckedChange = { vm.saveSettings(settings.copy(remoteChannelKeys = it)) }
+                )
+
+                // ---- Kontrol paneli saydamlığı ----
+                SliderSetting(
+                    icon = Icons.Default.Opacity,
+                    title = "Kontrol Paneli Saydamlığı",
+                    description = "Oynatıcıdaki üst/alt panellerin opaklığı (düşük değer = daha saydam).",
+                    value = settings.playerPanelAlpha,
+                    valueRange = 0.6f..1f,
+                    steps = 3,
+                    valueText = "${(settings.playerPanelAlpha * 100).toInt()}%",
+                    onChange = { vm.saveSettings(settings.copy(playerPanelAlpha = it)) }
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))

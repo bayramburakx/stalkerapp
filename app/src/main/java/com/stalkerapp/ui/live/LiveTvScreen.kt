@@ -302,6 +302,7 @@ fun LiveTvScreen(
                         ChannelRow(
                             channel = ch,
                             baseUrl = profile?.baseUrl.orEmpty(),
+                            hideNumber = settings.hideChannelNumbers,
                             isFavorite = isFav,
                             nowPlaying = nowPlaying[ch.id],
                             onToggleFavorite = { vm.toggleFavoriteChannel(ch) },

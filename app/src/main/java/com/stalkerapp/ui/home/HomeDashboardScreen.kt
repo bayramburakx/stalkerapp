@@ -87,6 +87,7 @@ fun HomeDashboardScreen(
     val vm: MainViewModel = rememberMainViewModel(app)
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val adultUnlocked by vm.adultUnlocked.collectAsStateWithLifecycle()
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
 
@@ -180,13 +181,15 @@ fun HomeDashboardScreen(
     }
 
     // Kullanıcının gizlediği kategoriler + +18 filtresi (Kütüphane & İçerik ayarları).
+    // PIN kilidi açıksa yetişkin içerik, oturumda PIN girilmedikçe gizli kalır.
     val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
     val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
+    val adultVisible = settings.adultContentEnabled && (!settings.lockAdultWithPin || adultUnlocked)
     fun keepItem(item: VodItem): Boolean {
         val title = catTitles[item.categoryId]
         val hidden = settings.hiddenCategories.contains(title.orEmpty())
         val adult = title != null && adultRegex.containsMatchIn(title)
-        return !hidden && (settings.adultContentEnabled || !adult)
+        return !hidden && (adultVisible || !adult)
     }
 
     // Bölüm başına öğe sayısı (Kütüphane & İçerik → Ana Sayfa ayarları).
@@ -210,10 +213,13 @@ fun HomeDashboardScreen(
 
     // Bölüm sırası (Ayarlar'dan değiştirilebilir).
     val sectionOrder = remember(settings.homeSectionOrder) {
-        val known = listOf("recent", "continue", "movies", "series", "favchannels", "live", "favvods")
+        val known = listOf("recentchannels", "recent", "continue", "movies", "series", "favchannels", "live", "favvods")
         val custom = settings.homeSectionOrder.filter { it in known }
         custom + known.filter { it !in custom }
     }
+
+    // Ana sayfadaki "Son İzlenen Kanallar" satırı (son oynatılan canlı kanallar).
+    val recentChannels by PlaybackManager.recentChannels.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
 
@@ -315,6 +321,27 @@ fun HomeDashboardScreen(
                                     watched = isWatched(item),
                                     onLongPress = { quickActionItem = item },
                                     onClick = { onOpenVod(item.id, true) }
+                                )
+                            }
+                        }
+                    }
+                }
+                "recentchannels" -> if (settings.recentChannelsOnHome && recentChannels.isNotEmpty()) {
+                    Section(title = "Son İzlenen Kanallar", onSeeAll = { onGotoTab(1) }) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(recentChannels, key = { it.id }) { ch ->
+                                ChannelCard(
+                                    channel = ch,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    onClick = {
+                                        runCatching {
+                                            PlaybackManager.playChannel(listOf(ch), 0, profile)
+                                            onOpenPlayer()
+                                        }
+                                    }
                                 )
                             }
                         }

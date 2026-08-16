@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,10 +22,18 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +61,51 @@ import com.stalkerapp.ui.vod.VodScreen
 private data class NavItem(val icon: ImageVector, val label: String, val onClick: (() -> Unit)? = null)
 
 @Composable
+private fun AdultPinDialog(
+    onUnlock: (String) -> Boolean,
+    onDismiss: () -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Yetişkin İçerik Kilitli") },
+        text = {
+            Column {
+                Text(
+                    "Bu içeriği görmek için PIN gerekli (Gizlilik & Güvenlik'te ayarlanır).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.take(8); error = false },
+                    label = { Text("PIN") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    isError = error,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error) {
+                    Text(
+                        "Yanlış PIN",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (!onUnlock(pin)) error = true },
+                enabled = pin.isNotBlank()
+            ) { Text("Aç") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
+    )
+}
+
+@Composable
 fun HomeScreen(
     onOpenPlayer: () -> Unit,
     onOpenVod: (Long, Boolean) -> Unit,
@@ -74,6 +128,28 @@ fun HomeScreen(
     // otomatik başlatılır (kaynak hâlâ aktifse; hata/sessiz durumda atlanır).
     LaunchedEffect(Unit) {
         vm.resumeLastLiveChannelIfEnabled(profile)
+    }
+
+    // Yetişkin içerik PIN kilidi: ayar açıksa ve oturumda PIN girilmediyse
+    // uygulama genelinde PIN sorulur (içerik listeleri kilitli kalır).
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val adultUnlocked by vm.adultUnlocked.collectAsStateWithLifecycle()
+    var showAdultPin by remember { mutableStateOf(false) }
+    LaunchedEffect(settings.adultContentEnabled, settings.lockAdultWithPin, adultUnlocked) {
+        if (settings.adultContentEnabled && settings.lockAdultWithPin && !adultUnlocked) {
+            showAdultPin = true
+        }
+    }
+    if (showAdultPin) {
+        AdultPinDialog(
+            onUnlock = { pin ->
+                if (vm.unlockAdult(pin)) {
+                    showAdultPin = false
+                    true
+                } else false
+            },
+            onDismiss = { showAdultPin = false }
+        )
     }
     // Sekmeler arası geçişte her ekranın durumu (pager sayfası, kaydırma
     // konumu, arama/ filtre girişleri) korunur — sıfırdan kurulmadığı için

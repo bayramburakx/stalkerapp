@@ -72,6 +72,7 @@ fun VodScreen(
     val vm: MainViewModel = rememberMainViewModel(app)
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val adultUnlocked by vm.adultUnlocked.collectAsStateWithLifecycle()
     // M3U/Xtream kaynaklarında Stalker profili olmayabilir; bu durumda katalog
     // aktif kaynaktan (dış katalog) gelir ve profil gerekmez.
     val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
@@ -125,16 +126,18 @@ fun VodScreen(
     }
 
     // +18 ve kullanıcının gizlediği kategoriler listelerden filtrelenir.
+    // PIN kilidi açıksa yetişkin içerik, oturumda PIN girilmedikçe gizli kalır.
     val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
     val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
+    val adultVisible = settings.adultContentEnabled && (!settings.lockAdultWithPin || adultUnlocked)
     fun keepItem(item: VodItem): Boolean {
         val title = catTitles[item.categoryId]
         val hidden = settings.hiddenCategories.contains(title.orEmpty())
         val adult = title != null && adultRegex.containsMatchIn(title)
-        return !hidden && (settings.adultContentEnabled || !adult)
+        return !hidden && (adultVisible || !adult)
     }
 
-    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, settings.adultContentEnabled, settings.hiddenCategories) {
+    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, settings.adultContentEnabled, settings.lockAdultWithPin, adultUnlocked, settings.hiddenCategories) {
         val q = query.trim()
         catalog.allItems
             .filter { keepItem(it) }
@@ -181,7 +184,7 @@ fun VodScreen(
         false -> catList.filter { it.id !in seriesCatIds }
         else -> catList
     }.filter { it.title !in hiddenTitles }
-        .filter { settings.adultContentEnabled || !Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE).containsMatchIn(it.title) }
+        .filter { adultVisible || !Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE).containsMatchIn(it.title) }
 
     Column(modifier = modifier.fillMaxSize()) {
         if (catalog.status == VodCatalogStatus.Error) {

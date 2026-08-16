@@ -44,6 +44,21 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     private val _favorites = MutableStateFlow(store.favorites())
     val favorites: StateFlow<Set<String>> = _favorites
 
+    // Yetişkin içerik kilidi: oturum boyunca PIN girildiyse kilit açık kalır.
+    private val _adultUnlocked = MutableStateFlow(false)
+    val adultUnlocked: StateFlow<Boolean> = _adultUnlocked
+
+    /** PIN doğruysa yetişkin içeriği açar (oturumluk). */
+    fun unlockAdult(pin: String): Boolean {
+        val ok = pin == store.settings().pin && pin.isNotBlank()
+        if (ok) _adultUnlocked.value = true
+        return ok
+    }
+
+    fun lockAdult() {
+        _adultUnlocked.value = false
+    }
+
     private val _favoriteChannels = MutableStateFlow(store.favoriteChannels())
     val favoriteChannels: StateFlow<List<Channel>> = _favoriteChannels
 

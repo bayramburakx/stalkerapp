@@ -47,6 +47,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 object ChannelQueue {
@@ -104,6 +106,15 @@ object PlaybackManager {
 
     // Son oynatılan içeriğin kapak görseli — yayına aktarılırken tekrar kurulur.
     private var currentArtwork: String = ""
+
+    // Ana sayfadaki "Son İzlenen Kanallar" satırı için son oynatılan kanallar (10).
+    private val _recentChannels = MutableStateFlow<List<Channel>>(emptyList())
+    val recentChannels: StateFlow<List<Channel>> = _recentChannels
+
+    private fun trackRecentChannel(ch: Channel) {
+        val updated = (listOf(ch) + _recentChannels.value.filter { it.id != ch.id }).take(10)
+        _recentChannels.value = updated
+    }
 
     // Yapısal oynatıcı ayarları (çözücü, akış formatı, passthrough, tampon)
     // değişince oyuncu yeniden kurulur; aksi halde yeni değerler uygulanmazdı
@@ -409,6 +420,7 @@ object PlaybackManager {
             }
             // "Açılışta son kanalı oynat" için son izlenen canlı kanalı kaydet.
             store.saveLastLiveChannel(store.activeSourceKind(), store.activeSourceId() ?: "", ch.id)
+            trackRecentChannel(ch)
             playInternal(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle }, isVod = false)
             prepareNextChannelForZapping()
         }
