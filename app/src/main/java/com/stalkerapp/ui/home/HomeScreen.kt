@@ -174,6 +174,7 @@ fun HomeScreen(
                         if (p != null) vm.syncVodIfNeeded(p)
                     },
                     onOpenLibrary = { tab = 5 },
+                    onOpenPlayer = onOpenPlayer,
                     // Telefon geri tuşu ayarlardan çıkarken uygulamayı kapatmasın.
                     onBack = { gotoTab(0) },
                     onRestartSetup = onOpenOnboarding

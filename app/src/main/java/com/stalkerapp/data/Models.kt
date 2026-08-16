@@ -296,6 +296,31 @@ data class Episode(
     val thumb: String = ""
 )
 
+/**
+ * Cihaz üzerinde kayıt (recording): akış [startTs]'de [stopTs]'ye kadar bir
+ * dosyaya indirilir. Sunucu kaydı yerine cihaz kaydı — MPEG-TS / ilerlemeli
+ * akışlarda güvenilir, HLS'de bazı kaynaklarda çalışmayabilir.
+ */
+@Serializable
+data class Recording(
+    val id: String = "",
+    val channelId: Long = 0,
+    val channelName: String = "",
+    val programName: String = "",
+    val startTs: Long = 0,
+    val stopTs: Long = 0,
+    /** "scheduled" | "recording" | "done" | "failed" | "cancelled" */
+    val status: String = "scheduled",
+    /** İndirilen dosyanın yolu (tamamlanınca dolar). */
+    val filePath: String = "",
+    /** Başlangıçta çözülen akış URL'si (elle başlatılan kayıtlarda hazır gelir). */
+    val streamUrl: String = "",
+    /** Kaydın ait olduğu kaynak türü ("stalker"|"m3u"|"xtream"). */
+    val sourceKind: String = "",
+    /** URL'yi başlangıçta çözmek için gereken kanal bilgisi. */
+    val channel: Channel = Channel()
+)
+
 /** EPG program hatırlatıcısı: program başlayınca bildirim gönderilir. */
 @Serializable
 data class EpgReminder(

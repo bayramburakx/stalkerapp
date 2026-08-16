@@ -57,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -127,6 +128,7 @@ import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.util.Afr
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class GestureMode { BRIGHTNESS, VOLUME, SEEK }
 
@@ -1312,9 +1314,11 @@ fun EpgSheet(
     }
     var programs by remember { mutableStateOf<List<com.stalkerapp.data.EpgProgram>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    // Hatırlatıcı ekle/kaldır sonrası listeyi tazele.
+    // Hatırlatıcı ekle/kaldır + kayıt planla sonrası listeyi tazele.
     var remindersVersion by remember { mutableStateOf(0) }
     val reminders = remember(remindersVersion) { vm.store.epgReminders() }
+    val recordings = remember(remindersVersion) { vm.store.recordings() }
+    val nowTs = System.currentTimeMillis() / 1000
 
     LaunchedEffect(channel.id) {
         try {
@@ -1389,7 +1393,7 @@ fun EpgSheet(
                                 )
                             }
                             // Program hatırlatıcısı: gelecekteki programlara "başlayınca bildir".
-                            if (!p.isDefault && p.startTs > System.currentTimeMillis() / 1000) {
+                            if (!p.isDefault && p.startTs > nowTs) {
                                 val reminded = reminders.any { it.channelId == channel.id && it.startTs == p.startTs }
                                 TextButton(
                                     onClick = {
@@ -1413,6 +1417,60 @@ fun EpgSheet(
                                     Text(
                                         if (reminded) "🔔 Hatırlatma ayarlandı (dokun: kaldır)" else "🔔 Başlayınca Bildir",
                                         color = if (reminded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                // Kayıt: gelecekteki/şu anki program için cihaza kayıt planlar.
+                                if (p.stopTs > nowTs) {
+                                    val planned = recordings.any { it.channelId == channel.id && it.startTs == p.startTs }
+                                    TextButton(
+                                        onClick = {
+                                            if (planned) {
+                                                recordings.filter { it.channelId == channel.id && it.startTs == p.startTs }
+                                                    .forEach { vm.store.removeRecording(it.id) }
+                                            } else {
+                                                vm.store.addRecording(
+                                                    com.stalkerapp.data.Recording(
+                                                        id = "rec_${channel.id}_${p.startTs}",
+                                                        channelId = channel.id,
+                                                        channelName = channel.name,
+                                                        programName = p.name,
+                                                        startTs = p.startTs,
+                                                        stopTs = p.stopTs,
+                                                        sourceKind = vm.store.activeSourceKind(),
+                                                        channel = channel
+                                                    )
+                                                )
+                                            }
+                                            remindersVersion++
+                                        },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text(
+                                            if (planned) "⏺ Kayıt planlandı (dokun: iptal)" else "⏺ Kaydet (cihaza)",
+                                            color = if (planned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                            }
+                            // Catch-up: geçmişteki programı şimdi izle (sunucu destekliyorsa).
+                            if (!p.isDefault && p.stopTs <= nowTs) {
+                                TextButton(
+                                    onClick = {
+                                        val scope = rememberCoroutineScope()
+                                        scope.launch {
+                                            val url = vm.repository.catchupUrl(channel, profile, p.startTs)
+                                            if (!url.isNullOrBlank()) {
+                                                PlaybackManager.play(url, "${channel.name} — ${p.name}", subtitle = vm.repository.formatEpoch(p.startTs))
+                                            }
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        "▶ Geçmiş Yayını İzle (catch-up)",
+                                        color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                 }

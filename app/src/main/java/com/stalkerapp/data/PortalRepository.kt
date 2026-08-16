@@ -561,6 +561,17 @@ class PortalRepository(
     }
 
     /**
+     * Geçmiş bir programı (catch-up) oynatmak için akış URL'si. Xtream/M3U
+     * kaynaklarında standart `utc` parametresi eklenir (sunucu destekliyorsa
+     * geçmiş yayını oynatır); Stalker'da arşiv/timeshift destekli sunucularda denenir.
+     */
+    suspend fun catchupUrl(channel: Channel, profile: Profile?, startTs: Long): String? {
+        val live = channelStreamUrl(channel, profile) ?: return null
+        val sep = if (live.contains("?")) "&" else "?"
+        return live + sep + "utc=" + startTs
+    }
+
+    /**
      * Harici EPG'yi gerekirse (ilk kez / 6 saat geçti / URL değişti) hazırlar.
      * Sıralama: taze disk önbelleği (anında) → ağdan indirme → ağ başarısızsa
      * eski disk önbelleği. Böylece rehber "yükleniyor"da takılı kalmaz ve

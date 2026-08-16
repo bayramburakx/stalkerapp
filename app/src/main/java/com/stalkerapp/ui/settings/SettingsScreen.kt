@@ -99,6 +99,7 @@ import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.XtreamSource
+import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.GlassChip
@@ -110,6 +111,15 @@ private val AVATARS = listOf(
     "😀", "😎", "🦊", "🐼", "🐸", "🐙", "🦁", "🐯",
     "🚀", "🎬", "🍿", "🎮", "⚽", "🎵", "👾", "🤖"
 )
+
+private fun recordingStatusLabel(status: String): String = when (status) {
+    "scheduled" -> "Planlandı"
+    "recording" -> "Kaydediliyor…"
+    "done" -> "Tamamlandı"
+    "failed" -> "Başarısız"
+    "cancelled" -> "İptal"
+    else -> status
+}
 
 private val HOME_SECTIONS = listOf(
     "recent" to "Son İzlenenler",
@@ -127,6 +137,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onPortalsChanged: () -> Unit = {},
     onOpenLibrary: () -> Unit = {},
+    onOpenPlayer: () -> Unit = {},
     onBack: () -> Unit = {},
     onRestartSetup: () -> Unit = {}
 ) {
@@ -167,6 +178,8 @@ fun SettingsScreen(
     var stripSuffixesText by remember { mutableStateOf(vm.store.channelCustomization().stripSuffixes.joinToString(", ")) }
     var newChannelGroupName by remember { mutableStateOf("") }
     var channelCustVersion by remember { mutableStateOf(0) }
+    // Kayıtlar (recording) listesi tazeleme.
+    var recordingsVersion by remember { mutableStateOf(0) }
 
     // Dialog'lar
     var showPortalDialog by remember { mutableStateOf(false) }
@@ -1280,6 +1293,61 @@ fun SettingsScreen(
                         },
                         enabled = newListName.trim().isNotBlank()
                     ) { Text("Oluştur") }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ---- Kayıtlar (recording) ----
+                SectionHeader(Icons.Default.VideoLibrary, "Kayıtlar")
+                Text(
+                    "EPG rehberinden planlanan kayıtlar cihaza indirilir. MPEG-TS / ilerlemeli akışlarda güvenilirdir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val recordings = remember(recordingsVersion) { vm.store.recordings() }
+                if (recordings.isEmpty()) {
+                    Text(
+                        "Henüz kayıt yok. Oynatıcıdaki rehberden bir programa \"Kaydet\" deyip planlayabilirsin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    recordings.sortedByDescending { it.startTs }.forEach { r ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    r.programName.ifBlank { r.channelName },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "${r.channelName} • ${recordingStatusLabel(r.status)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (r.status == "done" && r.filePath.isNotBlank()) {
+                                TextButton(onClick = {
+                                    PlaybackManager.play("file://" + r.filePath, r.programName.ifBlank { r.channelName })
+                                    onOpenPlayer()
+                                }) { Text("Oynat") }
+                            }
+                            IconButton(onClick = {
+                                vm.store.removeRecording(r.id)
+                                recordingsVersion++
+                            }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Kaydı sil",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
                 }
             }
             "player" -> {
