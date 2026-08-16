@@ -19,6 +19,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.cast.CastPlayer
+import androidx.media3.cast.SessionAvailabilityListener
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -93,6 +94,8 @@ object PlaybackManager {
     // servisleri yoksa kurulamaz ve null kalır (yayın özelliği kapalı olur).
     private var castPlayer: CastPlayer? = null
     private val castListeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
+    // Yayın oturumu aktif mi? SessionAvailabilityListener ile güncellenir.
+    @Volatile private var castSessionActive = false
     // stop() sırasında yayın kesilirken yerel oynatıcıyı yeniden başlatmayı önler.
     private var stopping = false
 
@@ -110,34 +113,8 @@ object PlaybackManager {
     private var stateListeners = CopyOnWriteArrayList<(Boolean, Boolean) -> Unit>()
     private val errorListeners = CopyOnWriteArrayList<(String?) -> Unit>()
 
-    /**
-     * CastPlayer (media3-cast) dinleyicisi: oturum bağlanınca aktif içeriği
-     * TV'ye aktarır, bağlantı kesilince telefon oynatıcısı kaldığı yerden sürer.
-     */
+    /** CastPlayer (media3-cast) oynatma durumu dinleyicisi (bildirim + durum). */
     private val castListener = object : Player.Listener {
-        override fun onIsCastingChanged(isCasting: Boolean) {
-            if (isCasting) {
-                // Aktif içeriği TV'ye gönder; telefondaki oynatmayı duraklat
-                // (aksi halde iki cihazdan aynı anda ses çıkar).
-                if (currentStreamUrl.isNotBlank()) {
-                    val item = mediaItem(currentStreamUrl, currentTitle, currentArtwork)
-                    val pos = activePlayer?.currentPosition ?: 0L
-                    castPlayer?.setMediaItem(item, pos)
-                    castPlayer?.prepare()
-                    castPlayer?.play()
-                }
-                activePlayer?.pause()
-            } else if (!stopping) {
-                // Yayın bitti/kesildi: telefon oynatıcısı kaldığı yerden sürsün.
-                val pos = castPlayer?.currentPosition ?: 0L
-                activePlayer?.let { p ->
-                    if (pos > 0) p.seekTo(pos)
-                    p.play()
-                }
-            }
-            notifyCastChanged()
-        }
-
         override fun onPlaybackStateChanged(playbackState: Int) {
             notifyStateChanged()
             if (playbackState == Player.STATE_ENDED && vodPlayback) {
@@ -150,6 +127,41 @@ object PlaybackManager {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updateNotification()
+        }
+    }
+
+    /**
+     * Yayın oturumu durumu (media3-cast `SessionAvailabilityListener`): oturum
+     * bağlanınca aktif içeriği TV'ye aktarır, bağlantı kesilince telefon
+     * oynatıcısı kaldığı yerden sürer.
+     */
+    private val sessionAvailabilityListener = object : SessionAvailabilityListener {
+        override fun onCastSessionAvailable() {
+            castSessionActive = true
+            // Aktif içeriği TV'ye gönder; telefondaki oynatmayı duraklat
+            // (aksi halde iki cihazdan aynı anda ses çıkar).
+            if (currentStreamUrl.isNotBlank()) {
+                val item = mediaItem(currentStreamUrl, currentTitle, currentArtwork)
+                val pos = activePlayer?.currentPosition ?: 0L
+                castPlayer?.setMediaItem(item, pos)
+                castPlayer?.prepare()
+                castPlayer?.play()
+            }
+            activePlayer?.pause()
+            notifyCastChanged()
+        }
+
+        override fun onCastSessionUnavailable() {
+            castSessionActive = false
+            if (!stopping) {
+                // Yayın bitti/kesildi: telefon oynatıcısı kaldığı yerden sürsün.
+                val pos = castPlayer?.currentPosition ?: 0L
+                activePlayer?.let { p ->
+                    if (pos > 0) p.seekTo(pos)
+                    p.play()
+                }
+            }
+            notifyCastChanged()
         }
     }
 
@@ -192,8 +204,11 @@ object PlaybackManager {
         castPlayer = runCatching {
             CastPlayer(CastContext.getSharedInstance(appContext)).apply {
                 addListener(castListener)
+                setSessionAvailabilityListener(sessionAvailabilityListener)
             }
         }.getOrNull()
+        // Uygulama açılırken oturum zaten bağlıysa (CastContext hatırlar) durumu yakala.
+        castSessionActive = castPlayer?.isCastSessionAvailable() == true
         // Bölüm %85 izlendiğinde otomatik "izlendi" işareti (ekran arka planda
         // olsa da, PiP/arka plan oynatmada bile) — 5 sn'de bir kontrol edilir.
         scope.launch {
@@ -605,7 +620,7 @@ object PlaybackManager {
     // ---------- Chromecast ----------
 
     /** Yayın oturumu bağlı mı? (İçerik TV'de oynatılıyor.) */
-    fun isCasting(): Boolean = castPlayer?.isCastSessionConnected == true
+    fun isCasting(): Boolean = castSessionActive
 
     /**
      * UI'nin izlemesi gereken oynatıcı: yayın sırasında CastPlayer, aksi halde

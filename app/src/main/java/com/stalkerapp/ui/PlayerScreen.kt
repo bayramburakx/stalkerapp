@@ -1234,7 +1234,9 @@ fun PlayerInfoSheet(
     val rows = remember { mutableStateListOf<Pair<String, String>>() }
 
     fun rebuild() {
-        val p = PlaybackManager.displayPlayer()
+        // Yayın (cast) sırasında bu panel yerel ExoPlayer bilgisini gösterir
+        // (videoFormat/audioFormat yalnızca ExoPlayer'da vardır).
+        val p = PlaybackManager.player
         val v = p?.videoFormat
         val a = p?.audioFormat
         val url = PlaybackManager.currentStreamUrl

@@ -207,8 +207,8 @@ class Store(private val context: Context) {
         if (userProfiles().any { it.id == id }) setActiveProfileId(id)
     }
 
-    /** Profili siler; aktif profil silindiyse ilk kalan profile geçer (son profil silinemez). */
-    fun deleteProfile(id: String) {
+    /** Kullanıcı profilini siler; aktifse ilk kalan profile geçer (son profil silinemez). */
+    fun deleteUserProfile(id: String) {
         val list = userProfiles().filterNot { it.id == id }
         if (list.isEmpty()) return
         saveUserProfiles(list)

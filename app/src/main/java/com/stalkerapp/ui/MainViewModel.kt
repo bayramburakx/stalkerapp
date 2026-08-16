@@ -165,7 +165,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     /** Profili siler; aktifse ilk kalan profile döner. */
     fun deleteProfile(id: String) {
-        store.deleteProfile(id)
+        store.deleteUserProfile(id)
         refreshProfileFlows()
     }
 

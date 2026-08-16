@@ -2,6 +2,7 @@ package com.stalkerapp.cast
 
 import android.content.Context
 import androidx.mediarouter.media.MediaRouteDiscoveryRequest
+import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import androidx.mediarouter.media.MediaRouter.RouteInfo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +35,7 @@ object CastManager {
 
     private val discoveryRequest by lazy {
         MediaRouteDiscoveryRequest(
-            MediaRouter.MediaRouteSelector.Builder()
+            MediaRouteSelector.Builder()
                 .addControlCategory(CAST_CATEGORY)
                 .build(),
             /* activeScan = */ true
@@ -48,8 +49,8 @@ object CastManager {
         override fun onRouteAdded(router: MediaRouter, info: RouteInfo) = refresh()
         override fun onRouteRemoved(router: MediaRouter, info: RouteInfo) = refresh()
         override fun onRouteChanged(router: MediaRouter, info: RouteInfo) = refresh()
-        override fun onRouteSelected(router: MediaRouter, type: Int, info: RouteInfo) = refresh()
-        override fun onRouteUnselected(router: MediaRouter, type: Int, info: RouteInfo) = refresh()
+        override fun onRouteSelected(router: MediaRouter, info: RouteInfo, reason: Int) = refresh()
+        override fun onRouteUnselected(router: MediaRouter, info: RouteInfo, reason: Int) = refresh()
     }
 
     fun init(context: Context) {
@@ -78,7 +79,7 @@ object CastManager {
         router?.selectRoute(route.info)
     }
 
-    /** Bağlantıyı keser; CastPlayer `onIsCastingChanged(false)` ile yerel oynatıcıya döner. */
+    /** Bağlantıyı keser; CastPlayer `onCastSessionUnavailable` ile yerel oynatıcıya döner. */
     fun disconnect() {
         router?.unselect(MediaRouter.UNSELECT_REASON_STOPPED)
     }
@@ -86,7 +87,7 @@ object CastManager {
     private fun refresh() {
         val r = router ?: return
         _routes.value = r.routes
-            .filter { it.isSelectable && it.name?.isNotBlank() == true }
+            .filter { it.matchesSelector(discoveryRequest.selector) && it.name?.isNotBlank() == true }
             .map { CastRoute(it.id, it.name.toString(), it.isSelected, it.isConnecting, it) }
     }
 }
