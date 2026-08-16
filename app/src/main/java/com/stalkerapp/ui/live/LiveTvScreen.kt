@@ -18,10 +18,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.ChannelCustomization
+import com.stalkerapp.data.ChannelCustomizer
+import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.ui.MainViewModel
@@ -101,7 +109,11 @@ fun LiveTvScreen(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selectedGenre by remember { mutableStateOf(0L) }
+    var selectedCustomGroup by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    // Kanal yönetimi: özelleştirme sürümü değişince liste yeniden okunur (uzun bas → yönet).
+    var customVersion by remember { mutableStateOf(0) }
+    var manageChannel by remember { mutableStateOf<Channel?>(null) }
     // Kanal adının altında gösterilecek "şu an oynayan" programlar (harici EPG).
     var nowPlaying by remember { mutableStateOf(emptyMap<Long, String>()) }
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -109,6 +121,7 @@ fun LiveTvScreen(
 
     LaunchedEffect(profile, kind, sourceId) {
         selectedGenre = 0L
+        selectedCustomGroup = null
         query = ""
     }
 
@@ -213,7 +226,21 @@ fun LiveTvScreen(
             }
         }
 
-        val genreList = genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups }
+        // Kanal yönetimi özelleştirmeleri (özel gruplar / sıralama / ad / logo).
+        val customization = remember(customVersion) { app.store.channelCustomization() }
+
+        // Kanal yönetimi uygulanmış liste: ad düzenleyici + özel logo + özel grup.
+        val rawChannels = channels.orEmpty()
+        val customGroups = customization.customGroups.filter { g ->
+            rawChannels.any { customization.channelGroup[it.id.toString()] == g.name }
+        }
+        val genreList = (
+            ChannelCustomizer.sortedGenres(
+                genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups },
+                customization
+            ) +
+            customGroups.map { Genre(0, it.name) }
+        ).distinctBy { it.title }
         if (genreList.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -221,38 +248,56 @@ fun LiveTvScreen(
             ) {
                 item {
                     GlassChip(
-                        selected = selectedGenre == 0L,
-                        onClick = { selectedGenre = 0L },
+                        selected = selectedGenre == 0L && selectedCustomGroup == null,
+                        onClick = { selectedGenre = 0L; selectedCustomGroup = null },
                         label = "Tümü"
                     )
                 }
-                items(genreList.filter { it.id != 0L }, key = { it.id }) { g ->
+                items(genreList.filter { it.title != "Tümü" }, key = { it.title }) { g ->
                     GlassChip(
-                        selected = selectedGenre == g.id,
-                        onClick = { selectedGenre = g.id },
+                        selected = if (g.id == 0L) selectedCustomGroup == g.title
+                            else selectedGenre == g.id && selectedCustomGroup == null,
+                        onClick = {
+                            if (g.id == 0L) {
+                                selectedCustomGroup = g.title
+                                selectedGenre = 0L
+                            } else {
+                                selectedGenre = g.id
+                                selectedCustomGroup = null
+                            }
+                        },
                         label = g.title
                     )
                 }
             }
         }
 
-        val allChannels = channels.orEmpty().filter { it.tvGenreTitle !in hiddenGroups }
+        val allChannels = rawChannels
+            .map { ChannelCustomizer.apply(it, customization) }
+            .filter { it.tvGenreTitle !in hiddenGroups }
         // Kategori filtresi tür başlığına göre yapılır (Stalker/M3U/Xtream hepsinde çalışır).
         val activeGenreTitle = genreList.firstOrNull { it.id == selectedGenre }?.title
         val filtered = allChannels.filter { ch ->
-            (selectedGenre <= 0L || ch.tvGenreTitle == activeGenreTitle || ch.tvGenreId == selectedGenre) &&
+            val inGenre = selectedGenre <= 0L || ch.tvGenreTitle == activeGenreTitle || ch.tvGenreId == selectedGenre
+            val inCustom = selectedCustomGroup == null || ch.tvGenreTitle == selectedCustomGroup
+            inGenre && inCustom &&
                 (query.isBlank() || ch.name.contains(query.trim(), ignoreCase = true))
         }
+        // Seçili grupta manuel sıralama (Ayarlar → Kanal Yönetimi / uzun bas → taşı).
+        val sortGroup = selectedCustomGroup ?: if (selectedGenre > 0L) activeGenreTitle else null
+        val displayed = if (sortGroup != null) {
+            ChannelCustomizer.sortedChannels(filtered, sortGroup, customization)
+        } else filtered
 
         when {
             loading && channels == null -> LoadingBox()
             error != null && channels == null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
             allChannels.isEmpty() -> EmptyState("Kanal bulunamadı")
-            filtered.isEmpty() -> EmptyState("Sonuç bulunamadı")
+            displayed.isEmpty() -> EmptyState("Sonuç bulunamadı")
             else -> {
                 val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
                 LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
-                    items(filtered, key = { it.id }) { ch ->
+                    items(displayed, key = { it.id }) { ch ->
                         val isFav = favChannels.any { it.id == ch.id }
                         ChannelRow(
                             channel = ch,
@@ -260,6 +305,8 @@ fun LiveTvScreen(
                             isFavorite = isFav,
                             nowPlaying = nowPlaying[ch.id],
                             onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                            // Uzun bas → kanal yönetimi (özel logo, gruba taşı, sıralama).
+                            onLongClick = { manageChannel = it },
                             onClick = {
                                 scope.launch {
                                     val list = allChannels
@@ -277,4 +324,181 @@ fun LiveTvScreen(
             }
         }
     }
+
+    manageChannel?.let { ch ->
+        ChannelManageDialog(
+            channel = ch,
+            customization = customization,
+            groupChannels = displayed,
+            onAction = { updated ->
+                app.store.saveChannelCustomization(updated)
+                customVersion++
+            },
+            onDismiss = { manageChannel = null }
+        )
+    }
+}
+
+/**
+ * Kanal yönetimi dialog'u: özel logo, özel gruba taşıma, manuel sıralama
+ * (yukarı/aşağı) ve sıralama sıfırlama. Her eylem [onAction] ile anında kaydedilir.
+ */
+@Composable
+private fun ChannelManageDialog(
+    channel: Channel,
+    customization: ChannelCustomization,
+    groupChannels: List<Channel>,
+    onAction: (ChannelCustomization) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val key = channel.id.toString()
+    val currentGroup = ChannelCustomizer.groupOf(channel, customization)
+    val inCustomGroup = customization.customGroups.any { it.name == currentGroup }
+    val customLogos = customization.customLogos
+    var logoUrl by remember(key) { mutableStateOf(customLogos[key].orEmpty()) }
+    var newGroup by remember { mutableStateOf("") }
+
+    // Geçerli grubun sıralaması: kayıtlı manuel sıralama yoksa özgün sıra.
+    val currentOrder = customization.channelOrder[currentGroup] ?: groupChannels.map { it.id }
+    val pos = currentOrder.indexOf(channel.id)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(ChannelCustomizer.displayName(channel.name, customization), maxLines = 1) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Grup: $currentGroup",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text("Özel Logo", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = logoUrl,
+                        onValueChange = { logoUrl = it },
+                        label = { Text("Logo URL (boş = kaldır)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(onClick = {
+                        val updated = customization.copy(
+                            customLogos = if (logoUrl.isBlank()) customLogos - key else customLogos + (key to logoUrl.trim())
+                        )
+                        onAction(updated)
+                    }) { Text("Uygula") }
+                }
+
+                Text("Özel Gruba Taşı", style = MaterialTheme.typography.titleSmall)
+                if (customization.customGroups.isNotEmpty()) {
+                    customization.customGroups.forEach { g ->
+                        val isCurrent = g.name == currentGroup
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                g.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isCurrent) {
+                                Text(
+                                    "✓",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            } else {
+                                TextButton(onClick = {
+                                    onAction(customization.copy(
+                                        channelGroup = customization.channelGroup + (key to g.name)
+                                    ))
+                                }) { Text("Taşı") }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        "Henüz özel grup yok — aşağıdan bir tane oluştur.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newGroup,
+                        onValueChange = { newGroup = it.take(30) },
+                        label = { Text("Yeni grup adı") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val name = newGroup.trim()
+                            if (name.isNotBlank()) {
+                                val g = CustomChannelGroup(
+                                    id = "g_" + System.currentTimeMillis().toString(36),
+                                    name = name
+                                )
+                                val updated = customization.copy(
+                                    customGroups = customization.customGroups + g,
+                                    channelGroup = customization.channelGroup + (key to name)
+                                )
+                                onAction(updated)
+                                newGroup = ""
+                            }
+                        },
+                        enabled = newGroup.trim().isNotBlank()
+                    ) { Text("Oluştur & Taşı") }
+                }
+                if (inCustomGroup) {
+                    TextButton(onClick = {
+                        onAction(customization.copy(
+                            channelGroup = customization.channelGroup - key
+                        ))
+                    }) { Text("Özel Gruptan Çıkar (orijinal gruba dön)") }
+                }
+
+                Text("Manuel Sıralama", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            val list = currentOrder.toMutableList()
+                            val p = list.indexOf(channel.id)
+                            if (p > 0) {
+                                list[p] = list[p - 1].also { list[p - 1] = list[p] }
+                                onAction(customization.copy(
+                                    channelOrder = customization.channelOrder + (currentGroup to list)
+                                ))
+                            }
+                        },
+                        enabled = pos > 0
+                    ) { Text("↑ Yukarı") }
+                    OutlinedButton(
+                        onClick = {
+                            val list = currentOrder.toMutableList()
+                            val p = list.indexOf(channel.id)
+                            if (p >= 0 && p < list.size - 1) {
+                                list[p] = list[p + 1].also { list[p + 1] = list[p] }
+                                onAction(customization.copy(
+                                    channelOrder = customization.channelOrder + (currentGroup to list)
+                                ))
+                            }
+                        },
+                        enabled = pos >= 0 && pos < currentOrder.size - 1
+                    ) { Text("↓ Aşağı") }
+                    OutlinedButton(
+                        onClick = {
+                            onAction(customization.copy(
+                                channelOrder = customization.channelOrder - currentGroup
+                            ))
+                        },
+                        enabled = customization.channelOrder.containsKey(currentGroup)
+                    ) { Text("Sıralamayı Sıfırla") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } }
+    )
 }

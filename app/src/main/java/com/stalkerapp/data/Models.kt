@@ -129,6 +129,8 @@ data class Settings(
     val audioPassthrough: Boolean = true,
     /** Varsayılan oynatıcı: "builtin" (yerleşik ExoPlayer) veya "external" (sistem oynatıcısı). */
     val defaultPlayer: String = "builtin",
+    /** Uygulama açılınca son izlenen canlı kanal otomatik oynatılsın mı? */
+    val resumeLastChannel: Boolean = false,
 
     // ---------- Entegrasyonlar ----------
     /** TMDB istek dili ("tr", "en" vb.). */
@@ -240,6 +242,36 @@ data class Season(
     val name: String = "",
     /** Portal'ın sezon/afiş görseli (yoksa TMDB'den çekilir). */
     val poster: String = ""
+)
+
+/** Kullanıcının oluşturduğu özel kanal grubu (kanal yönetimi). */
+@Serializable
+data class CustomChannelGroup(
+    val id: String = "",
+    val name: String = ""
+)
+
+/**
+ * Kanal yönetimi özelleştirmeleri: özel gruplar, manuel sıralama, ad düzenleyici
+ * (önek/sonek temizleme), özel logolar. Cihaz genelinde saklanır (profil bazlı
+ * değil) — TiviMate'teki "per-playlist" kanal yapılandırmasına benzer.
+ */
+@Serializable
+data class ChannelCustomization(
+    /** Kullanıcının oluşturduğu özel gruplar. */
+    val customGroups: List<CustomChannelGroup> = emptyList(),
+    /** Kanalın görüneceği grup adı (kanal id -> grup adı). Özel gruba taşıma için. */
+    val channelGroup: Map<String, String> = emptyMap(),
+    /** Grup adı -> manuel sıralanmış kanal id listesi. */
+    val channelOrder: Map<String, List<Long>> = emptyMap(),
+    /** Grup sıralaması (grup başlıkları, ilk sıradan sona). */
+    val groupOrder: List<String> = emptyList(),
+    /** Ad düzenleyici: silinecek önekler (ör. "HD ", "TR "). */
+    val stripPrefixes: List<String> = emptyList(),
+    /** Ad düzenleyici: silinecek sonekler (ör. " HD", " FHD"). */
+    val stripSuffixes: List<String> = emptyList(),
+    /** Kanal başına özel logo (kanal id -> logo URL). */
+    val customLogos: Map<String, String> = emptyMap()
 )
 
 @Serializable

@@ -254,6 +254,30 @@ class Store(private val context: Context) {
         }
     }
 
+    // ---------- Kanal yönetimi (özel gruplar / sıralama / ad / logo) ----------
+
+    fun channelCustomization(): ChannelCustomization =
+        runCatching {
+            json.decodeFromString(
+                ChannelCustomization.serializer(),
+                prefs.getString(KEY_CHANNEL_CUSTOMIZATION, "").orEmpty()
+            )
+        }.getOrDefault(ChannelCustomization())
+
+    fun saveChannelCustomization(c: ChannelCustomization) {
+        prefs.edit().putString(
+            KEY_CHANNEL_CUSTOMIZATION,
+            json.encodeToString(ChannelCustomization.serializer(), c)
+        ).apply()
+    }
+
+    /** Son izlenen canlı kanal: "kaynakTürü|kaynakId|kanalId" biçiminde (açılışta devam için). */
+    fun lastLiveChannel(): String? = prefs.getString(KEY_LAST_LIVE_CHANNEL, null)
+
+    fun saveLastLiveChannel(kind: String, sourceId: String, channelId: Long) {
+        prefs.edit().putString(KEY_LAST_LIVE_CHANNEL, "$kind|$sourceId|$channelId").apply()
+    }
+
     /** Tüm kullanıcı verilerini tek JSON olarak dışa aktarır (yedek). */
     fun backupJson(): String {
         val data = LinkedHashMap<String, JsonElement>()
@@ -692,6 +716,8 @@ class Store(private val context: Context) {
         private const val KEY_ACTIVE_PROFILE = "active_profile"
         private const val KEY_WATCH_LATER = "watch_later"
         private const val KEY_USER_LISTS = "user_lists"
+        private const val KEY_CHANNEL_CUSTOMIZATION = "channel_customization"
+        private const val KEY_LAST_LIVE_CHANNEL = "last_live_channel"
 
         /** Varsayılan profil kimliği (eski tek profil). Bu profilde veri anahtarları izole edilmez. */
         const val DEFAULT_PROFILE_ID = "default"
@@ -711,7 +737,8 @@ class Store(private val context: Context) {
             KEY_EPISODE_PROGRESS, KEY_M3U_SOURCES, KEY_XTREAM_SOURCES,
             KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_USER_PROFILE,
             KEY_USER_PROFILES, KEY_ACTIVE_PROFILE,
-            KEY_WATCH_LATER, KEY_USER_LISTS
+            KEY_WATCH_LATER, KEY_USER_LISTS, KEY_CHANNEL_CUSTOMIZATION,
+            KEY_LAST_LIVE_CHANNEL
         )
 
         /** JSON olarak kodlanmış (putString + serialize) yedek anahtarları. */
@@ -722,7 +749,8 @@ class Store(private val context: Context) {
 
         /** Düz metin olarak saklanan yedek anahtarları. */
         private val PLAIN_BACKUP_KEYS = setOf(
-            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_ACTIVE_PROFILE
+            KEY_ACTIVE_PORTAL, KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_ACTIVE_PROFILE,
+            KEY_LAST_LIVE_CHANNEL
         )
     }
 }

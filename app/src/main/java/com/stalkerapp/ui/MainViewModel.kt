@@ -24,6 +24,7 @@ import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
+import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.util.isWifiConnected
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -461,6 +462,31 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             xtreamCache.remove(source.id)
             xtreamVodCache.remove(source.id)
             ensureExternalVodCatalog(force = true)
+        }
+    }
+
+    /**
+     * "Açılışta son kanalı oynat" ayarı açıksa son izlenen canlı kanalı otomatik
+     * başlatır. Yalnızca kaydedilen kaynak hâlâ aktifse çalışır (kaynak değişmişse
+     * sessizce atlanır); hata durumunda da sessizce vazgeçer.
+     */
+    fun resumeLastLiveChannelIfEnabled(profile: Profile?) {
+        if (!store.settings().resumeLastChannel) return
+        val last = store.lastLiveChannel() ?: return
+        val parts = last.split('|')
+        if (parts.size < 3) return
+        val kind = parts[0]
+        val sourceId = parts[1]
+        if (kind != store.activeSourceKind()) return
+        if (sourceId != (store.activeSourceId() ?: "")) return
+        val channelId = parts[2].toLongOrNull() ?: return
+        viewModelScope.launch {
+            val loaded = loadChannelsForActiveSource(profile) ?: return@launch
+            val channels = loaded.second
+            val idx = channels.indexOfFirst { it.id == channelId }
+            if (idx >= 0) {
+                PlaybackManager.playChannel(channels, idx, profile)
+            }
         }
     }
 

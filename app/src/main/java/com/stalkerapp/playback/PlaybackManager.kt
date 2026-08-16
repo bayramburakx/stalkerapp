@@ -406,6 +406,8 @@ object PlaybackManager {
                 setError("Kanal akış URL'si boş")
                 return@launch
             }
+            // "Açılışta son kanalı oynat" için son izlenen canlı kanalı kaydet.
+            store.saveLastLiveChannel(store.activeSourceKind(), store.activeSourceId() ?: "", ch.id)
             playInternal(url, ch.name, logo.ifEmpty { ch.logo }, subtitle.ifEmpty { ch.tvGenreTitle }, isVod = false)
             prepareNextChannelForZapping()
         }

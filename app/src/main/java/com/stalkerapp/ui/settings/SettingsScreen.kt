@@ -97,6 +97,7 @@ import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
+import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
@@ -160,6 +161,12 @@ fun SettingsScreen(
     var updateDialog by remember { mutableStateOf<UpdateInfo?>(null) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
+
+    // Kanal yönetimi (ad düzenleyici + özel gruplar) alanları.
+    var stripPrefixesText by remember { mutableStateOf(vm.store.channelCustomization().stripPrefixes.joinToString(", ")) }
+    var stripSuffixesText by remember { mutableStateOf(vm.store.channelCustomization().stripSuffixes.joinToString(", ")) }
+    var newChannelGroupName by remember { mutableStateOf("") }
+    var channelCustVersion by remember { mutableStateOf(0) }
 
     // Dialog'lar
     var showPortalDialog by remember { mutableStateOf(false) }
@@ -694,6 +701,120 @@ fun SettingsScreen(
                         }
                     }
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ---- Kanal Yönetimi: ad düzenleyici, özel gruplar, açılışta son kanal ----
+                SectionHeader(Icons.Default.Tv, "Kanal Yönetimi")
+                Text(
+                    "Kanal listesinde bir kanala uzun basarak özel logo atayabilir, özel gruba taşıyabilir ve sıralayabilirsin.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text("Ad Düzenleyici (Önek / Sonek)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Kanal adlarının başından/sonundan silinecek kısımlar (virgülle ayırın, ör. HD, FHD, TR).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = stripPrefixesText,
+                    onValueChange = { stripPrefixesText = it.take(100) },
+                    label = { Text("Silinecek önekler") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = stripSuffixesText,
+                    onValueChange = { stripSuffixesText = it.take(100) },
+                    label = { Text("Silinecek sonekler") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        val c = vm.store.channelCustomization()
+                        vm.store.saveChannelCustomization(c.copy(
+                            stripPrefixes = stripPrefixesText.split(',').map { it.trim() }.filter { it.isNotBlank() },
+                            stripSuffixes = stripSuffixesText.split(',').map { it.trim() }.filter { it.isNotBlank() }
+                        ))
+                        vm.showMessage("Kanal adı düzenleyici kaydedildi")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Ad Düzenleyiciyi Uygula") }
+
+                val channelCust = remember(channelCustVersion) { vm.store.channelCustomization() }
+                Text("Özel Gruplar", style = MaterialTheme.typography.titleSmall)
+                if (channelCust.customGroups.isEmpty()) {
+                    Text(
+                        "Henüz özel grup yok. Kanal listesinde bir kanala uzun basıp \"Yeni grup oluştur\" ile ekleyebilirsin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    channelCust.customGroups.forEach { g ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                g.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = {
+                                val c = vm.store.channelCustomization()
+                                vm.store.saveChannelCustomization(c.copy(
+                                    customGroups = c.customGroups.filterNot { it.id == g.id },
+                                    channelGroup = c.channelGroup.filterValues { it != g.name },
+                                    channelOrder = c.channelOrder - g.name,
+                                    groupOrder = c.groupOrder - g.name
+                                ))
+                                channelCustVersion++
+                            }) { Text("Sil") }
+                        }
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newChannelGroupName,
+                        onValueChange = { newChannelGroupName = it.take(30) },
+                        label = { Text("Yeni özel grup") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val name = newChannelGroupName.trim()
+                            if (name.isNotBlank()) {
+                                val c = vm.store.channelCustomization()
+                                if (c.customGroups.none { it.name == name }) {
+                                    vm.store.saveChannelCustomization(c.copy(
+                                        customGroups = c.customGroups + CustomChannelGroup(
+                                            id = "g_" + System.currentTimeMillis().toString(36),
+                                            name = name
+                                        )
+                                    ))
+                                    channelCustVersion++
+                                }
+                                newChannelGroupName = ""
+                            }
+                        },
+                        enabled = newChannelGroupName.trim().isNotBlank()
+                    ) { Text("Ekle") }
+                }
+
+                ToggleRow(
+                    icon = Icons.Default.Refresh,
+                    title = "Açılışta Son Kanalı Oynat",
+                    desc = "Uygulama açılınca son izlenen canlı kanal otomatik oynatılır",
+                    checked = settings.resumeLastChannel,
+                    onCheckedChange = { vm.saveSettings(settings.copy(resumeLastChannel = it)) }
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 

@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +69,12 @@ fun HomeScreen(
         mutableIntStateOf(vm.store.settings().defaultTab.coerceIn(0, 3))
     }
     val gotoTab: (Int) -> Unit = { tab = it }
+
+    // "Açılışta son kanalı oynat" ayarı: uygulama açılınca son izlenen canlı kanal
+    // otomatik başlatılır (kaynak hâlâ aktifse; hata/sessiz durumda atlanır).
+    LaunchedEffect(Unit) {
+        vm.resumeLastLiveChannelIfEnabled(profile)
+    }
     // Sekmeler arası geçişte her ekranın durumu (pager sayfası, kaydırma
     // konumu, arama/ filtre girişleri) korunur — sıfırdan kurulmadığı için
     // menü geçişleri daha akıcı olur.
