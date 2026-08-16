@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "111484817724",
+    "project_id": "stalkerapp-858d4",
+    "storage_bucket": "stalkerapp-858d4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:111484817724:android:9626591d1ea411658b0e39",
+        "android_client_info": {
+          "package_name": "com.stalkerapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAcZ91VM06d9LeDVsVMWYf6gv40nJEgKQU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

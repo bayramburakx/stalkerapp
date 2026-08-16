@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Stalker Player</string>
+    <!--
+      Google Sign-In web client ID (Firebase konsolu → Authentication →
+      Sign-in method → Google → Web SDK configuration kısmındaki değer).
+      Boşsa "Google ile devam et" butonu devre dışı kalır; e-posta/şifre girişi çalışır.
+    -->
+    <string name="google_web_client_id" translatable="false"></string>
 </resources>

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.stalkerapp.data.EpgReminder
+import com.stalkerapp.data.FirebaseSyncManager
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.StalkerClient
 import com.stalkerapp.data.Store
@@ -34,6 +35,8 @@ class StalkerApp : Application() {
         private set
     lateinit var tmdb: TmdbClient
         private set
+    lateinit var firebase: FirebaseSyncManager
+        private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -48,6 +51,7 @@ class StalkerApp : Application() {
         )
         PlaybackManager.init(this, store, repository)
         RecordingManager.init(this)
+        firebase = FirebaseSyncManager.init(this)
         instance = this
         // Zamanlanmış görevler: 30 sn'de bir kontrol edilir — EPG program
         // hatırlatıcıları (başlama vaktine yaklaşınca bildirim) ve planlı

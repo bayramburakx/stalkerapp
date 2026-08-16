@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Forward10
@@ -107,6 +108,7 @@ import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
+import com.stalkerapp.data.FirebaseSyncManager
 import com.stalkerapp.data.TraktManager
 import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.XtreamSource
@@ -2136,6 +2138,57 @@ fun SettingsScreen(
                 ) { Text("Kurulumu Yeniden Aç") }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader(Icons.Default.Cloud, "Bulut Hesabı")
+                val firebase = FirebaseSyncManager.instance
+                val signedIn = firebase.isSignedIn
+                if (signedIn) {
+                    Text(
+                        "Giriş yapıldı: ${firebase.userEmail}\nVerilerin bulutta senkronlanır — başka cihazda aynı hesapla giriş yapınca kaldığın yerden devam edersin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val ok = firebase.pushBackup(vm.store)
+                                    vm.showMessage(if (ok) "Yedek buluta kaydedildi ✓" else "Yedeklenemedi — oturum kapalı")
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Buluta Yedekle") }
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val ok = firebase.restoreFromCloud(vm.store)
+                                    if (ok) vm.refreshFlows()
+                                    vm.showMessage(firebase.syncState.value.ifBlank { "İşlem tamam" })
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Buluttan Geri Yükle") }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            firebase.signOut()
+                            vm.showMessage("Çıkış yapıldı")
+                            onRestartSetup()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Çıkış Yap", color = MaterialTheme.colorScheme.error) }
+                } else {
+                    Text(
+                        "Hesap oluşturup giriş yaparsan favorilerin, izleme geçmişin ve ayarların bulutta saklanır; başka cihazda kaldığın yerden devam edersin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = { onRestartSetup() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Giriş Yap / Kayıt Ol") }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 SectionHeader(Icons.Default.Star, "İstatistikler")
                 val stats = remember(watchedVersion, settings) {
                     val prog = vm.store.loadVodProgress()
@@ -2203,8 +2256,13 @@ fun SettingsScreen(
             }
             "privacy" -> {
                 Text(
-                    "Tüm verilerin (portallar, izleme geçmişi, listeler) yalnızca bu cihazda saklanır. " +
-                        "Hiçbir veri uygulama dışına gönderilmez.",
+                    if (FirebaseSyncManager.instance.isSignedIn) {
+                        "Verilerin, oturum açtığın Google/Firebase hesabının bulut depolamasında saklanır " +
+                            "ve cihazlar arasında senkronlanır. Hesaptan çıkınca bulut kopyan kalır."
+                    } else {
+                        "Tüm verilerin (portallar, izleme geçmişi, listeler) yalnızca bu cihazda saklanır. " +
+                            "Hesap oluşturup giriş yaparsan verilerin buluta senkronlanır."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

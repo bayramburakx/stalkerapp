@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
@@ -99,4 +100,17 @@ fun StalkerTheme(
             content = content
         )
     }
+}
+
+/** Giriş/onboarding ekranları için yumuşak degrade arka plan (tema renklerinden). */
+@Composable
+fun accentBrush(): Brush {
+    val scheme = MaterialTheme.colorScheme
+    return Brush.verticalGradient(
+        listOf(
+            scheme.background,
+            scheme.surfaceVariant.copy(alpha = 0.4f).compositeOver(scheme.background),
+            scheme.background
+        )
+    )
 }

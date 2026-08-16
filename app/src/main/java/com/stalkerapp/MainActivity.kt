@@ -28,6 +28,8 @@ import androidx.navigation.navArgument
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.PlayerScreen
+import com.stalkerapp.ui.account.LoginScreen
+import com.stalkerapp.data.FirebaseSyncManager
 import com.stalkerapp.ui.favorites.FavoritesScreen
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.home.HomeScreen
@@ -67,6 +69,11 @@ class MainActivity : ComponentActivity() {
         if (!isInPictureInPictureMode && !PlaybackManager.isCasting() && !PlaybackManager.isBackgroundPlaybackEnabled()) {
             PlaybackManager.pause()
         }
+        // Oturum açıksa yapılan değişiklikleri buluta yaz (diğer cihazlara taşır).
+        if (FirebaseSyncManager.current.isSignedIn) {
+            val store = (applicationContext as StalkerApp).store
+            FirebaseSyncManager.current.pushBackup(store)
+        }
     }
 }
 
@@ -104,18 +111,39 @@ private fun AppNav() {
             navController.navigate("player") { launchSingleTop = true }
         }
     }
+    // Firebase hesap yönetimi (giriş/çıkış için uygulama genelinde kullanılır).
+    val firebase = remember { FirebaseSyncManager.init(app) }
+
     // Başlangıç ekranı: ilk açılışta profil oluşturma (onboarding); sonrasında
-    // doğrudan Ana Sayfa — kaynaklar Ayarlar → Playlist & Kaynaklar'dan eklenir.
+    // oturum varsa doğrudan Ana Sayfa, yoksa Giriş ekranı.
     val startDestination = remember {
-        if (!app.store.isOnboardingDone()) "onboarding" else "home"
+        when {
+            !app.store.isOnboardingDone() -> "onboarding"
+            firebase.isSignedIn -> "home"
+            else -> "login"
+        }
     }
     NavHost(navController = navController, startDestination = startDestination) {
         composable("onboarding") {
             OnboardingScreen(onDone = {
-                // İlk açılışta kullanıcıyı doğrudan login'e zorlama; uygulama normal
-                // açılsın, portalı isterse Ayarlar → Playlist & Kaynaklar'dan ekler.
-                navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
+                // Onboarding sonrası: hesabı olan içeri, olmayan giriş ekranına gider.
+                if (firebase.isSignedIn) {
+                    navController.navigate("home") { popUpTo("onboarding") { inclusive = true } }
+                } else {
+                    navController.navigate("login") { popUpTo("onboarding") { inclusive = true } }
+                }
             })
+        }
+        composable("login") {
+            LoginScreen(
+                firebase = firebase,
+                onSignedIn = {
+                    // Bulut yedeği geri yüklendiyse Store değişti; akışları tazele.
+                    vm.refreshFlows()
+                    navController.navigate("home") { popUpTo("login") { inclusive = true } }
+                },
+                onBack = { navController.popBackStack() }
+            )
         }
         composable("favorites") {
             FavoritesScreen(
@@ -132,9 +160,17 @@ private fun AppNav() {
                 onOpenSearch = { navController.navigate("search") },
                 onOpenGuide = { navController.navigate("epg") },
                 onOpenOnboarding = {
-                    navController.navigate("onboarding") {
-                        popUpTo("home") { inclusive = false }
-                        launchSingleTop = true
+                    // Oturum kapalıysa doğrudan giriş ekranına, açıksa kurulum sihirbazına.
+                    if (firebase.isSignedIn) {
+                        navController.navigate("onboarding") {
+                            popUpTo("home") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    } else {
+                        navController.navigate("login") {
+                            popUpTo("home") { inclusive = false }
+                            launchSingleTop = true
+                        }
                     }
                 }
             )
