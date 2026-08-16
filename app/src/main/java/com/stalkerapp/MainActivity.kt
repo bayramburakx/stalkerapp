@@ -40,6 +40,7 @@ import com.stalkerapp.ui.search.SearchScreen
 import com.stalkerapp.ui.theme.StalkerTheme
 import com.stalkerapp.ui.vod.VodDetailScreen
 import com.stalkerapp.playback.PlaybackManager
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +73,9 @@ class MainActivity : ComponentActivity() {
         // Oturum açıksa yapılan değişiklikleri buluta yaz (diğer cihazlara taşır).
         if (FirebaseSyncManager.current.isSignedIn) {
             val store = (applicationContext as StalkerApp).store
-            FirebaseSyncManager.current.pushBackup(store)
+            // pushBackup suspend olduğu için bir coroutine içinde çağrılır.
+            val appScope = (applicationContext as StalkerApp).appScope
+            appScope.launch { FirebaseSyncManager.current.pushBackup(store) }
         }
     }
 }

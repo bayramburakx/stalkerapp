@@ -74,7 +74,7 @@ class FirebaseSyncManager(private val context: Context) {
 
     suspend fun sendPasswordReset(email: String): Result<Unit> =
         withContext(Dispatchers.IO) {
-            runCatching { auth.sendPasswordResetEmail(email.trim()).await() }
+            runCatching { auth.sendPasswordResetEmail(email.trim()).await(); Unit }
         }
 
     /** Google hesabından gelen idToken ile Firebase oturumu açar. */

@@ -38,7 +38,7 @@ class StalkerApp : Application() {
     lateinit var firebase: FirebaseSyncManager
         private set
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
