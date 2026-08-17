@@ -63,23 +63,33 @@ jobs:
           name: portio-release
           path: app/build/outputs/apk/release/*.apk
 
+      # GitHub API geçici hataları ("No server is currently available") release
+      # yayınlama adımını öldürebiliyor; bu yüzden gh CLI ile yeniden deneme
+      # döngüsü kullanılır. Build başarılıysa APK eninde sonunda yayınlanır.
       - name: Publish APK to Release (latest)
-        uses: softprops/action-gh-release@v2
         if: github.event_name == 'push'
-        with:
-          tag_name: latest
-          name: Portio v${{ steps.ver.outputs.version }} – Latest APK
-          body: |
-            Automatically built APK (refreshed on every push).
-
-            Recent changes:
-            - Full English localization (Turkish source + English dictionary)
-            - Sub-menu: black bar removed, pill-shaped backgrounds only
-            - Hero banner enlarged to ~1/3 of the screen
-            - VOD sync fixed: full catalog (80k+ items) is fetched
-            - Stale/incomplete catalogs are re-synced automatically
-            - Secrets moved out of the repo (keystore + google-services.json via GitHub Secrets)
-          files: app/build/outputs/apk/release/*.apk
-          update_existing: true
-          overwrite: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VERSION="${{ steps.ver.outputs.version }}"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          NOTES="Automatically built APK (refreshed on every push)."
+          for i in 1 2 3 4 5 6; do
+            if gh release view latest >/dev/null 2>&1; then
+              if gh release edit latest --title "Portio v${VERSION} – Latest APK" --notes "$NOTES" \
+                 && gh release upload latest "$APK" --clobber; then
+                echo "✅ Release güncellendi: Portio v${VERSION}"
+                exit 0
+              fi
+            else
+              if gh release create latest "$APK" --title "Portio v${VERSION} – Latest APK" --notes "$NOTES"; then
+                echo "✅ Release oluşturuldu: Portio v${VERSION}"
+                exit 0
+              fi
+            fi
+            echo "⚠️ GitHub API geçici hatası — 30 sn sonra yeniden deneniyor (deneme $i/6)"
+            sleep 30
+          done
+          echo "❌ Release yayınlanamadı (6 deneme sonrası)"
+          exit 1
