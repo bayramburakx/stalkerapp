@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import com.stalkerapp.util.L10n
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -33,6 +34,8 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
+
+    private fun l10n(text: String): String = L10n.t(settingsProvider().language, text)
 
     @Volatile private var lastRequestAt = 0L
     @Volatile private var cooldownUntil = 0L
@@ -97,7 +100,7 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
         val remaining = cooldownRemainingMs()
         if (remaining > 0) {
             throw StalkerException(
-                "Sunucu istekleri geçici olarak engelledi. ${remaining / 1000} sn sonra tekrar deneyin.",
+                l10n("Sunucu istekleri geçici olarak engelledi") + ". ${remaining / 1000} " + l10n("sn sonra tekrar deneyin") + ".",
                 isCooldown = true
             )
         }
@@ -134,13 +137,13 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             } catch (e: java.io.IOException) {
                 val msg = when (e) {
                     is java.net.UnknownHostException ->
-                        "Sunucu adresi bulunamadı (DNS). Portal adresini kontrol edin."
+                        l10n("Sunucu adresi bulunamadı (DNS). Portal adresini kontrol edin.")
                     is java.net.ConnectException ->
-                        "Sunucuya bağlanılamadı. Adres/port yanlış veya sunucu çalışmıyor."
+                        l10n("Sunucuya bağlanılamadı. Adres/port yanlış veya sunucu çalışmıyor.")
                     is java.net.SocketTimeoutException ->
-                        "Sunucu yanıt vermedi (zaman aşımı). Ağ bağlantınızı ve adresi kontrol edin."
+                        l10n("Sunucu yanıt vermedi (zaman aşımı). Ağ bağlantınızı ve adresi kontrol edin.")
                     else ->
-                        "Sunucuya ulaşılamadı (${e::class.simpleName ?: "ağ hatası"}). İnternet bağlantınızı ve portal adresini kontrol edin."
+                        l10n("Sunucuya ulaşılamadı") + " (${e::class.simpleName ?: l10n("ağ hatası")}). " + l10n("İnternet bağlantınızı ve portal adresini kontrol edin")
                 }
                 throw StalkerException(msg)
             }
@@ -169,7 +172,7 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
             throw StalkerException("HTTP $respCode")
         }
 
-        return payload ?: throw StalkerException("Geçersiz sunucu yanıtı")
+        return payload ?: throw StalkerException(l10n("Geçersiz sunucu yanıtı"))
     }
 
     companion object {

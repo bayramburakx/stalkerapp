@@ -15,7 +15,7 @@
         android:textSize="13sp"
         android:textStyle="bold"
         android:maxLines="1"
-        android:text="Stalker — Favori Kanallar" />
+        android:text="Portio — Favori Kanallar" />
 
     <LinearLayout
         android:id="@+id/widget_rows"

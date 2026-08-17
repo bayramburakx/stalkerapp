@@ -26,6 +26,7 @@ import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.util.isWifiConnected
+import com.stalkerapp.util.L10n
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -329,17 +330,17 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         return runCatching { repository.connect(portal, activate = false) }
             .fold(
                 onSuccess = { null },
-                onFailure = { it.message ?: it::class.simpleName ?: "Bilinmeyen hata" }
+                onFailure = { it.message ?: it::class.simpleName ?: L10n.t(store.settings().language, "Bilinmeyen hata") }
             )
     }
 
     /** M3U URL'sini indirmeyi dener; içerik alınamazsa hata döner. */
     suspend fun testM3u(source: M3uSource): String? {
-        if (source.url.isBlank()) return "URL boş"
+        if (source.url.isBlank()) return L10n.t(store.settings().language, "URL boş")
         val content = M3uParser.fetch(source.url)
-        if (content == null) return "İndirilemedi (URL geçersiz veya erişilemiyor)"
+        if (content == null) return L10n.t(store.settings().language, "İndirilemedi (URL geçersiz veya erişilemiyor)")
         val count = M3uParser.parse(content, source.id).size
-        if (count == 0) return "Kanal bulunamadı (geçerli M3U değil?)"
+        if (count == 0) return L10n.t(store.settings().language, "Kanal bulunamadı (geçerli M3U değil?)")
         saveM3uSource(source.copy(content = content))
         // İçerik değişti: kaynak aktifse dış katalog bayat kalmasın (bir sonraki
         // açılışta yeniden kurulur).
@@ -353,8 +354,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     suspend fun testXtream(source: XtreamSource): String? {
         return runCatching { XtreamClient().validate(source) }
             .fold(
-                onSuccess = { ok -> if (ok) null else "Kullanıcı adı/şifre geçersiz" },
-                onFailure = { it.message ?: it::class.simpleName ?: "Bilinmeyen hata" }
+                onSuccess = { ok -> if (ok) null else L10n.t(store.settings().language, "Kullanıcı adı/şifre geçersiz") },
+                onFailure = { it.message ?: it::class.simpleName ?: L10n.t(store.settings().language, "Bilinmeyen hata") }
             )
     }
 
@@ -647,7 +648,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     fun launchSwitch(portal: Portal, onDone: () -> Unit = {}) {
         viewModelScope.launch {
-            switchPortal(portal).onFailure { showMessage("Portal değiştirilemedi: ${it.message}") }
+            switchPortal(portal).onFailure { showMessage(L10n.t(store.settings().language, "Portal değiştirilemedi") + ": ${it.message}") }
             onDone()
         }
     }

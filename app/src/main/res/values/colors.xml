@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="black">#FF000000</color>
+    <color name="portio_dark">#FF1A1C25</color>
+    <color name="portio_logo_bg">#FF313443</color>
 </resources>

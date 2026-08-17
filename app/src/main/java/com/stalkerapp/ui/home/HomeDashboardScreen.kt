@@ -75,6 +75,31 @@ import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 import kotlinx.coroutines.delay
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Henüz bir kaynak eklemedin" to "You haven't added a source yet",
+    "Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi " to "From Settings → Playlist & Sources, add a Stalker portal, M3U list ",
+    "veya Xtream Codes ekleyerek izlemeye başlayabilirsin." to "or Xtream Codes to start watching.",
+    "Son İzlenenler" to "Recently Watched",
+    "İzlemeye Devam" to "Continue Watching",
+    "Popüler Filmler" to "Popular Movies",
+    "Popüler Diziler" to "Popular Series",
+    "Son İzlenen Kanallar" to "Recently Watched Channels",
+    "Favori Kanallar" to "Favorite Channels",
+    "Canlı TV" to "Live TV",
+    "Favori Filmler & Diziler" to "Favorite Movies & Series",
+    "Film bulunamadı" to "No movies found",
+    "Dizi bulunamadı" to "No series found",
+    "Kanal bulunamadı" to "No channels found",
+    "Henüz favori kanal yok" to "No favorite channels yet",
+    "DİZİ" to "SERIES",
+    "FİLM" to "MOVIE",
+    "Detayları Gör" to "View Details",
+    "Tümü" to "All"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 @Composable
 fun HomeDashboardScreen(
     profile: Profile?,
@@ -85,6 +110,7 @@ fun HomeDashboardScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val adultUnlocked by vm.adultUnlocked.collectAsStateWithLifecycle()
@@ -97,15 +123,15 @@ fun HomeDashboardScreen(
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                 Text(
-                    "Henüz bir kaynak eklemedin",
+                    str(lang, "Henüz bir kaynak eklemedin"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi " +
-                        "veya Xtream Codes ekleyerek izlemeye başlayabilirsin.",
+                    str(lang, "Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi ") +
+                        str(lang, "veya Xtream Codes ekleyerek izlemeye başlayabilirsin."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -231,6 +257,7 @@ fun HomeDashboardScreen(
         // Hero banner Kütüphane & İçerik ayarından kapatılabilir.
         if (settings.heroEnabled && featured.isNotEmpty()) {
             HeroBanner(
+                lang = lang,
                 items = featured,
                 baseUrl = profile?.baseUrl.orEmpty(),
                 catTitle = { id -> catTitles[id].orEmpty() },
@@ -244,7 +271,7 @@ fun HomeDashboardScreen(
         sectionOrder.forEach { key ->
             when (key) {
                 "recent" -> if (recentlyWatched.isNotEmpty()) {
-                    Section(title = "Son İzlenenler", onSeeAll = null) {
+                    Section(title = str(lang, "Son İzlenenler"), lang = lang, onSeeAll = null) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -264,7 +291,7 @@ fun HomeDashboardScreen(
                     }
                 }
                 "continue" -> if (continueWatching.isNotEmpty()) {
-                    Section(title = "İzlemeye Devam", onSeeAll = null) {
+                    Section(title = str(lang, "İzlemeye Devam"), lang = lang, onSeeAll = null) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -282,9 +309,9 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "movies" -> Section(title = "Popüler Filmler", onSeeAll = { onGotoTab(2) }) {
+                "movies" -> Section(title = str(lang, "Popüler Filmler"), lang = lang, onSeeAll = { onGotoTab(2) }) {
                     if (movies.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
-                        EmptyState("Film bulunamadı")
+                        EmptyState(str(lang, "Film bulunamadı"))
                     } else {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
@@ -304,9 +331,9 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "series" -> Section(title = "Popüler Diziler", onSeeAll = { onGotoTab(3) }) {
+                "series" -> Section(title = str(lang, "Popüler Diziler"), lang = lang, onSeeAll = { onGotoTab(3) }) {
                     if (series.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
-                        EmptyState("Dizi bulunamadı")
+                        EmptyState(str(lang, "Dizi bulunamadı"))
                     } else {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
@@ -327,7 +354,7 @@ fun HomeDashboardScreen(
                     }
                 }
                 "recentchannels" -> if (settings.recentChannelsOnHome && recentChannels.isNotEmpty()) {
-                    Section(title = "Son İzlenen Kanallar", onSeeAll = { onGotoTab(1) }) {
+                    Section(title = str(lang, "Son İzlenen Kanallar"), lang = lang, onSeeAll = { onGotoTab(1) }) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -347,9 +374,9 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "favchannels" -> Section(title = "Favori Kanallar", onSeeAll = { onGotoTab(1) }) {
+                "favchannels" -> Section(title = str(lang, "Favori Kanallar"), lang = lang, onSeeAll = { onGotoTab(1) }) {
                     if (favChannels.isEmpty()) {
-                        Text("Henüz favori kanal yok", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        Text(str(lang, "Henüz favori kanal yok"), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         LazyRow(
@@ -371,10 +398,10 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "live" -> Section(title = "Canlı TV", onSeeAll = { onGotoTab(1) }) {
+                "live" -> Section(title = str(lang, "Canlı TV"), lang = lang, onSeeAll = { onGotoTab(1) }) {
                     when {
                         loadingChannels -> LoadingBox()
-                        homeChannels.isNullOrEmpty() -> EmptyState("Kanal bulunamadı")
+                        homeChannels.isNullOrEmpty() -> EmptyState(str(lang, "Kanal bulunamadı"))
                         else -> LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -395,7 +422,7 @@ fun HomeDashboardScreen(
                     }
                 }
                 "favvods" -> if (favVods.isNotEmpty()) {
-                    Section(title = "Favori Filmler & Diziler", onSeeAll = { onGotoTab(4) }) {
+                    Section(title = str(lang, "Favori Filmler & Diziler"), lang = lang, onSeeAll = { onGotoTab(4) }) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -424,6 +451,7 @@ fun HomeDashboardScreen(
     if (quickActionItem != null) {
         val qi = quickActionItem!!
         VodQuickActionsSheet(
+            lang = lang,
             item = qi,
             isSeries = catalog.isSeriesItem(qi),
             vm = vm,
@@ -435,6 +463,7 @@ fun HomeDashboardScreen(
 
 @Composable
 private fun HeroBanner(
+    lang: String,
     items: List<VodItem>,
     baseUrl: String,
     catTitle: (Long) -> String,
@@ -529,7 +558,7 @@ private fun HeroBanner(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        if (isSeries) "DİZİ" else "FİLM",
+                        if (isSeries) str(lang, "DİZİ") else str(lang, "FİLM"),
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
@@ -561,7 +590,7 @@ private fun HeroBanner(
                     ),
                     modifier = Modifier.height(46.dp)
                 ) {
-                    Text("Detayları Gör", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text(str(lang, "Detayları Gör"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                 }
             }
         }
@@ -569,7 +598,7 @@ private fun HeroBanner(
 }
 
 @Composable
-private fun Section(title: String, onSeeAll: (() -> Unit)?, content: @Composable () -> Unit) {
+private fun Section(title: String, lang: String, onSeeAll: (() -> Unit)?, content: @Composable () -> Unit) {
     Column(modifier = Modifier.padding(vertical = 10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -597,7 +626,7 @@ private fun Section(title: String, onSeeAll: (() -> Unit)?, content: @Composable
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Tümü",
+                        contentDescription = str(lang, "Tümü"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )

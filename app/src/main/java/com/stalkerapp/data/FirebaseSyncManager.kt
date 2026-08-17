@@ -11,6 +11,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.stalkerapp.R
 import com.stalkerapp.StalkerApp
+import com.stalkerapp.util.L10n
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -135,9 +136,9 @@ class FirebaseSyncManager(private val context: Context) {
             } else {
                 // Bulut verisi baskın: geri yükle ("kaldığı yerden devam").
                 val ok = store.restoreJson(cloudJson)
-                if (ok) SyncResult.Restored else SyncResult.Failed("Yedek geçersiz")
+                if (ok) SyncResult.Restored else SyncResult.Failed(L10n.t(store.settings().language, "Yedek geçersiz"))
             }
-        }.getOrElse { SyncResult.Failed(it.message ?: "Senkron hatası") }
+        }.getOrElse { SyncResult.Failed(it.message ?: L10n.t(store.settings().language, "Senkron hatası")) }
     }
 
     /** Oturum açıkken yerel veriyi buluta yazar (çıkış/arka plan öncesi). */
@@ -152,7 +153,7 @@ class FirebaseSyncManager(private val context: Context) {
                 ),
                 SetOptions.merge()
             ).await()
-            _syncState.value = "Yedek buluta kaydedildi ✓"
+            _syncState.value = L10n.t(store.settings().language, "Yedek buluta kaydedildi ✓")
             true
         }.getOrDefault(false)
     }
@@ -163,11 +164,11 @@ class FirebaseSyncManager(private val context: Context) {
         runCatching {
             val json = backupDoc(uid).get().await()?.getString("json")
             if (json.isNullOrBlank()) {
-                _syncState.value = "Bulutta yedek yok"
+                _syncState.value = L10n.t(store.settings().language, "Bulutta yedek yok")
                 false
             } else {
                 val ok = store.restoreJson(json)
-                _syncState.value = if (ok) "Bulut yedeği geri yüklendi ✓" else "Yedek geçersiz"
+                _syncState.value = if (ok) L10n.t(store.settings().language, "Bulut yedeği geri yüklendi ✓") else L10n.t(store.settings().language, "Yedek geçersiz")
                 ok
             }
         }.getOrDefault(false)

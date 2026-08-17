@@ -41,6 +41,31 @@ import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Tümü" to "All",
+    "Devam Eden" to "In Progress",
+    "İzlediklerim" to "Watched",
+    "Sonra İzle" to "Watch Later",
+    "Favoriler" to "Favorites",
+    "Kütüphanem" to "My Library",
+    "Kütüphane yükleniyor…" to "Loading your library…",
+    "Kütüphanen henüz boş.\nİzlediğin ve favorilediğin içerikler burada görünür." to "Your library is still empty.\nContent you watch and favorite will show up here.",
+    "Favori Kanallar" to "Favorite Channels",
+    "Bu listede henüz içerik yok. Bir içeriğin detayından listeye ekleyebilirsin." to "This list is still empty. You can add content to it from the item's details.",
+    "İzlemeye Devam" to "Keep Watching",
+    "devam et" to "continue",
+    "Sonra İzleyeceklerim" to "Watch Later",
+    "bölüm izlendi" to "episodes watched",
+    "Devam eden içerik yok" to "No content in progress",
+    "Henüz izlediğin içerik yok" to "Nothing watched yet",
+    "Sonra izle listesi boş" to "Watch later list is empty",
+    "Favori içerik yok" to "No favorites yet",
+    "Favori Filmler & Diziler" to "Favorite Movies & Series"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 private enum class LibFilter(val label: String) {
     ALL("Tümü"),
     CONTINUE("Devam Eden"),
@@ -63,6 +88,7 @@ fun LibraryScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val watchLater by vm.watchLater.collectAsStateWithLifecycle()
@@ -130,7 +156,7 @@ fun LibraryScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         Text(
-            "Kütüphanem",
+            str(lang, "Kütüphanem"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -147,7 +173,7 @@ fun LibraryScreen(
                 GlassChip(
                     selected = filter == f && activeListId == null,
                     onClick = { filter = f; activeListId = null },
-                    label = f.label
+                    label = str(lang, f.label)
                 )
             }
             items(userLists) { l ->
@@ -167,9 +193,9 @@ fun LibraryScreen(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 EmptyState(
                     if (catalog.status == VodCatalogStatus.Syncing)
-                        "Kütüphane yükleniyor…"
+                        str(lang, "Kütüphane yükleniyor…")
                     else
-                        "Kütüphanen henüz boş.\nİzlediğin ve favorilediğin içerikler burada görünür."
+                        str(lang, "Kütüphanen henüz boş.\nİzlediğin ve favorilediğin içerikler burada görünür.")
                 )
             }
             return
@@ -184,7 +210,7 @@ fun LibraryScreen(
                 // Favori kanallar her filtrenin üstünde sabit gösterilir
                 // (Kütüphanem'de canlı TV favorileri de görünmeli).
                 favChannels.isNotEmpty() && activeList == null && filter == LibFilter.ALL -> {
-                    item { SectionHeader("Favori Kanallar") }
+                    item { SectionHeader(str(lang, "Favori Kanallar")) }
                     item {
                         favChannels.forEach { ch ->
                             ChannelRow(
@@ -206,7 +232,7 @@ fun LibraryScreen(
                     item {
                         if (listItems.isEmpty()) {
                             Text(
-                                "Bu listede henüz içerik yok. Bir içeriğin detayından listeye ekleyebilirsin.",
+                                str(lang, "Bu listede henüz içerik yok. Bir içeriğin detayından listeye ekleyebilirsin."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 8.dp)
@@ -217,31 +243,31 @@ fun LibraryScreen(
                 }
                 filter == LibFilter.ALL -> {
                     if (continueItems.isNotEmpty()) {
-                        item { SectionHeader("İzlemeye Devam") }
+                        item { SectionHeader(str(lang, "İzlemeye Devam")) }
                         item { PosterRow(continueItems, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) { item ->
                             // Dizi ise ilerleme bölüm bazında olabilir.
                             val seriesEps = episodeProgress.filterKeys { it.startsWith("${item.id}:") }
                             if (seriesEps.isNotEmpty()) {
                                 val latest = seriesEps.maxByOrNull { (k, v) -> v.lastUpdated }
                                 val parts = latest?.key?.split(":") ?: emptyList()
-                                if (parts.size >= 3) "S${parts[1]} · B${parts[2]} — devam et"
+                                if (parts.size >= 3) "S${parts[1]} · B${parts[2]} — ${str(lang, "devam et")}"
                                 else null
                             } else null
                         } }
                     }
                     if (watchLaterResolved.isNotEmpty()) {
-                        item { SectionHeader("Sonra İzleyeceklerim") }
+                        item { SectionHeader(str(lang, "Sonra İzleyeceklerim")) }
                         item { PosterRow(watchLaterResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                     }
                     if (favResolved.isNotEmpty()) {
-                        item { SectionHeader("Favoriler") }
+                        item { SectionHeader(str(lang, "Favoriler")) }
                         item { PosterRow(favResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                     }
                     if (watchedItems.isNotEmpty()) {
-                        item { SectionHeader("İzlediklerim") }
+                        item { SectionHeader(str(lang, "İzlediklerim")) }
                         item { PosterRow(watchedItems, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) { item ->
                             val eps = watchedEps.count { it.startsWith("${item.id}:") }
-                            if (eps > 0) "$eps bölüm izlendi" else null
+                            if (eps > 0) "$eps ${str(lang, "bölüm izlendi")}" else null
                         } }
                     }
                     userLists.filter { it.itemIds.isNotEmpty() }.forEach { l ->
@@ -254,41 +280,41 @@ fun LibraryScreen(
                 }
                 filter == LibFilter.CONTINUE -> {
                     if (continueItems.isEmpty()) {
-                        item { EmptyHint("Devam eden içerik yok") }
+                        item { EmptyHint(str(lang, "Devam eden içerik yok")) }
                     } else {
-                        item { SectionHeader("İzlemeye Devam") }
+                        item { SectionHeader(str(lang, "İzlemeye Devam")) }
                         item { PosterRow(continueItems, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                     }
                 }
                 filter == LibFilter.WATCHED -> {
                     if (watchedItems.isEmpty()) {
-                        item { EmptyHint("Henüz izlediğin içerik yok") }
+                        item { EmptyHint(str(lang, "Henüz izlediğin içerik yok")) }
                     } else {
-                        item { SectionHeader("İzlediklerim") }
+                        item { SectionHeader(str(lang, "İzlediklerim")) }
                         item { PosterRow(watchedItems, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) { item ->
                             val eps = watchedEps.count { it.startsWith("${item.id}:") }
-                            if (eps > 0) "$eps bölüm izlendi" else null
+                            if (eps > 0) "$eps ${str(lang, "bölüm izlendi")}" else null
                         } }
                     }
                 }
                 filter == LibFilter.WATCH_LATER -> {
                     if (watchLaterResolved.isEmpty()) {
-                        item { EmptyHint("Sonra izle listesi boş") }
+                        item { EmptyHint(str(lang, "Sonra izle listesi boş")) }
                     } else {
-                        item { SectionHeader("Sonra İzleyeceklerim") }
+                        item { SectionHeader(str(lang, "Sonra İzleyeceklerim")) }
                         item { PosterRow(watchLaterResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                     }
                 }
                 filter == LibFilter.FAVORITES -> {
                     if (favResolved.isEmpty() && favChannels.isEmpty()) {
-                        item { EmptyHint("Favori içerik yok") }
+                        item { EmptyHint(str(lang, "Favori içerik yok")) }
                     } else {
                         if (favResolved.isNotEmpty()) {
-                            item { SectionHeader("Favori Filmler & Diziler") }
+                            item { SectionHeader(str(lang, "Favori Filmler & Diziler")) }
                             item { PosterRow(favResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                         }
                         if (favChannels.isNotEmpty()) {
-                            item { SectionHeader("Favori Kanallar") }
+                            item { SectionHeader(str(lang, "Favori Kanallar")) }
                             item {
                                 favChannels.forEach { ch ->
                                     ChannelRow(

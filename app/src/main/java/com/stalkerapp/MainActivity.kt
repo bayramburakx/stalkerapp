@@ -141,6 +141,7 @@ private fun AppNav() {
         composable("login") {
             LoginScreen(
                 firebase = firebase,
+                lang = app.store.settings().language,
                 onSignedIn = {
                     // Bulut yedeği geri yüklendiyse Store değişti; akışları tazele.
                     vm.refreshFlows()
@@ -153,6 +154,7 @@ private fun AppNav() {
             ProfilePickerScreen(
                 vm = vm,
                 firebase = firebase,
+                lang = app.store.settings().language,
                 onProfileSelected = {
                     navController.navigate("home") { popUpTo("profiles") { inclusive = true } }
                 }

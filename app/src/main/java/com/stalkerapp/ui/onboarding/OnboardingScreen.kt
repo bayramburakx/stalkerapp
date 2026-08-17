@@ -1,6 +1,7 @@
 package com.stalkerapp.ui.onboarding
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Tv
@@ -50,14 +50,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.stalkerapp.R
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
@@ -66,6 +67,7 @@ import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.rememberMainViewModel
+import com.stalkerapp.util.L10n
 import kotlinx.coroutines.launch
 
 private data class Feature(val icon: ImageVector, val title: String, val desc: String)
@@ -79,8 +81,9 @@ private val FEATURES = listOf(
 
 /**
  * Adım adım kurulum sihirbazı:
- *  1. Hoş geldin + özellik tanıtımı
- *  2. İlk kaynak (Stalker / Xtream / M3U) — atlanabilir
+ *  1. Dil seçimi (Türkçe / English)
+ *  2. Hoş geldin + özellik tanıtımı
+ *  3. İlk kaynak (Stalker / Xtream / M3U) — atlanabilir
  *
  * Profil oluşturma artık giriş sonrası Netflix tarzı profil seçicide yapılır.
  * Her adımdan "Atla" ile çıkılabilir; kaynaklar her zaman sonradan
@@ -92,7 +95,11 @@ fun OnboardingScreen(onDone: () -> Unit) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
+
+    // Dil: ilk ekranda seçilir ve kaydedilir; tüm sihirbaz o dilde gösterilir.
+    var lang by remember { mutableStateOf(app.store.settings().language) }
+    fun t(text: String) = L10n.t(lang, text)
 
     // Kaynak adımı durumu
     var sourceChoice by remember { mutableStateOf<String?>(null) } // "portal" | "xtream" | "m3u"
@@ -112,6 +119,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
     var sourceError by remember { mutableStateOf<String?>(null) }
 
     fun finish() {
+        app.store.saveSettings(app.store.settings().copy(language = lang))
         app.store.setOnboardingDone(true)
         onDone()
     }
@@ -129,14 +137,14 @@ fun OnboardingScreen(onDone: () -> Unit) {
         ) {
             if (pagerState.currentPage > 0) {
                 IconButton(onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("Geri"), tint = Color.White)
                 }
             } else {
                 Spacer(Modifier.width(48.dp))
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { finish() }) {
-                Text("Atla", color = Color.White.copy(alpha = 0.8f))
+                Text(t("Atla"), color = Color.White.copy(alpha = 0.8f))
             }
         }
 
@@ -145,8 +153,14 @@ fun OnboardingScreen(onDone: () -> Unit) {
             modifier = Modifier.weight(1f)
         ) { page ->
             when (page) {
-                0 -> WelcomePage { scope.launch { pagerState.animateScrollToPage(1) } }
-                1 -> SourcePage(
+                0 -> LanguagePage(
+                    current = lang,
+                    onSelect = { lang = it },
+                    onContinue = { scope.launch { pagerState.animateScrollToPage(1) } }
+                )
+                1 -> WelcomePage(lang = lang) { scope.launch { pagerState.animateScrollToPage(2) } }
+                2 -> SourcePage(
+                    lang = lang,
                     vm = vm,
                     sourceChoice = sourceChoice,
                     onChoice = { sourceChoice = it },
@@ -172,7 +186,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
             horizontalArrangement = Arrangement.Center
         ) {
-            repeat(2) { i ->
+            repeat(3) { i ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
@@ -189,8 +203,116 @@ fun OnboardingScreen(onDone: () -> Unit) {
     }
 }
 
+/** İlk ekran: uygulama dili seçimi (Türkçe / English). */
 @Composable
-private fun WelcomePage(onStart: () -> Unit) {
+private fun LanguagePage(
+    current: String,
+    onSelect: (String) -> Unit,
+    onContinue: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(24.dp))
+        Image(
+            painter = painterResource(R.drawable.portio_logo),
+            contentDescription = null,
+            modifier = Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(24.dp))
+        )
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Portio",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Dilini seç  •  Choose your language",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(32.dp))
+
+        LanguageCard(
+            code = "tr",
+            title = "Türkçe",
+            subtitle = "Uygulamayı Türkçe kullan",
+            selected = current == "tr",
+            onClick = { onSelect("tr") }
+        )
+        Spacer(Modifier.height(12.dp))
+        LanguageCard(
+            code = "en",
+            title = "English",
+            subtitle = "Use the app in English",
+            selected = current == "en",
+            onClick = { onSelect("en") }
+        )
+
+        Spacer(Modifier.height(32.dp))
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text(if (current == "en") "Continue" else "Devam Et", fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun LanguageCard(
+    code: String,
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) Color.White.copy(alpha = 0.16f)
+        else Color.White.copy(alpha = 0.06f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+            }
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) Color.White else Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Text("✓", color = Color.Black, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = Color.White.copy(alpha = 0.06f))
+}
+
+@Composable
+private fun WelcomePage(lang: String, onStart: () -> Unit) {
+    fun t(text: String) = L10n.t(lang, text)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -199,24 +321,22 @@ private fun WelcomePage(onStart: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(16.dp))
-        Box(
+        Image(
+            painter = painterResource(R.drawable.portio_logo),
+            contentDescription = null,
             modifier = Modifier
-                .size(88.dp)
+                .size(96.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF123D8B)))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(52.dp))
-        }
+        )
         Spacer(Modifier.height(20.dp))
         Text(
-            "Hoş Geldin",
+            t("Hoş Geldin"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
         Text(
-            "Tüm IPTV içeriğin tek uygulamada — kurulum bir dakika sürer.",
+            t("Tüm IPTV içeriğin tek uygulamada — kurulum bir dakika sürer."),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
@@ -241,8 +361,8 @@ private fun WelcomePage(onStart: () -> Unit) {
                 }
                 Spacer(Modifier.width(14.dp))
                 Column {
-                    Text(f.title, style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text(f.desc, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    Text(t(f.title), style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(t(f.desc), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
                 }
             }
         }
@@ -252,7 +372,7 @@ private fun WelcomePage(onStart: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(14.dp)
         ) {
-            Text("Başla", fontWeight = FontWeight.Bold)
+            Text(t("Başla"), fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -260,6 +380,7 @@ private fun WelcomePage(onStart: () -> Unit) {
 
 @Composable
 private fun SourcePage(
+    lang: String,
     vm: MainViewModel,
     sourceChoice: String?,
     onChoice: (String?) -> Unit,
@@ -277,10 +398,11 @@ private fun SourcePage(
     onDone: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    fun t(text: String) = L10n.t(lang, text)
 
     fun savePortalAndFinish() {
         if (pName.isBlank() || pUrl.isBlank()) {
-            onError("Portal adı ve URL zorunludur")
+            onError(t("Portal adı ve URL zorunludur"))
             return
         }
         onBusy(true)
@@ -298,18 +420,18 @@ private fun SourcePage(
             val result = vm.connect(portal)
             onBusy(false)
             if (result.isSuccess) onDone()
-            else onError(result.exceptionOrNull()?.message ?: "Bağlantı hatası")
+            else onError(result.exceptionOrNull()?.message ?: t("Bağlantı hatası"))
         }
     }
 
     fun saveXtreamAndFinish() {
         val srv = xServer.trim()
         if (!srv.startsWith("http")) {
-            onError("Geçerli bir http(s) sunucu adresi girin")
+            onError(t("Geçerli bir http(s) sunucu adresi girin"))
             return
         }
         if (xUser.trim().isBlank()) {
-            onError("Kullanıcı adı gerekli")
+            onError(t("Kullanıcı adı gerekli"))
             return
         }
         onBusy(true)
@@ -329,7 +451,7 @@ private fun SourcePage(
                 vm.setActiveSource("xtream", candidate.id)
                 onDone()
             } else {
-                onError("Xtream doğrulaması başarısız — sunucu, kullanıcı adı veya şifre hatalı")
+                onError(t("Xtream doğrulaması başarısız — sunucu, kullanıcı adı veya şifre hatalı"))
             }
         }
     }
@@ -337,7 +459,7 @@ private fun SourcePage(
     fun saveM3uAndFinish() {
         val trimmed = mUrl.trim()
         if (!trimmed.startsWith("http") && mContent.isBlank()) {
-            onError("Geçerli bir http(s) M3U URL girin veya içeriği yapıştırın")
+            onError(t("Geçerli bir http(s) M3U URL girin veya içeriği yapıştırın"))
             return
         }
         onBusy(true)
@@ -362,13 +484,13 @@ private fun SourcePage(
     ) {
         Spacer(Modifier.height(16.dp))
         Text(
-            "İlk Kaynağını Ekle",
+            t("İlk Kaynağını Ekle"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
         Text(
-            "İçeriğinin geldiği kaynağı seç — sonradan Ayarlar → Playlist & Kaynaklar'dan dilediğin kadar ekleyebilirsin.",
+            t("İçeriğinin geldiği kaynağı seç — sonradan Ayarlar → Playlist & Kaynaklar'dan dilediğin kadar ekleyebilirsin."),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f),
             modifier = Modifier.padding(top = 8.dp)
@@ -377,22 +499,22 @@ private fun SourcePage(
 
         SourceChoiceCard(
             icon = Icons.Default.Tv,
-            title = "Stalker Portal",
-            desc = "Portal URL'si + MAC adresi (ör. MAG/STB portalı)",
+            title = t("Stalker Portal"),
+            desc = t("Portal URL'si + MAC adresi (ör. MAG/STB portalı)"),
             selected = sourceChoice == "portal",
             onClick = { onChoice(if (sourceChoice == "portal") null else "portal") }
         )
         SourceChoiceCard(
             icon = Icons.Default.Cloud,
-            title = "Xtream Codes",
-            desc = "Sunucu adresi + kullanıcı adı + şifre",
+            title = t("Xtream Codes"),
+            desc = t("Sunucu adresi + kullanıcı adı + şifre"),
             selected = sourceChoice == "xtream",
             onClick = { onChoice(if (sourceChoice == "xtream") null else "xtream") }
         )
         SourceChoiceCard(
             icon = Icons.Default.PlaylistPlay,
-            title = "M3U Playlist",
-            desc = "#EXTM3U liste adresi veya içerik",
+            title = t("M3U Playlist"),
+            desc = t("#EXTM3U liste adresi veya içerik"),
             selected = sourceChoice == "m3u",
             onClick = { onChoice(if (sourceChoice == "m3u") null else "m3u") }
         )
@@ -400,25 +522,25 @@ private fun SourcePage(
         when (sourceChoice) {
             "portal" -> {
                 Spacer(Modifier.height(20.dp))
-                Text("Stalker Portal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(t("Stalker Portal"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = pName, onValueChange = onPName, label = { Text("Portal Adı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = pUrl, onValueChange = onPUrl, label = { Text("Portal URL (http://ip:port/portal)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pName, onValueChange = onPName, label = { Text(t("Portal Adı")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pUrl, onValueChange = onPUrl, label = { Text(t("Portal URL (http://ip:port/portal)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = pMac,
                         onValueChange = onPMac,
-                        label = { Text("MAC Adresi (opsiyonel)") },
+                        label = { Text(t("MAC Adresi (opsiyonel)")) },
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
-                    TextButton(onClick = { onPMac(StalkerClient.generateMac()) }) { Text("Yeni MAC") }
+                    TextButton(onClick = { onPMac(StalkerClient.generateMac()) }) { Text(t("Yeni MAC")) }
                 }
-                OutlinedTextField(value = pUser, onValueChange = onPUser, label = { Text("Kullanıcı Adı (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pUser, onValueChange = onPUser, label = { Text(t("Kullanıcı Adı (opsiyonel)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = pPass,
                     onValueChange = onPPass,
-                    label = { Text("Şifre (opsiyonel)") },
+                    label = { Text(t("Şifre (opsiyonel)")) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -426,23 +548,23 @@ private fun SourcePage(
             }
             "xtream" -> {
                 Spacer(Modifier.height(20.dp))
-                Text("Xtream Codes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(t("Xtream Codes"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = xName, onValueChange = onXName, label = { Text("İsim") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = xServer, onValueChange = onXServer, label = { Text("Sunucu (http://host:port)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = xUser, onValueChange = onXUser, label = { Text("Kullanıcı adı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = xPass, onValueChange = onXPass, label = { Text("Şifre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = xName, onValueChange = onXName, label = { Text(t("İsim")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = xServer, onValueChange = onXServer, label = { Text(t("Sunucu (http://host:port)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = xUser, onValueChange = onXUser, label = { Text(t("Kullanıcı adı")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = xPass, onValueChange = onXPass, label = { Text(t("Şifre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
             "m3u" -> {
                 Spacer(Modifier.height(20.dp))
-                Text("M3U Playlist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(t("M3U Playlist"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = mName, onValueChange = onMName, label = { Text("İsim (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = mUrl, onValueChange = onMUrl, label = { Text("M3U URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = mName, onValueChange = onMName, label = { Text(t("İsim (opsiyonel)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = mUrl, onValueChange = onMUrl, label = { Text(t("M3U URL")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = mContent,
                     onValueChange = onMContent,
-                    label = { Text("İçerik (isteğe bağlı — #EXTM3U metni)") },
+                    label = { Text(t("İçerik (isteğe bağlı — #EXTM3U metni)")) },
                     minLines = 3,
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth()
@@ -471,9 +593,9 @@ private fun SourcePage(
                 if (busy) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                     Spacer(Modifier.width(10.dp))
-                    Text("Bağlanılıyor…")
+                    Text(t("Bağlanılıyor…"))
                 } else {
-                    Text("Kaydet ve Devam Et", fontWeight = FontWeight.Bold)
+                    Text(t("Kaydet ve Devam Et"), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -483,7 +605,7 @@ private fun SourcePage(
             onClick = onDone,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
-            Text("Şimdilik atla", color = Color.White.copy(alpha = 0.7f))
+            Text(t("Şimdilik atla"), color = Color.White.copy(alpha = 0.7f))
         }
         Spacer(Modifier.height(16.dp))
     }

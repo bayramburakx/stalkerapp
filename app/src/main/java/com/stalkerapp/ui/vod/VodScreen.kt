@@ -61,6 +61,20 @@ import com.stalkerapp.ui.components.VodQuickActionsSheet
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal, M3U listesi veya Xtream Codes ekleyebilirsin." to "No source added yet.\nTo browse the VOD catalog, add a Stalker portal, M3U list or Xtream Codes from Settings → Playlists & Sources.",
+    "VOD senkron hatası. Yenileme için kategorileri açın." to "VOD sync error. Open the categories to refresh.",
+    "Film / dizi ara…" to "Search movies / series…",
+    "Tümü" to "All",
+    "VOD içeriği bulunamadı" to "No VOD content found",
+    "İçerik bulunamadı" to "No content found",
+    "DİZİ" to "SERIES",
+    "İzlendi" to "Watched"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 @Composable
 fun VodScreen(
     profile: Profile?,
@@ -70,6 +84,7 @@ fun VodScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val adultUnlocked by vm.adultUnlocked.collectAsStateWithLifecycle()
@@ -80,7 +95,7 @@ fun VodScreen(
     if (profile == null && !externalSource) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal, M3U listesi veya Xtream Codes ekleyebilirsin.",
+                str(lang, "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal, M3U listesi veya Xtream Codes ekleyebilirsin."),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(24.dp)
@@ -189,7 +204,7 @@ fun VodScreen(
     Column(modifier = modifier.fillMaxSize()) {
         if (catalog.status == VodCatalogStatus.Error) {
             Text(
-                "VOD senkron hatası. Yenileme için kategorileri açın.",
+                str(lang, "VOD senkron hatası. Yenileme için kategorileri açın."),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
@@ -229,7 +244,7 @@ fun VodScreen(
                     decorationBox = { inner ->
                         if (query.isBlank()) {
                             Text(
-                                "Film / dizi ara…",
+                                str(lang, "Film / dizi ara…"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -249,14 +264,14 @@ fun VodScreen(
                     GlassChip(
                         selected = selectedCategory == 0L && query.isBlank(),
                         onClick = { selectedCategory = 0L },
-                        label = "Tümü"
+                        label = str(lang, "Tümü")
                     )
                 }
                 items(shownCats) { c ->
                     GlassChip(
                         selected = selectedCategory == c.id,
                         onClick = { selectedCategory = c.id },
-                        label = c.title
+                        label = str(lang, c.title)
                     )
                 }
             }
@@ -265,8 +280,8 @@ fun VodScreen(
         when {
             catalog.status == VodCatalogStatus.Syncing && catalog.allItems.isEmpty() -> LoadingBox()
             catalog.allItems.isEmpty() && catalog.status != VodCatalogStatus.Syncing ->
-                EmptyState("VOD içeriği bulunamadı")
-            filtered.isEmpty() -> EmptyState("İçerik bulunamadı")
+                EmptyState(str(lang, "VOD içeriği bulunamadı"))
+            filtered.isEmpty() -> EmptyState(str(lang, "İçerik bulunamadı"))
             else -> {
                 val pageItems = filtered.take(visibleCount)
                 LazyVerticalGrid(
@@ -311,6 +326,7 @@ fun VodScreen(
     if (quickActionItem != null) {
         val qi = quickActionItem!!
         VodQuickActionsSheet(
+            lang = lang,
             item = qi,
             isSeries = filterIsSeries == true || catalog.isSeriesItem(qi),
             vm = vm,
@@ -331,6 +347,7 @@ fun VodPoster(
     watched: Boolean = false,
     onLongPress: (() -> Unit)? = null
 ) {
+    val lang = (LocalContext.current.applicationContext as StalkerApp).store.settings().language
     // Gri kart arka planı yok: sadece poster + altında başlık ve yıl.
     Column(
         modifier = Modifier
@@ -359,7 +376,7 @@ fun VodPoster(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        "DİZİ",
+                        str(lang, "DİZİ"),
                         color = Color.White,
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -378,7 +395,7 @@ fun VodPoster(
                 ) {
                     Icon(
                         Icons.Default.Check,
-                        contentDescription = "İzlendi",
+                        contentDescription = str(lang, "İzlendi"),
                         tint = Color.White,
                         modifier = Modifier.size(13.dp)
                     )

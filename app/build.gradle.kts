@@ -14,19 +14,19 @@ android {
         applicationId = "com.stalkerapp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
     }
 
     signingConfigs {
         create("release") {
-            // Sabit keystore: her CI derlemesi aynı imzayla yapılır, Google
-            // girişi için SHA-1 parmak izi bir kez Firebase'e eklenir.
-            // (keystore/release.p12 — şifre: stalkerapp2026)
-            storeFile = rootProject.file("keystore/release.p12")
-            storePassword = "stalkerapp2026"
+            // Keystore CI'da GitHub Secrets üzerinden sağlanır (KEYSTORE_BASE64
+            // decode edilip KEYSTORE_PATH olarak verilir); yerelde keystore/ altından
+            // okunur. Şifre env'den yoksa yerel varsayılan kullanılır.
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: rootProject.file("keystore/release.p12").path)
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "stalkerapp2026"
             keyAlias = "stalkerapp"
-            keyPassword = "stalkerapp2026"
+            keyPassword = System.getenv("KEYSTORE_PASSWORD") ?: "stalkerapp2026"
         }
     }
 

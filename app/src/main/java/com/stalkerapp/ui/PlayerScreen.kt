@@ -138,6 +138,80 @@ import com.stalkerapp.util.Afr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Yayınlanıyor…" to "Streaming…",
+    "TV'de yayınlanıyor" to "Streaming on TV",
+    "Parlaklık" to "Brightness",
+    "Ses" to "Audio",
+    "Geri" to "Back",
+    "Kanal" to "Channel",
+    "Favori" to "Favorite",
+    "Uyku zamanlayıcısı" to "Sleep timer",
+    "Oynatıcı seç" to "Choose player",
+    "Harici oynatıcı" to "External player",
+    "Kilit" to "Lock",
+    "PiP (Resim içinde resim)" to "PiP (Picture in picture)",
+    "Bilgi" to "Info",
+    "Ayarlar" to "Settings",
+    "10 sn Geri" to "10 sec Back",
+    "Oynat/Duraklat" to "Play/Pause",
+    "10 sn İleri" to "10 sec Forward",
+    "Ses Dili" to "Audio Language",
+    "Altyazı" to "Subtitles",
+    "Sonraki Bölüm" to "Next Episode",
+    "● CANLI" to "● LIVE",
+    "(timeshift: geri sarılabilir)" to "(timeshift: rewindable)",
+    "Canlıya Dön" to "Return to Live",
+    "Önceki" to "Previous",
+    "30 sn geri sar" to "Rewind 30 sec",
+    "Sonraki" to "Next",
+    "Rehber" to "Guide",
+    "Kanallar" to "Channels",
+    "Kiliti aç" to "Unlock",
+    "Bölüm sonu" to "End of episode",
+    "Uyku Zamanlayıcısı" to "Sleep Timer",
+    "Aktif: " to "Active: ",
+    "Bölüm sonunda dur" to "Stop at end of episode",
+    "kaldı" to "left",
+    "15 dk" to "15 min",
+    "30 dk" to "30 min",
+    "1 saat" to "1 hour",
+    "1.5 saat" to "1.5 hours",
+    "Geçerli bölüm/medya bitince kapanır" to "Turns off when the current episode/media ends",
+    "Kapat" to "Close",
+    "Varsayılan (Otomatik)" to "Default (Automatic)",
+    "Ses izi bulunamadı" to "No audio track found",
+    "Altyazılar" to "Subtitles",
+    "Altyazı yok (Kapat)" to "No subtitles (Off)",
+    "● ŞİMDİ" to "● NOW",
+    "🔔 Hatırlatma ayarlandı (dokun: kaldır)" to "🔔 Reminder set (tap to remove)",
+    "🔔 Başlayınca Bildir" to "🔔 Notify When It Starts",
+    "⏺ Kayıt planlandı (dokun: iptal)" to "⏺ Recording scheduled (tap to cancel)",
+    "⏺ Kaydet (cihaza)" to "⏺ Record (to device)",
+    "▶ Geçmiş Yayını İzle (catch-up)" to "▶ Watch Past Broadcast (catch-up)",
+    "EPG verisi yok" to "No EPG data",
+    "%.1f sn" to "%.1f s",
+    "Sığdır" to "Fit",
+    "Doldur" to "Fill",
+    "Yakınlaştır" to "Zoom",
+    "Oynatma Hızı" to "Playback Speed",
+    "Normal" to "Normal",
+    "Görüntü Oranı" to "Aspect Ratio",
+    "A/V Senkron (Ses Gecikmesi)" to "A/V Sync (Audio Delay)",
+    "Pozitif = ses gecikir, negatif = ses öne alınır." to "Positive = audio is delayed, negative = audio is ahead.",
+    "Sıfırla (0 ms)" to "Reset (0 ms)",
+    "Binge Modu" to "Binge Mode",
+    "Bölüm bitince sıradaki bölüm otomatik oynatılır" to "When an episode ends, the next episode plays automatically",
+    "Kanal ara…" to "Search channels…",
+    "Kanal akış URL'si boş" to "Channel stream URL is empty",
+    "Akış URL'si boş" to "Stream URL is empty",
+    "Harici oynatıcı bulunamadı (video desteği olan bir uygulama yükleyin)" to "No external player found (install an app that supports video)",
+    "Oynatma hatası" to "Playback error"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 private enum class GestureMode { BRIGHTNESS, VOLUME, SEEK }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -148,6 +222,7 @@ fun PlayerScreen(navController: NavHostController) {
     val app = context.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     val profile = vm.repository.cachedProfile()
+    val lang = vm.store.settings().language
 
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
@@ -571,7 +646,7 @@ fun PlayerScreen(navController: NavHostController) {
                                         screenBrightness = newB
                                     }
                                 }
-                                gestureText = "Parlaklık %${(newB * 100).toInt()}"
+                                gestureText = str(lang, "Parlaklık") + "%${(newB * 100).toInt()}"
                             }
                             GestureMode.VOLUME -> {
                                 val newV = (gestureStartVolume - (((change.position.y - gestureStartY) / size.height) * audioMax).toInt())
@@ -579,7 +654,7 @@ fun PlayerScreen(navController: NavHostController) {
                                 volume = newV
                                 audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, newV, 0)
                                 val pct = if (audioMax > 0) (newV * 100 / audioMax) else 0
-                                gestureText = "Ses %$pct"
+                                gestureText = str(lang, "Ses") + " %$pct"
                             }
                             null -> {}
                         }
@@ -620,7 +695,7 @@ fun PlayerScreen(navController: NavHostController) {
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = PlaybackManager.currentTitle.ifBlank { "Yayınlanıyor…" },
+                    text = PlaybackManager.currentTitle.ifBlank { str(lang, "Yayınlanıyor…") },
                     color = Color.White,
                     style = MaterialTheme.typography.titleLarge,
                     maxLines = 2,
@@ -629,7 +704,7 @@ fun PlayerScreen(navController: NavHostController) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "TV'de yayınlanıyor",
+                    text = str(lang, "TV'de yayınlanıyor"),
                     color = Color.White.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -679,7 +754,7 @@ fun PlayerScreen(navController: NavHostController) {
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Geri",
+                            contentDescription = str(lang, "Geri"),
                             tint = Color.White,
                             modifier = Modifier.size(22.dp)
                         )
@@ -704,7 +779,7 @@ fun PlayerScreen(navController: NavHostController) {
                         )
                         if (currentChannel != null && isLive) {
                             Text(
-                                text = "${currentChannel?.tvGenreTitle ?: ""}  •  Kanal ${currentChannel?.number ?: ""}",
+                                text = "${currentChannel?.tvGenreTitle ?: ""}  •  ${str(lang, "Kanal")} ${currentChannel?.number ?: ""}",
                                 color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
@@ -735,7 +810,7 @@ fun PlayerScreen(navController: NavHostController) {
                             ) {
                                 Icon(
                                     imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                    contentDescription = "Favori",
+                                    contentDescription = str(lang, "Favori"),
                                     tint = if (isFav) Color(0xFFFF5252) else Color.White,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -760,13 +835,13 @@ fun PlayerScreen(navController: NavHostController) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
                                     Icons.Default.Bedtime,
-                                    contentDescription = "Uyku zamanlayıcısı",
+                                    contentDescription = str(lang, "Uyku zamanlayıcısı"),
                                     tint = if (sleepRemaining != 0L) Color(0xFFFFB74D) else Color.White,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 if (sleepRemaining != 0L) {
                                     Text(
-                                        sleepLabel(sleepRemaining),
+                                        sleepLabel(sleepRemaining, lang),
                                         color = Color(0xFFFFB74D),
                                         fontSize = 8.sp,
                                         maxLines = 1
@@ -780,38 +855,38 @@ fun PlayerScreen(navController: NavHostController) {
                                 if (url.isNotBlank()) {
                                     runCatching {
                                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setType("video/*") }
-                                        context.startActivity(Intent.createChooser(intent, "Oynatıcı seç"))
+                                        context.startActivity(Intent.createChooser(intent, str(lang, "Oynatıcı seç")))
                                     }
                                 }
                             },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = "Harici oynatıcı", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.OpenInNew, contentDescription = str(lang, "Harici oynatıcı"), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         // Lock icon and PiP icon side-by-side
                         IconButton(
                             onClick = { locked = true; overlayVisible = false },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.Lock, contentDescription = "Kilit", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Lock, contentDescription = str(lang, "Kilit"), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         IconButton(
                             onClick = { PlaybackManager.enterPip(activity) },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = "PiP (Resim içinde resim)", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = str(lang, "PiP (Resim içinde resim)"), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         IconButton(
                             onClick = { showInfo = true },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.Info, contentDescription = "Bilgi", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Info, contentDescription = str(lang, "Bilgi"), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         IconButton(
                             onClick = { showPlayerSettings = true },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.Settings, contentDescription = "Ayarlar", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Settings, contentDescription = str(lang, "Ayarlar"), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -875,7 +950,7 @@ fun PlayerScreen(navController: NavHostController) {
                         ) {
                             Icon(
                                 Icons.Default.Replay10,
-                                contentDescription = "10 sn Geri",
+                                contentDescription = str(lang, "10 sn Geri"),
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -887,7 +962,7 @@ fun PlayerScreen(navController: NavHostController) {
                         ) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = "Oynat/Duraklat",
+                                contentDescription = str(lang, "Oynat/Duraklat"),
                                 tint = Color.White,
                                 modifier = Modifier.size(48.dp)
                             )
@@ -899,7 +974,7 @@ fun PlayerScreen(navController: NavHostController) {
                         ) {
                             Icon(
                                 Icons.Default.Forward10,
-                                contentDescription = "10 sn İleri",
+                                contentDescription = str(lang, "10 sn İleri"),
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -911,7 +986,7 @@ fun PlayerScreen(navController: NavHostController) {
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = "Ses Dili",
+                                contentDescription = str(lang, "Ses Dili"),
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -922,7 +997,7 @@ fun PlayerScreen(navController: NavHostController) {
                         ) {
                             Icon(
                                 Icons.Default.Subtitles,
-                                contentDescription = "Altyazı",
+                                contentDescription = str(lang, "Altyazı"),
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -938,7 +1013,7 @@ fun PlayerScreen(navController: NavHostController) {
                             ) {
                                 Icon(
                                     Icons.Default.SkipNext,
-                                    contentDescription = "Sonraki Bölüm",
+                                    contentDescription = str(lang, "Sonraki Bölüm"),
                                     tint = Color.White,
                                     modifier = Modifier.size(28.dp)
                                 )
@@ -948,11 +1023,11 @@ fun PlayerScreen(navController: NavHostController) {
                 } else {
                     // LIVE TV CONTROLS
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                        Text("● CANLI", color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
+                        Text(str(lang, "● CANLI"), color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
                         if (liveSeekable) {
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "(timeshift: geri sarılabilir)",
+                                str(lang, "(timeshift: geri sarılabilir)"),
                                 color = Color.White.copy(alpha = 0.5f),
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -987,7 +1062,7 @@ fun PlayerScreen(navController: NavHostController) {
                                 modifier = Modifier.weight(1f)
                             )
                             TextButton(onClick = { PlaybackManager.seekTo((duration - 1000).coerceAtLeast(0L)) }) {
-                                Text("Canlıya Dön", color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
+                                Text(str(lang, "Canlıya Dön"), color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -1005,7 +1080,7 @@ fun PlayerScreen(navController: NavHostController) {
                             }) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                    contentDescription = "Önceki",
+                                    contentDescription = str(lang, "Önceki"),
                                     tint = Color.White,
                                     modifier = Modifier.size(36.dp)
                                 )
@@ -1013,7 +1088,7 @@ fun PlayerScreen(navController: NavHostController) {
                             IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
                                 Icon(
                                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = "Oynat/Duraklat",
+                                    contentDescription = str(lang, "Oynat/Duraklat"),
                                     tint = Color.White,
                                     modifier = Modifier.size(52.dp)
                                 )
@@ -1023,7 +1098,7 @@ fun PlayerScreen(navController: NavHostController) {
                                 IconButton(onClick = { PlaybackManager.seekBack(30_000L) }) {
                                     Icon(
                                         Icons.Default.Replay10,
-                                        contentDescription = "30 sn geri sar",
+                                        contentDescription = str(lang, "30 sn geri sar"),
                                         tint = Color.White,
                                         modifier = Modifier.size(30.dp)
                                     )
@@ -1036,7 +1111,7 @@ fun PlayerScreen(navController: NavHostController) {
                             }) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = "Sonraki",
+                                    contentDescription = str(lang, "Sonraki"),
                                     tint = Color.White,
                                     modifier = Modifier.size(36.dp)
                                 )
@@ -1044,7 +1119,7 @@ fun PlayerScreen(navController: NavHostController) {
                             IconButton(onClick = { showTracks = true }) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = "Ses",
+                                    contentDescription = str(lang, "Ses"),
                                     tint = Color.White,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -1052,7 +1127,7 @@ fun PlayerScreen(navController: NavHostController) {
                             IconButton(onClick = { showSubs = true }) {
                                 Icon(
                                     Icons.Default.Subtitles,
-                                    contentDescription = "Altyazı",
+                                    contentDescription = str(lang, "Altyazı"),
                                     tint = Color.White,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -1075,11 +1150,11 @@ fun PlayerScreen(navController: NavHostController) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(
                                         Icons.Default.Tv,
-                                        contentDescription = "Rehber",
+                                        contentDescription = str(lang, "Rehber"),
                                         tint = Color.White,
                                         modifier = Modifier.size(22.dp)
                                     )
-                                    Text("Rehber", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                    Text(str(lang, "Rehber"), color = Color.White, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                             Box(
@@ -1091,11 +1166,11 @@ fun PlayerScreen(navController: NavHostController) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(
                                         Icons.Default.List,
-                                        contentDescription = "Kanallar",
+                                        contentDescription = str(lang, "Kanallar"),
                                         tint = Color.White,
                                         modifier = Modifier.size(22.dp)
                                     )
-                                    Text("Kanallar", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                    Text(str(lang, "Kanallar"), color = Color.White, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -1118,7 +1193,7 @@ fun PlayerScreen(navController: NavHostController) {
                     onClick = { locked = false; overlayVisible = true },
                     modifier = Modifier.statusBarsPadding().padding(8.dp)
                 ) {
-                    Icon(Icons.Default.LockOpen, contentDescription = "Kiliti aç", tint = Color.White)
+                    Icon(Icons.Default.LockOpen, contentDescription = str(lang, "Kiliti aç"), tint = Color.White)
                 }
             }
         }
@@ -1136,6 +1211,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     if (showTracks) {
         AudioTracksSheet(
+            lang = lang,
             onDismiss = { showTracks = false },
             onSelect = { lang ->
                 PlaybackManager.setAudioLanguage(lang)
@@ -1146,6 +1222,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     if (showSubs) {
         SubtitleSheet(
+            lang = lang,
             onDismiss = { showSubs = false },
             onSelect = { lang ->
                 PlaybackManager.setSubtitleLanguage(lang)
@@ -1158,6 +1235,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     if (showEpg) {
         EpgSheet(
+            lang = lang,
             channel = currentChannel,
             profile = profile,
             onDismiss = { showEpg = false },
@@ -1167,6 +1245,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     if (showInfo) {
         PlayerInfoSheet(
+            lang = lang,
             channel = currentChannel,
             profile = profile,
             onDismiss = { showInfo = false }
@@ -1175,6 +1254,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     if (showPlayerSettings) {
         PlayerSettingsSheet(
+            lang = lang,
             currentSpeed = playbackSpeed,
             currentAspect = aspectMode,
             binge = settings.bingeMode,
@@ -1188,6 +1268,7 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     ChannelListPanel(
+        lang = lang,
         visible = showChannels,
         currentId = currentChannel?.id,
         onClose = { showChannels = false },
@@ -1206,6 +1287,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     if (showSleepDialog) {
         SleepTimerDialog(
+            lang = lang,
             current = sleepRemaining,
             onMinutes = { minutes -> PlaybackManager.setSleepTimer(minutes); showSleepDialog = false },
             onUntilEnd = { PlaybackManager.setSleepUntilEpisodeEnd(); showSleepDialog = false },
@@ -1215,14 +1297,15 @@ fun PlayerScreen(navController: NavHostController) {
     }
 }
 
-private fun sleepLabel(sec: Long): String = when {
-    sec < 0 -> "Bölüm sonu"
+private fun sleepLabel(sec: Long, lang: String): String = when {
+    sec < 0 -> str(lang, "Bölüm sonu")
     sec >= 3600 -> "%d:%02d:%02d".format(sec / 3600, (sec % 3600) / 60, sec % 60)
     else -> "%d:%02d".format(sec / 60, sec % 60)
 }
 
 @Composable
 private fun SleepTimerDialog(
+    lang: String,
     current: Long,
     onMinutes: (Int) -> Unit,
     onUntilEnd: () -> Unit,
@@ -1231,17 +1314,17 @@ private fun SleepTimerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Uyku Zamanlayıcısı") },
+        title = { Text(str(lang, "Uyku Zamanlayıcısı")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (current != 0L) {
                     Text(
-                        "Aktif: ${if (current < 0) "Bölüm sonunda dur" else "${sleepLabel(current)} kaldı"}",
+                        "${str(lang, "Aktif: ")}${if (current < 0) str(lang, "Bölüm sonunda dur") else "${sleepLabel(current, lang)} ${str(lang, "kaldı")}"}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                listOf(15 to "15 dk", 30 to "30 dk", 60 to "1 saat", 90 to "1.5 saat").forEach { (m, label) ->
+                listOf(15 to str(lang, "15 dk"), 30 to str(lang, "30 dk"), 60 to str(lang, "1 saat"), 90 to str(lang, "1.5 saat")).forEach { (m, label) ->
                     ListItem(
                         headlineContent = { Text(label) },
                         trailingContent = if (current == m * 60L) {
@@ -1251,8 +1334,8 @@ private fun SleepTimerDialog(
                     )
                 }
                 ListItem(
-                    headlineContent = { Text("Bölüm sonunda dur") },
-                    supportingContent = { Text("Geçerli bölüm/medya bitince kapanır") },
+                    headlineContent = { Text(str(lang, "Bölüm sonunda dur")) },
+                    supportingContent = { Text(str(lang, "Geçerli bölüm/medya bitince kapanır")) },
                     trailingContent = if (current < 0) {
                         { Text("✓", color = MaterialTheme.colorScheme.primary) }
                     } else null,
@@ -1260,28 +1343,28 @@ private fun SleepTimerDialog(
                 )
                 if (current != 0L) {
                     ListItem(
-                        headlineContent = { Text("Kapat") },
+                        headlineContent = { Text(str(lang, "Kapat")) },
                         modifier = Modifier.clickable(onClick = onCancel)
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(str(lang, "Kapat")) } }
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioTracksSheet(onDismiss: () -> Unit, onSelect: (String?) -> Unit) {
+fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) -> Unit) {
     var tracks by remember { mutableStateOf(PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO)) }
     LaunchedEffect(Unit) {
         tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO)
     }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Text("Ses Dili", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+            Text(str(lang, "Ses Dili"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             ListItem(
-                headlineContent = { Text("Varsayılan (Otomatik)") },
+                headlineContent = { Text(str(lang, "Varsayılan (Otomatik)")) },
                 modifier = Modifier.clickable { onSelect(null) }
             )
             tracks.forEach { (lang, label) ->
@@ -1293,7 +1376,7 @@ fun AudioTracksSheet(onDismiss: () -> Unit, onSelect: (String?) -> Unit) {
             }
             if (tracks.isEmpty()) {
                 Text(
-                    "Ses izi bulunamadı",
+                    str(lang, "Ses izi bulunamadı"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp)
                 )
@@ -1305,6 +1388,7 @@ fun AudioTracksSheet(onDismiss: () -> Unit, onSelect: (String?) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubtitleSheet(
+    lang: String,
     onDismiss: () -> Unit,
     onSelect: (String?) -> Unit,
     enabled: Boolean,
@@ -1316,15 +1400,15 @@ fun SubtitleSheet(
     }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Text("Altyazı", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+            Text(str(lang, "Altyazı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             ListItem(
-                headlineContent = { Text("Altyazılar") },
+                headlineContent = { Text(str(lang, "Altyazılar")) },
                 trailingContent = {
                     Switch(checked = enabled, onCheckedChange = { onToggle(it) })
                 }
             )
             ListItem(
-                headlineContent = { Text("Altyazı yok (Kapat)") },
+                headlineContent = { Text(str(lang, "Altyazı yok (Kapat)")) },
                 modifier = Modifier.clickable { onSelect(null) }
             )
             tracks.forEach { (lang, label) ->
@@ -1341,6 +1425,7 @@ fun SubtitleSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EpgSheet(
+    lang: String,
     channel: Channel?,
     profile: com.stalkerapp.data.Profile?,
     onDismiss: () -> Unit,
@@ -1390,7 +1475,7 @@ fun EpgSheet(
                     modifier = Modifier.padding(16.dp)
                 )
                 programs.orEmpty().isEmpty() -> Text(
-                    "EPG verisi yok",
+                    str(lang, "EPG verisi yok"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp)
                 )
@@ -1412,7 +1497,7 @@ fun EpgSheet(
                                 )
                                 if (p.isCurrent) {
                                     Text(
-                                        "● ŞİMDİ",
+                                        str(lang, "● ŞİMDİ"),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -1455,7 +1540,7 @@ fun EpgSheet(
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text(
-                                        if (reminded) "🔔 Hatırlatma ayarlandı (dokun: kaldır)" else "🔔 Başlayınca Bildir",
+                                        if (reminded) str(lang, "🔔 Hatırlatma ayarlandı (dokun: kaldır)") else str(lang, "🔔 Başlayınca Bildir"),
                                         color = if (reminded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.labelMedium
                                     )
@@ -1487,7 +1572,7 @@ fun EpgSheet(
                                         contentPadding = PaddingValues(0.dp)
                                     ) {
                                         Text(
-                                            if (planned) "⏺ Kayıt planlandı (dokun: iptal)" else "⏺ Kaydet (cihaza)",
+                                            if (planned) str(lang, "⏺ Kayıt planlandı (dokun: iptal)") else str(lang, "⏺ Kaydet (cihaza)"),
                                             color = if (planned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.labelMedium
                                         )
@@ -1508,7 +1593,7 @@ fun EpgSheet(
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text(
-                                        "▶ Geçmiş Yayını İzle (catch-up)",
+                                        str(lang, "▶ Geçmiş Yayını İzle (catch-up)"),
                                         color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.labelMedium
                                     )
@@ -1543,6 +1628,7 @@ private fun formatMs(ms: Long): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerInfoSheet(
+    lang: String,
     channel: Channel?,
     profile: Profile?,
     onDismiss: () -> Unit
@@ -1574,7 +1660,7 @@ fun PlayerInfoSheet(
         )
         rows.add("Engine" to "exo player")
         rows.add("audio" to mimeLabel(a?.sampleMimeType))
-        rows.add("BUFFER" to "%.1f sn".format(bufSec))
+        rows.add("BUFFER" to str(lang, "%.1f sn").format(bufSec))
         rows.add("DECODER" to (v?.codecs ?: "MediaCodec"))
         if (url.isNotBlank()) rows.add("URL" to url)
     }
@@ -1646,6 +1732,7 @@ private fun mimeLabel(mime: String?): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerSettingsSheet(
+    lang: String,
     currentSpeed: Float,
     currentAspect: Int,
     binge: Boolean,
@@ -1658,16 +1745,16 @@ fun PlayerSettingsSheet(
 ) {
     val speeds = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
     val aspects = listOf(
-        "Sığdır" to AspectRatioFrameLayout.RESIZE_MODE_FIT,
-        "Doldur" to AspectRatioFrameLayout.RESIZE_MODE_FILL,
-        "Yakınlaştır" to AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        str(lang, "Sığdır") to AspectRatioFrameLayout.RESIZE_MODE_FIT,
+        str(lang, "Doldur") to AspectRatioFrameLayout.RESIZE_MODE_FILL,
+        str(lang, "Yakınlaştır") to AspectRatioFrameLayout.RESIZE_MODE_ZOOM
     )
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Text("Oynatma Hızı", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+            Text(str(lang, "Oynatma Hızı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             speeds.forEach { s ->
                 ListItem(
-                    headlineContent = { Text("${if (s == 1f) "Normal" else s}⨉") },
+                    headlineContent = { Text("${if (s == 1f) str(lang, "Normal") else s}⨉") },
                     trailingContent = if (s == currentSpeed) {
                         { Text("✓", color = MaterialTheme.colorScheme.primary) }
                     } else null,
@@ -1675,7 +1762,7 @@ fun PlayerSettingsSheet(
                 )
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text("Görüntü Oranı", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+            Text(str(lang, "Görüntü Oranı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             aspects.forEach { (label, mode) ->
                 ListItem(
                     headlineContent = { Text(label) },
@@ -1687,12 +1774,12 @@ fun PlayerSettingsSheet(
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Text(
-                "A/V Senkron (Ses Gecikmesi)",
+                str(lang, "A/V Senkron (Ses Gecikmesi)"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(16.dp)
             )
             Text(
-                "Pozitif = ses gecikir, negatif = ses öne alınır.",
+                str(lang, "Pozitif = ses gecikir, negatif = ses öne alınır."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -1719,11 +1806,11 @@ fun PlayerSettingsSheet(
                 onClick = { onDelay(0) },
                 enabled = audioDelayMs != 0,
                 modifier = Modifier.padding(horizontal = 16.dp)
-            ) { Text("Sıfırla (0 ms)") }
+            ) { Text(str(lang, "Sıfırla (0 ms)")) }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             ListItem(
-                headlineContent = { Text("Binge Modu") },
-                supportingContent = { Text("Bölüm bitince sıradaki bölüm otomatik oynatılır") },
+                headlineContent = { Text(str(lang, "Binge Modu")) },
+                supportingContent = { Text(str(lang, "Bölüm bitince sıradaki bölüm otomatik oynatılır")) },
                 trailingContent = { Switch(checked = binge, onCheckedChange = onBinge) }
             )
         }
@@ -1732,6 +1819,7 @@ fun PlayerSettingsSheet(
 
 @Composable
 fun ChannelListPanel(
+    lang: String,
     visible: Boolean,
     currentId: Long? = null,
     onClose: () -> Unit,
@@ -1769,19 +1857,19 @@ fun ChannelListPanel(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Kanallar",
+                            str(lang, "Kanallar"),
                             style = MaterialTheme.typography.titleMedium,
                             color = Color.White,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(onClick = onClose) {
-                            Icon(Icons.Default.Close, contentDescription = "Kapat", tint = Color.White)
+                            Icon(Icons.Default.Close, contentDescription = str(lang, "Kapat"), tint = Color.White)
                         }
                     }
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        placeholder = { Text("Kanal ara…") },
+                        placeholder = { Text(str(lang, "Kanal ara…")) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()

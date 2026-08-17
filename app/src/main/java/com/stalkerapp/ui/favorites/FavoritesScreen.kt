@@ -38,6 +38,16 @@ import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.vod.VodPoster
 import kotlinx.coroutines.launch
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Portal bağlı değil" to "No portal connected",
+    "Henüz favori yok" to "No favorites yet",
+    "Kanallar" to "Channels",
+    "Film & Dizi" to "Movies & Series",
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 @Composable
 fun FavoritesScreen(
     profile: Profile?,
@@ -46,21 +56,23 @@ fun FavoritesScreen(
     modifier: Modifier = Modifier
 ) {
     if (profile == null) {
+        val lang = (LocalContext.current.applicationContext as StalkerApp).store.settings().language
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Portal bağlı değil")
+            Text(str(lang, "Portal bağlı değil"))
         }
         return
     }
 
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     if (favChannels.isEmpty() && favVods.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Henüz favori yok", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(str(lang, "Henüz favori yok"), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
     }
@@ -72,7 +84,7 @@ fun FavoritesScreen(
             if (favChannels.isNotEmpty()) {
                 item {
                     Text(
-                        "Kanallar",
+                        str(lang, "Kanallar"),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -99,7 +111,7 @@ fun FavoritesScreen(
             if (favVods.isNotEmpty()) {
                 item {
                     Text(
-                        "Film & Dizi",
+                        str(lang, "Film & Dizi"),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(16.dp)
                     )

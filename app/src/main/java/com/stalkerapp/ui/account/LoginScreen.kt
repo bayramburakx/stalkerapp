@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,9 +50,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -74,11 +77,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     firebase: FirebaseSyncManager,
+    lang: String,
     onSignedIn: () -> Unit,
     onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
 
     var mode by remember { mutableStateOf("login") } // "login" | "register"
     var email by remember { mutableStateOf("") }
@@ -105,21 +110,21 @@ fun LoginScreen(
                     error = null
                     firebase.signInWithGoogle(account)
                         .onSuccess { completeSignIn(firebase, context, onSignedIn, scope) }
-                        .onFailure { e -> error = e.message ?: "Google girişi başarısız" }
+                        .onFailure { e -> error = e.message ?: t("Google girişi başarısız") }
                     busy = false
                 }
             } catch (e: ApiException) {
                 // 10 = DEVELOPER_ERROR (client ID / SHA-1 eşleşmesi), 12500 = sunucu hatası,
                 // 12501 = kullanıcı iptal etti. Kullanıcıya anlamlı bir mesaj göster.
                 error = when (e.statusCode) {
-                    10 -> "Google yapılandırma hatası: Firebase'e SHA-1 parmak izi ve Google oturumu eklenmiş olmalı"
-                    12500 -> "Google sunucu hatası — Firebase konsolunda Google oturum açma etkin mi kontrol et"
-                    12501 -> "Google girişi iptal edildi"
-                    else -> "Google girişi başarısız (kod ${e.statusCode})"
+                    10 -> t("Google yapılandırma hatası: Firebase'e SHA-1 parmak izi ve Google oturumu eklenmiş olmalı")
+                    12500 -> t("Google sunucu hatası — Firebase konsolunda Google oturum açma etkin mi kontrol et")
+                    12501 -> t("Google girişi iptal edildi")
+                    else -> t("Google girişi başarısız") + " (kod ${e.statusCode})"
                 }
             }
         } else {
-            error = "Google girişi iptal edildi"
+            error = t("Google girişi iptal edildi")
         }
     }
 
@@ -136,10 +141,10 @@ fun LoginScreen(
         if (busy) return
         val mail = email.trim()
         when {
-            mail.isEmpty() -> error = "E-posta adresi girin"
-            password.isEmpty() -> error = "Şifre girin"
-            mode == "register" && password.length < 6 -> error = "Şifre en az 6 karakter olmalı"
-            mode == "register" && password != password2 -> error = "Şifreler eşleşmiyor"
+            mail.isEmpty() -> error = t("E-posta adresi girin")
+            password.isEmpty() -> error = t("Şifre girin")
+            mode == "register" && password.length < 6 -> error = t("Şifre en az 6 karakter olmalı")
+            mode == "register" && password != password2 -> error = t("Şifreler eşleşmiyor")
             else -> {
                 busy = true
                 error = null
@@ -154,13 +159,13 @@ fun LoginScreen(
                         .onSuccess { completeSignIn(firebase, context, onSignedIn, scope) }
                         .onFailure { e ->
                             error = when {
-                                e.message?.contains("already in use") == true -> "Bu e-posta zaten kayıtlı — giriş yapın"
-                                e.message?.contains("invalid-email") == true -> "Geçersiz e-posta adresi"
-                                e.message?.contains("wrong-password") == true -> "Şifre hatalı"
-                                e.message?.contains("user-not-found") == true -> "Bu e-posta ile kayıt bulunamadı"
-                                e.message?.contains("invalid-credential") == true -> "E-posta veya şifre hatalı"
-                                e.message?.contains("too-many-requests") == true -> "Çok fazla deneme — bir süre sonra tekrar deneyin"
-                                else -> e.message ?: "İşlem başarısız"
+                                e.message?.contains("already in use") == true -> t("Bu e-posta zaten kayıtlı — giriş yapın")
+                                e.message?.contains("invalid-email") == true -> t("Geçersiz e-posta adresi")
+                                e.message?.contains("wrong-password") == true -> t("Şifre hatalı")
+                                e.message?.contains("user-not-found") == true -> t("Bu e-posta ile kayıt bulunamadı")
+                                e.message?.contains("invalid-credential") == true -> t("E-posta veya şifre hatalı")
+                                e.message?.contains("too-many-requests") == true -> t("Çok fazla deneme — bir süre sonra tekrar deneyin")
+                                else -> e.message ?: t("İşlem başarısız")
                             }
                         }
                     busy = false
@@ -189,7 +194,7 @@ fun LoginScreen(
                         IconButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Geri",
+                                contentDescription = t("Geri"),
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -200,25 +205,23 @@ fun LoginScreen(
                 Box(
                     modifier = Modifier
                         .size(72.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape),
-                    contentAlignment = Alignment.Center
+                        .clip(CircleShape)
                 ) {
-                    Icon(
-                        Icons.Filled.Person,
+                    Image(
+                        painter = painterResource(com.stalkerapp.R.drawable.portio_logo),
                         contentDescription = null,
-                        modifier = Modifier.size(40.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = if (mode == "login") "Hesabına Giriş Yap" else "Hesap Oluştur",
+                    text = if (mode == "login") t("Hesabına Giriş Yap") else t("Hesap Oluştur"),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Verilerin bulutta senkronlanır — başka cihazda kaldığın yerden devam et",
+                    text = t("Verilerin bulutta senkronlanır — başka cihazda kaldığın yerden devam et"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
@@ -229,7 +232,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("E-posta") },
+                    label = { Text(t("E-posta")) },
                     leadingIcon = { Icon(Icons.Filled.Email, null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -239,7 +242,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Şifre") },
+                    label = { Text(t("Şifre")) },
                     leadingIcon = { Icon(Icons.Filled.Lock, null) },
                     singleLine = true,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -259,7 +262,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = password2,
                         onValueChange = { password2 = it },
-                        label = { Text("Şifre (tekrar)") },
+                        label = { Text(t("Şifre (tekrar)")) },
                         leadingIcon = { Icon(Icons.Filled.Lock, null) },
                         singleLine = true,
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -300,27 +303,27 @@ fun LoginScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text(if (mode == "login") "Giriş Yap" else "Kayıt Ol", fontWeight = FontWeight.Bold)
+                        Text(if (mode == "login") t("Giriş Yap") else t("Kayıt Ol"), fontWeight = FontWeight.Bold)
                     }
                 }
 
                 if (mode == "login") {
                     TextButton(onClick = {
-                        if (email.isBlank()) { error = "Önce e-posta adresini girin"; return@TextButton }
+                        if (email.isBlank()) { error = t("Önce e-posta adresini girin"); return@TextButton }
                         scope.launch {
                             firebase.sendPasswordReset(email.trim())
-                                .onSuccess { info = "Şifre sıfırlama bağlantısı e-postana gönderildi" }
-                                .onFailure { e -> error = e.message ?: "Şifre sıfırlama başarısız" }
+                                .onSuccess { info = t("Şifre sıfırlama bağlantısı e-postana gönderildi") }
+                                .onFailure { e -> error = e.message ?: t("Şifre sıfırlama başarısız") }
                         }
                     }) {
-                        Text("Şifremi unuttum")
+                        Text(t("Şifremi unuttum"))
                     }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
                     Text(
-                        " veya ",
+                        " ${t("veya")} ",
                         modifier = Modifier.padding(horizontal = 12.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -340,14 +343,13 @@ fun LoginScreen(
                     )
                 ) {
                     Text(
-                        "Google ile devam et" + if (!googleAvailable) " (kurulum gerekli)" else "",
+                        if (!googleAvailable) t("Google ile devam et (kurulum gerekli)") else t("Google ile devam et"),
                         fontWeight = FontWeight.Bold
                     )
                 }
                 if (!googleAvailable) {
                     Text(
-                        "Google girişi henüz yapılandırılmadı. Firebase konsolunda Google\n" +
-                            "oturumunu etkinleştirip Web client ID'yi doldur.",
+                        t("Google girişi henüz yapılandırılmadı. Firebase konsolunda Google oturumunu etkinleştirip Web client ID'yi doldur."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center,
@@ -358,7 +360,7 @@ fun LoginScreen(
                 Spacer(Modifier.height(24.dp))
                 TextButton(onClick = { mode = if (mode == "login") "register" else "login"; error = null; info = null }) {
                     Text(
-                        if (mode == "login") "Hesabın yok mu? Kayıt ol" else "Zaten hesabın var mı? Giriş yap",
+                        if (mode == "login") t("Hesabın yok mu? Kayıt ol") else t("Zaten hesabın var mı? Giriş yap"),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }

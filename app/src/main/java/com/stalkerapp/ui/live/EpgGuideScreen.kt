@@ -62,6 +62,24 @@ import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Portal bağlı değil" to "Portal not connected",
+    "Geri" to "Back",
+    "EPG Rehberi" to "EPG Guide",
+    "Kanal ara…" to "Search channels…",
+    "Tümü" to "All",
+    "Liste" to "List",
+    "Izgara" to "Grid",
+    "Geri dönüp tekrar deneyin" to "Go back and try again",
+    "Kanal bulunamadı" to "No channels found",
+    "Kanal" to "Channel",
+    "EPG yok" to "No EPG",
+    "Varsayılan" to "Default",
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 /**
  * Tam ekran EPG rehberi: kanallar + "şimdi/sonra" programları. İlk ~60 kanalın
  * EPG'si arka planda çekilir; kalanlar için "yükleniyor" gösterilir.
@@ -74,10 +92,11 @@ fun EpgGuideScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
 
     if (profile == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Portal bağlı değil")
+            Text(str(lang, "Portal bağlı değil"))
         }
         return
     }
@@ -137,10 +156,10 @@ fun EpgGuideScreen(
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.35f))
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), tint = Color.White)
                 }
                 Text(
-                    "EPG Rehberi",
+                    str(lang, "EPG Rehberi"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -181,7 +200,7 @@ fun EpgGuideScreen(
                         decorationBox = { inner ->
                             if (query.isBlank()) {
                                 Text(
-                                    "Kanal ara…",
+                                    str(lang, "Kanal ara…"),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -202,7 +221,7 @@ fun EpgGuideScreen(
                         GlassChip(
                             selected = selectedGenre == 0L,
                             onClick = { selectedGenre = 0L },
-                            label = "Tümü"
+                            label = str(lang, "Tümü")
                         )
                     }
                     items(genreList) { g ->
@@ -225,12 +244,12 @@ fun EpgGuideScreen(
                 GlassChip(
                     selected = !gridMode,
                     onClick = { gridMode = false },
-                    label = "Liste"
+                    label = str(lang, "Liste")
                 )
                 GlassChip(
                     selected = gridMode,
                     onClick = { gridMode = true },
-                    label = "Izgara"
+                    label = str(lang, "Izgara")
                 )
             }
 
@@ -240,8 +259,8 @@ fun EpgGuideScreen(
 
             when {
                 loading && channels == null -> LoadingBox()
-                error != null && channels == null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
-                filtered.isEmpty() -> EmptyState("Kanal bulunamadı")
+                error != null && channels == null -> EmptyState("$error\n\n${str(lang, "Geri dönüp tekrar deneyin")}")
+                filtered.isEmpty() -> EmptyState(str(lang, "Kanal bulunamadı"))
                 gridMode -> EpgGridView(
                     channels = filtered,
                     epg = epg,
@@ -290,15 +309,15 @@ fun EpgGuideScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        "Kanal ${ch.number}",
+                                        "${str(lang, "Kanal")} ${ch.number}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White.copy(alpha = 0.5f)
                                     )
                                 }
                                 Text(
                                     when {
-                                        programs.isEmpty() -> "EPG yok"
-                                        programs.first().isDefault -> "Varsayılan"
+                                        programs.isEmpty() -> str(lang, "EPG yok")
+                                        programs.first().isDefault -> str(lang, "Varsayılan")
                                         else -> "EPG"
                                     },
                                     style = MaterialTheme.typography.labelSmall,

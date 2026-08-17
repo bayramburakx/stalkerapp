@@ -19,6 +19,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import com.stalkerapp.util.L10n
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
@@ -55,6 +56,8 @@ class PortalRepository(
     private val client: StalkerClient
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private fun l10n(text: String): String = L10n.t(store.settings().language, text)
 
     private val handshakeTokens = mutableMapOf<String, String>()
     private val streamTokens = mutableMapOf<String, String>()
@@ -184,7 +187,7 @@ class PortalRepository(
             val isStalkerPlaceholder = u.contains("localhost") || u.contains("127.0.0.1")
             if (isDirect && !isStalkerPlaceholder) return u
         }
-        val p = profile ?: throw StalkerException("Kanal akış URL'si alınamadı (profil yok)")
+        val p = profile ?: throw StalkerException(l10n("Kanal akış URL'si alınamadı (profil yok)"))
         val base = p.baseUrl
         val resp = try {
             client.request(
@@ -220,7 +223,7 @@ class PortalRepository(
             val s = if (server.startsWith("http")) server else "http://$server"
             return "$s/${ch.id}"
         }
-        throw StalkerException("Kanal akış URL'si alınamadı")
+        throw StalkerException(l10n("Kanal akış URL'si alınamadı"))
     }
 
     private fun rewriteLocalhost(url: String, profile: Profile): String {
@@ -272,7 +275,7 @@ class PortalRepository(
             )
             val hToken = handshake.jsonObject["token"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
             if (hToken.isEmpty()) {
-                throw StalkerException("Handshake başarısız: token alınamadı. Sunucu erişimi engelliyor olabilir.")
+                throw StalkerException(l10n("Handshake başarısız: token alınamadı. Sunucu erişimi engelliyor olabilir."))
             }
 
             val body = buildMap {
@@ -303,7 +306,7 @@ class PortalRepository(
             // bu yüzden boş alanlar tek başına hata nedeni olmamalı.
             if (!profileError.isNullOrBlank()) {
                 throw StalkerException(
-                    "Portal MAC'i kabul etmedi: ${profileError}. Portalda bu MAC'in kayıtlı ve aktif olduğundan emin olun."
+                    l10n("Portal MAC'i kabul etmedi") + ": ${profileError}. " + l10n("Portalda bu MAC'in kayıtlı ve aktif olduğundan emin olun")
                 )
             }
 
@@ -332,7 +335,7 @@ class PortalRepository(
             _status.value = PortalStatus.Connected(profile)
             profile
         } catch (e: Exception) {
-            _status.value = PortalStatus.Error(e.message ?: "Bağlantı hatası")
+            _status.value = PortalStatus.Error(e.message ?: L10n.t(store.settings().language, "Bağlantı hatası"))
             throw e
         }
     }
@@ -776,7 +779,7 @@ class PortalRepository(
         val name = channel.name.ifBlank {
             channelsCache[profile.portal?.id]?.values?.asSequence()
                 ?.flatten()?.firstOrNull { it.id == channel.id }?.name.orEmpty()
-        }.ifBlank { "Yayın" }
+        }.ifBlank { l10n("Yayın") }
         return listOf(
             EpgProgram(
                 chId = channel.id,
@@ -1647,15 +1650,15 @@ class PortalRepository(
         episode: Episode? = null
     ): String {
         return when (store.activeSourceKind()) {
-            "m3u" -> item.cmd.ifBlank { throw StalkerException("Akış URL'si boş") }
+            "m3u" -> item.cmd.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
             "xtream" -> {
                 // Dizi bölümü: URL bölüm üzerinde taşınır (get_series_info'dan).
                 episode?.cmd?.takeIf { it.isNotBlank() }?.let { return it }
-                item.cmd.ifBlank { throw StalkerException("Akış URL'si boş") }
+                item.cmd.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
             }
             else -> stalkerVodStreamUrl(
                 item,
-                profile ?: throw StalkerException("Portal bağlı değil"),
+                profile ?: throw StalkerException(l10n("Portal bağlı değil")),
                 episode
             )
         }
@@ -1697,7 +1700,7 @@ class PortalRepository(
             val s = if (server.startsWith("http")) server else "http://$server"
             return fixLocalhost("$s/media/$apiId.mp4", profile)
         }
-        throw StalkerException("VOD akış URL'si alınamadı")
+        throw StalkerException(l10n("VOD akış URL'si alınamadı"))
     }
 
     private suspend fun tryCreateLink(

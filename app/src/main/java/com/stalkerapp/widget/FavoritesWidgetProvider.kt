@@ -10,6 +10,7 @@ import android.widget.RemoteViews
 import com.stalkerapp.MainActivity
 import com.stalkerapp.R
 import com.stalkerapp.data.Store
+import com.stalkerapp.util.L10n
 
 /**
  * Ana ekran widget'ı: favori kanalları listeler. Bir kanala dokununca uygulama
@@ -26,9 +27,10 @@ class FavoritesWidgetProvider : AppWidgetProvider() {
     private fun buildViews(context: Context): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_favorites)
         val favs = runCatching { Store(context).favoriteChannels().take(6) }.getOrDefault(emptyList())
+        val lang = runCatching { Store(context).settings().language }.getOrDefault("tr")
         views.setTextViewText(
             R.id.widget_header,
-            "Stalker — Favori Kanallar (${favs.size})"
+            "Portio — ${L10n.t(lang, "Favori Kanallar")} (${favs.size})"
         )
         views.removeAllViews(R.id.widget_rows)
         favs.forEach { ch ->

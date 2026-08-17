@@ -92,6 +92,40 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "İçerik bulunamadı" to "No content found",
+    "Portal bağlı değil" to "Portal not connected",
+    "Bu dizi için bölüm bulunamadı" to "No episodes found for this series",
+    "DİZİ" to "SERIES",
+    "FİLM" to "MOVIE",
+    "Oynat" to "Play",
+    "Favori" to "Favorite",
+    "Sonra İzle" to "Watch Later",
+    "Yönetmen: " to "Director: ",
+    "Yazar: " to "Writer: ",
+    "Fragman" to "Trailer",
+    "Fragmanı oynat" to "Play trailer",
+    "Oyuncular" to "Cast",
+    "Sezonlar" to "Seasons",
+    "Sezon izlendi" to "Season watched",
+    "Bölüm bulunamadı" to "No episodes found",
+    "Bölümler" to "Episodes",
+    "Bölüm " to "Episode ",
+    "İzlenmedi yap" to "Mark as unwatched",
+    "İzlendi işaretle" to "Mark as watched",
+    "Benzer İçerikler" to "Similar Content",
+    "Geri" to "Back",
+    "Tüm bölümleri izlenmedi olarak işaretle?" to "Mark all episodes as unwatched?",
+    "Tüm bölümleri izlendi olarak işaretle?" to "Mark all episodes as watched?",
+    "İzlenmedi İşaretle" to "Mark as Unwatched",
+    "İzlendi İşaretle" to "Mark as Watched",
+    "İptal" to "Cancel",
+    "YouTube'da aç" to "Open in YouTube"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun VodDetailScreen(
@@ -104,6 +138,7 @@ fun VodDetailScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val profile = vm.repository.cachedProfile()
     val scope = rememberCoroutineScope()
 
@@ -222,7 +257,7 @@ fun VodDetailScreen(
                 if (base == null) delay(400)
             }
             if (base == null) {
-                error = "İçerik bulunamadı"
+                error = str(lang, "İçerik bulunamadı")
                 return@LaunchedEffect
             }
             // Enrich with detailed info (actors, full director, etc.) when available.
@@ -257,7 +292,7 @@ fun VodDetailScreen(
     val it = item
     if (it == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (loading) CircularProgressIndicator() else Text(error ?: "İçerik bulunamadı")
+            if (loading) CircularProgressIndicator() else Text(error ?: str(lang, "İçerik bulunamadı"))
         }
         return
     }
@@ -350,7 +385,7 @@ fun VodDetailScreen(
         val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
         val p = profile
         if (p == null && !externalSource) {
-            vm.showMessage("Portal bağlı değil")
+            vm.showMessage(str(lang, "Portal bağlı değil"))
             return
         }
         scope.launch {
@@ -367,7 +402,7 @@ fun VodDetailScreen(
                         onOpenPlayer()
                         return@launch
                     }
-                    vm.showMessage("Bu dizi için bölüm bulunamadı")
+                    vm.showMessage(str(lang, "Bu dizi için bölüm bulunamadı"))
                     return@launch
                 }
                 if (!isSeries) {
@@ -496,7 +531,7 @@ fun VodDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                if (isSeries) "DİZİ" else "FİLM",
+                                if (isSeries) str(lang, "DİZİ") else str(lang, "FİLM"),
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
@@ -538,7 +573,7 @@ fun VodDetailScreen(
                                 } else {
                                     Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Oynat", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                    Text(str(lang, "Oynat"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                                 }
                             }
                             // Favori: Oynat'ın hemen sağında, yuvarlak içinde kalp.
@@ -552,7 +587,7 @@ fun VodDetailScreen(
                             ) {
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                    contentDescription = "Favori",
+                                    contentDescription = str(lang, "Favori"),
                                     tint = if (isFavorite) Color(0xFFFF5252) else Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -569,7 +604,7 @@ fun VodDetailScreen(
                             ) {
                                 Icon(
                                     imageVector = if (inWatchLater) Icons.Default.Schedule else Icons.Default.Schedule,
-                                    contentDescription = "Sonra İzle",
+                                    contentDescription = str(lang, "Sonra İzle"),
                                     tint = if (inWatchLater) Color(0xFF64B5F6) else Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -603,7 +638,7 @@ fun VodDetailScreen(
                     }
                     it.director.takeIf { d -> d.isNotBlank() }?.let { d ->
                         Text(
-                            "Yönetmen: $d",
+                            "${str(lang, "Yönetmen: ")}$d",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.clickable { onOpenPerson(d, true) }
@@ -611,7 +646,7 @@ fun VodDetailScreen(
                         Spacer(Modifier.height(4.dp))
                     }
                     it.writers.takeIf { w -> w.isNotBlank() }?.let { w ->
-                        Text("Yazar: $w", style = MaterialTheme.typography.bodyMedium)
+                        Text("${str(lang, "Yazar: ")}$w", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(4.dp))
                     }
                     if (it.description.isNotBlank()) {
@@ -629,7 +664,7 @@ fun VodDetailScreen(
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         Text(
-                            "Fragman",
+                            str(lang, "Fragman"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -649,7 +684,7 @@ fun VodDetailScreen(
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         Text(
-                            "Oyuncular",
+                            str(lang, "Oyuncular"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -716,7 +751,7 @@ fun VodDetailScreen(
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         Text(
-                            "Sezonlar",
+                            str(lang, "Sezonlar"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -782,7 +817,7 @@ fun VodDetailScreen(
                                             ) {
                                                 Icon(
                                                     Icons.Default.Check,
-                                                    contentDescription = "Sezon izlendi",
+                                                    contentDescription = str(lang, "Sezon izlendi"),
                                                     tint = Color.White,
                                                     modifier = Modifier.size(12.dp)
                                                 )
@@ -806,11 +841,11 @@ fun VodDetailScreen(
                 }
                 when {
                     loadingEpisodes -> item { LoadingBox() }
-                    episodes.orEmpty().isEmpty() -> item { EmptyState("Bölüm bulunamadı") }
+                    episodes.orEmpty().isEmpty() -> item { EmptyState(str(lang, "Bölüm bulunamadı")) }
                     else -> item {
                         Column(modifier = Modifier.padding(vertical = 6.dp)) {
                             Text(
-                                "Bölümler",
+                                str(lang, "Bölümler"),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -827,7 +862,7 @@ fun VodDetailScreen(
                                     // yoksa "Bölüm N" (kutu her zaman ad gösterir).
                                     val name = episodeNames[ep.id].orEmpty()
                                         .ifBlank { ep.name }
-                                        .ifBlank { "Bölüm ${ep.episodeNumber}" }
+                                        .ifBlank { "${str(lang, "Bölüm ")}$ep.episodeNumber" }
                                     Box(
                                         modifier = Modifier
                                             .width(196.dp)
@@ -888,7 +923,7 @@ fun VodDetailScreen(
                                                 ) {
                                                     Icon(
                                                         Icons.Default.Check,
-                                                        contentDescription = if (watched) "İzlenmedi yap" else "İzlendi işaretle",
+                                                        contentDescription = if (watched) str(lang, "İzlenmedi yap") else str(lang, "İzlendi işaretle"),
                                                         tint = Color.White,
                                                         modifier = Modifier.size(15.dp)
                                                     )
@@ -935,7 +970,7 @@ fun VodDetailScreen(
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         Text(
-                            "Benzer İçerikler",
+                            str(lang, "Benzer İçerikler"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -980,7 +1015,7 @@ fun VodDetailScreen(
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.35f))
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), tint = Color.White)
             }
         }
     }
@@ -1002,8 +1037,8 @@ fun VodDetailScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    if (alreadyWatched) "Tüm bölümleri izlenmedi olarak işaretle?"
-                    else "Tüm bölümleri izlendi olarak işaretle?",
+                    if (alreadyWatched) str(lang, "Tüm bölümleri izlenmedi olarak işaretle?")
+                    else str(lang, "Tüm bölümleri izlendi olarak işaretle?"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -1020,7 +1055,7 @@ fun VodDetailScreen(
                     Icon(Icons.Default.Check, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (alreadyWatched) "İzlenmedi İşaretle" else "İzlendi İşaretle",
+                        if (alreadyWatched) str(lang, "İzlenmedi İşaretle") else str(lang, "İzlendi İşaretle"),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1030,7 +1065,7 @@ fun VodDetailScreen(
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("İptal")
+                    Text(str(lang, "İptal"))
                 }
             }
         }
@@ -1048,6 +1083,7 @@ fun VodDetailScreen(
 private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val app = context.applicationContext as StalkerApp
+    val lang = app.store.settings().language
     val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(false) }
     var streamUrl by remember { mutableStateOf<String?>(null) }
@@ -1102,7 +1138,7 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
             else -> {
                 AsyncImage(
                     model = "https://img.youtube.com/vi/$key/hqdefault.jpg",
-                    contentDescription = "Fragman",
+                    contentDescription = str(lang, "Fragman"),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -1129,7 +1165,7 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                         } else {
                             Icon(
                                 Icons.Default.PlayArrow,
-                                contentDescription = "Fragmanı oynat",
+                                contentDescription = str(lang, "Fragmanı oynat"),
                                 tint = Color.White,
                                 modifier = Modifier.size(40.dp)
                             )
@@ -1149,7 +1185,7 @@ private fun TrailerPlayer(key: String, modifier: Modifier = Modifier) {
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Text(
-                "YouTube'da aç",
+                str(lang, "YouTube'da aç"),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White
             )

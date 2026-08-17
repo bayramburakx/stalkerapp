@@ -46,12 +46,32 @@ import coil.compose.AsyncImage
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Dizi" to "Series",
+    "Film" to "Movie",
+    "Favorilerden Çıkar" to "Remove from Favorites",
+    "Favorilere Ekle" to "Add to Favorites",
+    "Sonra İzle'den Çıkar" to "Remove from Watch Later",
+    "Sonra İzle'ye Ekle" to "Add to Watch Later",
+    "İzlenmedi İşaretle" to "Mark as Not Watched",
+    "İzlendi İşaretle" to "Mark as Watched",
+    "Listeleri Gizle" to "Hide Lists",
+    "Listeye Ekle" to "Add to List",
+    "Henüz liste yok. Ayarlar → Kütüphanem bölümünden liste oluşturabilirsin." to "No lists yet. Create lists from Settings → My Library.",
+    "Ana Sayfadan Kaldır" to "Remove from Home",
+    "Detayları Gör" to "View Details"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 /**
  * Uzun basma ile açılan hızlı işlemler: favori, izlendi işaretle/geri al, detay.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VodQuickActionsSheet(
+    lang: String,
     item: VodItem,
     isSeries: Boolean,
     vm: MainViewModel,
@@ -100,7 +120,7 @@ fun VodQuickActionsSheet(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        if (isSeries) "Dizi" else "Film",
+                        if (isSeries) str(lang, "Dizi") else str(lang, "Film"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -112,7 +132,7 @@ fun VodQuickActionsSheet(
             QuickActionRow(
                 icon = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 tint = if (isFav) Color(0xFFFF5252) else MaterialTheme.colorScheme.onSurface,
-                label = if (isFav) "Favorilerden Çıkar" else "Favorilere Ekle"
+                label = if (isFav) str(lang, "Favorilerden Çıkar") else str(lang, "Favorilere Ekle")
             ) {
                 vm.toggleFavoriteVod(item)
                 onDismiss()
@@ -120,7 +140,7 @@ fun VodQuickActionsSheet(
             QuickActionRow(
                 icon = Icons.Default.Schedule,
                 tint = MaterialTheme.colorScheme.onSurface,
-                label = if (isWatchLater) "Sonra İzle'den Çıkar" else "Sonra İzle'ye Ekle"
+                label = if (isWatchLater) str(lang, "Sonra İzle'den Çıkar") else str(lang, "Sonra İzle'ye Ekle")
             ) {
                 vm.toggleWatchLater(item)
                 onDismiss()
@@ -128,7 +148,7 @@ fun VodQuickActionsSheet(
             QuickActionRow(
                 icon = Icons.Default.CheckCircle,
                 tint = if (watched) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface,
-                label = if (watched) "İzlenmedi İşaretle" else "İzlendi İşaretle"
+                label = if (watched) str(lang, "İzlenmedi İşaretle") else str(lang, "İzlendi İşaretle")
             ) {
                 watched = vm.toggleWatched(item.id)
                 onDismiss()
@@ -136,7 +156,7 @@ fun VodQuickActionsSheet(
             QuickActionRow(
                 icon = Icons.Default.List,
                 tint = MaterialTheme.colorScheme.onSurface,
-                label = if (showLists) "Listeleri Gizle" else "Listeye Ekle"
+                label = if (showLists) str(lang, "Listeleri Gizle") else str(lang, "Listeye Ekle")
             ) {
                 showLists = !showLists
             }
@@ -144,7 +164,7 @@ fun VodQuickActionsSheet(
                 val userLists = vm.userLists.value
                 if (userLists.isEmpty()) {
                     Text(
-                        "Henüz liste yok. Ayarlar → Kütüphanem bölümünden liste oluşturabilirsin.",
+                        str(lang, "Henüz liste yok. Ayarlar → Kütüphanem bölümünden liste oluşturabilirsin."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp)
@@ -175,7 +195,7 @@ fun VodQuickActionsSheet(
             QuickActionRow(
                 icon = Icons.Default.Home,
                 tint = MaterialTheme.colorScheme.error,
-                label = "Ana Sayfadan Kaldır"
+                label = str(lang, "Ana Sayfadan Kaldır")
             ) {
                 vm.hideFromHome(item.id)
                 onDismiss()
@@ -183,7 +203,7 @@ fun VodQuickActionsSheet(
             QuickActionRow(
                 icon = Icons.Default.Info,
                 tint = MaterialTheme.colorScheme.onSurface,
-                label = "Detayları Gör"
+                label = str(lang, "Detayları Gör")
             ) {
                 onDismiss()
                 onOpenDetail()

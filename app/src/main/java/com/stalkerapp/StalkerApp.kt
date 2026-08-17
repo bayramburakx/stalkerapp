@@ -19,6 +19,7 @@ import com.stalkerapp.playback.RecordingManager
 import com.stalkerapp.ui.VodSyncManager
 import com.stalkerapp.ui.VodSyncService
 import com.stalkerapp.util.isWifiConnected
+import com.stalkerapp.util.L10n
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -175,7 +176,7 @@ class StalkerApp : Application() {
             manager.createNotificationChannel(
                 NotificationChannel(
                     REMINDER_CHANNEL,
-                    "Program Hatırlatıcıları",
+                    L10n.t(store.settings().language, "Program Hatırlatıcıları"),
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply { setShowBadge(true) }
             )
@@ -190,7 +191,7 @@ class StalkerApp : Application() {
         val notif = NotificationCompat.Builder(this, REMINDER_CHANNEL)
             .setSmallIcon(R.drawable.ic_play)
             .setContentTitle(r.programName)
-            .setContentText("${r.channelName} kanalında şimdi başladı")
+            .setContentText("${r.channelName} ${L10n.t(store.settings().language, "kanalında şimdi başladı")}")
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

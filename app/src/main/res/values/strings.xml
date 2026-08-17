@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Stalker Player</string>
+    <string name="app_name">Portio</string>
     <!--
       Google Sign-In web client ID (Firebase konsolu → Authentication →
       Sign-in method → Google → Web SDK configuration kısmındaki değer).

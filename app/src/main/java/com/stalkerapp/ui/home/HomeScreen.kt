@@ -58,10 +58,23 @@ import com.stalkerapp.ui.live.LiveTvScreen
 import com.stalkerapp.ui.settings.SettingsScreen
 import com.stalkerapp.ui.vod.VodScreen
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Yetişkin İçerik Kilitli" to "Adult Content Locked",
+    "Bu içeriği görmek için PIN gerekli (Gizlilik & Güvenlik'te ayarlanır)." to "A PIN is required to view this content (set in Privacy & Security).",
+    "PIN" to "PIN",
+    "Yanlış PIN" to "Wrong PIN",
+    "Aç" to "Open",
+    "Vazgeç" to "Cancel"
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 private data class NavItem(val icon: ImageVector, val label: String, val onClick: (() -> Unit)? = null)
 
 @Composable
 private fun AdultPinDialog(
+    lang: String,
     onUnlock: (String) -> Boolean,
     onDismiss: () -> Unit
 ) {
@@ -69,18 +82,18 @@ private fun AdultPinDialog(
     var error by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Yetişkin İçerik Kilitli") },
+        title = { Text(str(lang, "Yetişkin İçerik Kilitli")) },
         text = {
             Column {
                 Text(
-                    "Bu içeriği görmek için PIN gerekli (Gizlilik & Güvenlik'te ayarlanır).",
+                    str(lang, "Bu içeriği görmek için PIN gerekli (Gizlilik & Güvenlik'te ayarlanır)."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = pin,
                     onValueChange = { pin = it.take(8); error = false },
-                    label = { Text("PIN") },
+                    label = { Text(str(lang, "PIN")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     isError = error,
@@ -88,7 +101,7 @@ private fun AdultPinDialog(
                 )
                 if (error) {
                     Text(
-                        "Yanlış PIN",
+                        str(lang, "Yanlış PIN"),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -99,9 +112,9 @@ private fun AdultPinDialog(
             Button(
                 onClick = { if (!onUnlock(pin)) error = true },
                 enabled = pin.isNotBlank()
-            ) { Text("Aç") }
+            ) { Text(str(lang, "Aç")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "Vazgeç")) } }
     )
 }
 
@@ -117,6 +130,7 @@ fun HomeScreen(
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     var profile by remember { mutableStateOf(vm.repository.cachedProfile()) }
+    val lang = vm.store.settings().language
 
     // Açılış sekmesi Kütüphane & İçerik ayarından değiştirilebilir
     // (0=Ana Sayfa, 1=Canlı TV, 2=Filmler, 3=Diziler).
@@ -143,6 +157,7 @@ fun HomeScreen(
     }
     if (showAdultPin) {
         AdultPinDialog(
+            lang = lang,
             onUnlock = { pin ->
                 if (vm.unlockAdult(pin)) {
                     showAdultPin = false
@@ -159,14 +174,13 @@ fun HomeScreen(
 
     // Kütüphanem alt menüden kaldırıldı: Ayarlar → Kütüphanem üzerinden açılır
     // (tab 5'e geçiş yapılır; menüde 6 öğe kalır: Ana, Canlı, Film, Dizi, Ayarlar, Ara).
-    val lang = vm.store.settings().language
     val navItems = listOf(
-        NavItem(Icons.Default.Home, com.stalkerapp.util.L10n.t(lang, "nav.home")),
-        NavItem(Icons.Default.LiveTv, com.stalkerapp.util.L10n.t(lang, "nav.live")),
-        NavItem(Icons.Default.Movie, com.stalkerapp.util.L10n.t(lang, "nav.movies")),
-        NavItem(Icons.Default.VideoLibrary, com.stalkerapp.util.L10n.t(lang, "nav.series")),
-        NavItem(Icons.Default.Settings, com.stalkerapp.util.L10n.t(lang, "nav.settings")),
-        NavItem(Icons.Default.Search, com.stalkerapp.util.L10n.t(lang, "nav.search"), onClick = onOpenSearch)
+        NavItem(Icons.Default.Home, com.stalkerapp.util.L10n.t(lang, "Ana Sayfa")),
+        NavItem(Icons.Default.LiveTv, com.stalkerapp.util.L10n.t(lang, "Canlı TV")),
+        NavItem(Icons.Default.Movie, com.stalkerapp.util.L10n.t(lang, "Filmler")),
+        NavItem(Icons.Default.VideoLibrary, com.stalkerapp.util.L10n.t(lang, "Diziler")),
+        NavItem(Icons.Default.Settings, com.stalkerapp.util.L10n.t(lang, "Ayarlar")),
+        NavItem(Icons.Default.Search, com.stalkerapp.util.L10n.t(lang, "Ara"), onClick = onOpenSearch)
     )
 
     Scaffold(

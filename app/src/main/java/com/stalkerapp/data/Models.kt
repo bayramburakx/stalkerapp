@@ -163,8 +163,6 @@ data class Settings(
     val playerPanelAlpha: Float = 1f,
     /** Ana sayfada "Son İzlenen Kanallar" satırı gösterilsin mi? */
     val recentChannelsOnHome: Boolean = true,
-    /** Multi View panel sayısı (2 veya 4). */
-    val multiViewPanes: Int = 2,
     /** Etkin altyazı türleri: "cc" (kapalı altyazı CEA-608/708), "dvbsub" (yayın DVB/PGS altyazıları). */
     val subtitleTypes: Set<String> = setOf("cc", "dvbsub"),
 

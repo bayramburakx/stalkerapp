@@ -11,3 +11,5 @@ captures/
 *.aab
 *.keystore
 .kotlin/
+keystore/
+app/google-services.json

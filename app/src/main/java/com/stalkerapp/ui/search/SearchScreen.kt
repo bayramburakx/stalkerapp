@@ -60,6 +60,26 @@ import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 import kotlinx.coroutines.delay
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Film, dizi, kanal ara…" to "Search movies, series, channels…",
+    "Geri" to "Back",
+    "Kanallar" to "Channels",
+    "Film & Dizi" to "Movies & Series",
+    "Bu kaynakta VOD araması desteklenmiyor" to "VOD search is not supported for this source",
+    "Sonuç bulunamadı" to "No results found",
+    "Keşfet" to "Discover",
+    "Tümü" to "All",
+    "Film" to "Movie",
+    "Dizi" to "Series",
+    "Belgesel" to "Documentary",
+    "Tür" to "Genre",
+    "Kategori: Tümü" to "Category: All",
+    "İçerik bulunamadı" to "No content found",
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
@@ -69,6 +89,7 @@ fun SearchScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val profile = vm.repository.cachedProfile()
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
@@ -107,7 +128,7 @@ fun SearchScreen(
                 runCatching { vm.repository.loadVodList(profile, 0, 1, q) }.getOrDefault(emptyList())
             } else {
                 // M3U/Xtream-only (profile=null) kullanıcısında VOD kataloğu yoktur.
-                vodMessage = "Bu kaynakta VOD araması desteklenmiyor"
+                vodMessage = str(lang, "Bu kaynakta VOD araması desteklenmiyor")
                 emptyList()
             }
         } finally {
@@ -152,7 +173,7 @@ fun SearchScreen(
                             decorationBox = { inner ->
                                 if (query.isBlank()) {
                                     Text(
-                                        "Film, dizi, kanal ara…",
+                                        str(lang, "Film, dizi, kanal ara…"),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -164,7 +185,7 @@ fun SearchScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"))
                     }
                 }
             )
@@ -175,6 +196,7 @@ fun SearchScreen(
                 catalog = catalog,
                 baseUrl = profile?.baseUrl.orEmpty(),
                 onOpenVod = onOpenVod,
+                lang = lang,
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
             return@Scaffold
@@ -184,7 +206,7 @@ fun SearchScreen(
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (liveFiltered.isNotEmpty()) {
                 item {
-                    Text("Kanallar (${liveFiltered.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    Text("${str(lang, "Kanallar")} (${liveFiltered.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 items(liveFiltered, key = { it.id }) { ch ->
@@ -209,7 +231,7 @@ fun SearchScreen(
                 item { LoadingBox() }
             } else if (vodList != null && vodList.isNotEmpty()) {
                 item {
-                    Text("Film & Dizi (${vodList.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    Text("${str(lang, "Film & Dizi")} (${vodList.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 item {
@@ -222,7 +244,7 @@ fun SearchScreen(
                     }
                 }
             } else if (liveFiltered.isEmpty() && vodList != null && vodList.isEmpty() && !loadingVod) {
-                item { EmptyState(vodMessage ?: "Sonuç bulunamadı") }
+                item { EmptyState(vodMessage ?: str(lang, "Sonuç bulunamadı")) }
             }
         }
     }
@@ -290,13 +312,14 @@ private fun DiscoverContent(
     catalog: com.stalkerapp.ui.VodCatalogState,
     baseUrl: String,
     onOpenVod: (Long, Boolean) -> Unit,
+    lang: String,
     modifier: Modifier = Modifier
 ) {
     var typeFilter by remember { mutableStateOf(0) } // 0 tümü, 1 film, 2 dizi, 3 belgesel
     var genreFilter by remember { mutableStateOf<Long?>(null) }
 
     val catTitle = remember(catalog.categories) { catalog.categories.associate { it.id to it.title } }
-    val types = listOf("Tümü", "Film", "Dizi", "Belgesel")
+    val types = listOf(str(lang, "Tümü"), str(lang, "Film"), str(lang, "Dizi"), str(lang, "Belgesel"))
     val genres = catalog.categories.take(14)
 
     val discover = remember(catalog, typeFilter, genreFilter) {
@@ -317,7 +340,7 @@ private fun DiscoverContent(
 
     Column(modifier = modifier.fillMaxSize()) {
         Text(
-            "Keşfet",
+            str(lang, "Keşfet"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -327,14 +350,14 @@ private fun DiscoverContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             DropdownFilterChip(
-                label = "Tür: ${types[typeFilter]}",
+                label = "${str(lang, "Tür")}: ${types[typeFilter]}",
                 options = types,
                 selected = typeFilter,
                 onSelect = { typeFilter = it }
             )
             if (genres.isNotEmpty()) {
                 val genreOptions = listOf(null) + genres.map { it.id }
-                val genreLabels = listOf("Kategori: Tümü") + genres.map { it.title }
+                val genreLabels = listOf(str(lang, "Kategori: Tümü")) + genres.map { it.title }
                 DropdownFilterChip(
                     label = genreLabels[genreOptions.indexOf(genreFilter)],
                     options = genreLabels,
@@ -346,7 +369,7 @@ private fun DiscoverContent(
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {
             when {
                 catalog.status == VodCatalogStatus.Syncing && catalog.allItems.isEmpty() -> LoadingBox()
-                discover.isEmpty() -> EmptyState("İçerik bulunamadı")
+                discover.isEmpty() -> EmptyState(str(lang, "İçerik bulunamadı"))
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     contentPadding = PaddingValues(10.dp),

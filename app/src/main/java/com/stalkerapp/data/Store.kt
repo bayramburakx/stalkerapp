@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import com.stalkerapp.util.L10n
 
 class Store(private val context: Context) {
 
@@ -226,7 +227,7 @@ class Store(private val context: Context) {
         } else {
             "p_" + System.currentTimeMillis().toString(36) + "_" + (name.hashCode() and 0xFFFF).toString(16)
         }
-        val p = UserProfile(id = id, name = name.ifBlank { "İzleyici" }, avatar = avatar.ifBlank { "😀" })
+        val p = UserProfile(id = id, name = name.ifBlank { L10n.t(settings().language, "İzleyici") }, avatar = avatar.ifBlank { "😀" })
         val list = userProfiles().toMutableList()
         list.add(p)
         saveUserProfiles(list)

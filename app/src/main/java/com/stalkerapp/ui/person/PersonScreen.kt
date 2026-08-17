@@ -48,6 +48,17 @@ import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Geri" to "Back",
+    "Yönetmen" to "Director",
+    "Oyuncu" to "Actor",
+    "içerik" to "items",
+    "İçerik bulunamadı" to "No content found",
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
+
 /**
  * Oyuncu / Yönetmen sayfası: TMDB'den fotoğraf (anahtar varsa), katalogdan
  * filmografi. Oyuncu adına katalogdaki `actors`, yönetmene `director` alanından
@@ -62,6 +73,7 @@ fun PersonScreen(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
+    val lang = vm.store.settings().language
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
     val profile = vm.repository.cachedProfile()
 
@@ -133,7 +145,7 @@ fun PersonScreen(
                         modifier = Modifier.padding(top = 14.dp)
                     )
                     Text(
-                        if (isDirector) "Yönetmen" else "Oyuncu",
+                        if (isDirector) str(lang, "Yönetmen") else str(lang, "Oyuncu"),
                         style = MaterialTheme.typography.labelLarge,
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -141,14 +153,14 @@ fun PersonScreen(
             }
             item {
                 Text(
-                    "${works.size} içerik",
+                    "${works.size} ${str(lang, "içerik")}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
             if (works.isEmpty()) {
-                item { EmptyState("İçerik bulunamadı") }
+                item { EmptyState(str(lang, "İçerik bulunamadı")) }
             } else {
                 items(works.chunked(3)) { rowItems ->
                     Row(
@@ -190,7 +202,7 @@ fun PersonScreen(
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.35f))
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), tint = Color.White)
             }
         }
     }

@@ -66,11 +66,13 @@ private val AVATARS = listOf(
 fun ProfilePickerScreen(
     vm: MainViewModel,
     firebase: FirebaseSyncManager,
+    lang: String,
     onProfileSelected: () -> Unit,
     onBack: (() -> Unit)? = null
 ) {
     val profiles by vm.profiles.collectAsState()
     val activeId by vm.userProfile.collectAsState()
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
 
     var editing by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -100,19 +102,19 @@ fun ProfilePickerScreen(
                 if (onBack != null) {
                     Row(modifier = Modifier.fillMaxWidth()) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("Geri"))
                         }
                     }
                 }
 
                 Spacer(Modifier.height(24.dp))
                 Text(
-                    "Kim izliyor?",
+                    t("Kim izliyor?"),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Profili seç, kaldığın yerden devam et",
+                    t("Profili seç, kaldığın yerden devam et"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -125,6 +127,7 @@ fun ProfilePickerScreen(
                 ) {
                     profiles.take(2).forEach { p ->
                         ProfileCard(
+                            lang = lang,
                             p = p,
                             isActive = p.id == activeId.id,
                             editing = editing,
@@ -146,6 +149,7 @@ fun ProfilePickerScreen(
                     ) {
                         profiles.drop(2).take(2).forEach { p ->
                             ProfileCard(
+                                lang = lang,
                                 p = p,
                                 isActive = p.id == activeId.id,
                                 editing = editing,
@@ -168,6 +172,7 @@ fun ProfilePickerScreen(
                     ) {
                         profiles.drop(4).take(2).forEach { p ->
                             ProfileCard(
+                                lang = lang,
                                 p = p,
                                 isActive = p.id == activeId.id,
                                 editing = editing,
@@ -186,19 +191,19 @@ fun ProfilePickerScreen(
                 // "+ Profil Ekle" kartı
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.Center) {
-                    AddProfileCard(onClick = { showAddDialog = true })
+                    AddProfileCard(lang = lang, onClick = { showAddDialog = true })
                 }
 
                 Spacer(Modifier.height(32.dp))
                 if (editing) {
-                    OutlinedButton(onClick = { editing = false }) { Text("Bitir") }
+                    OutlinedButton(onClick = { editing = false }) { Text(t("Bitir")) }
                 } else {
-                    OutlinedButton(onClick = { editing = true }) { Text("Profilleri Yönet") }
+                    OutlinedButton(onClick = { editing = true }) { Text(t("Profilleri Yönet")) }
                 }
 
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Giriş: ${firebase.userEmail}",
+                    "${t("Giriş")}: ${firebase.userEmail}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -208,7 +213,8 @@ fun ProfilePickerScreen(
 
     if (showAddDialog) {
         AddProfileDialog(
-            title = "Yeni Profil",
+            lang = lang,
+            title = t("Yeni Profil"),
             onDismiss = { showAddDialog = false },
             onSave = { name, avatar ->
                 vm.addProfile(name, avatar)
@@ -219,6 +225,7 @@ fun ProfilePickerScreen(
 
     editTarget?.let { target ->
         EditProfileDialog(
+            lang = lang,
             profile = target,
             onDismiss = { editTarget = null },
             onSave = { p ->
@@ -235,6 +242,7 @@ fun ProfilePickerScreen(
 
 @Composable
 private fun ProfileCard(
+    lang: String,
     p: UserProfile,
     isActive: Boolean,
     editing: Boolean,
@@ -242,6 +250,7 @@ private fun ProfileCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable { onClick() }
@@ -283,20 +292,20 @@ private fun ProfileCard(
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.6f))
                 ) {
-                    Icon(Icons.Filled.Create, contentDescription = "Düzenle", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Create, contentDescription = t("Düzenle"), modifier = Modifier.size(16.dp))
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            p.name.ifBlank { "İzleyici" },
+            p.name.ifBlank { t("İzleyici") },
             style = MaterialTheme.typography.titleMedium,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
             textAlign = TextAlign.Center
         )
         if (isActive) {
             Text(
-                "Aktif",
+                t("Aktif"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -305,7 +314,8 @@ private fun ProfileCard(
 }
 
 @Composable
-private fun AddProfileCard(onClick: () -> Unit) {
+private fun AddProfileCard(lang: String, onClick: () -> Unit) {
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick() }) {
         Box(
             modifier = Modifier
@@ -322,36 +332,38 @@ private fun AddProfileCard(onClick: () -> Unit) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text("Profil Ekle", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(t("Profil Ekle"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun AddProfileDialog(
+    lang: String,
     title: String,
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
     var name by remember { mutableStateOf("") }
     var avatar by remember { mutableStateOf(AVATARS.first()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = { onSave(name.trim().ifBlank { "İzleyici" }, avatar) }) { Text("Kaydet") }
+            Button(onClick = { onSave(name.trim().ifBlank { t("İzleyici") }, avatar) }) { Text(t("Kaydet")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(24) },
-                    label = { Text("Profil adı") },
+                    label = { Text(t("Profil adı")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("Avatar seç", style = MaterialTheme.typography.labelMedium)
+                Text(t("Avatar seç"), style = MaterialTheme.typography.labelMedium)
                 val rows = AVATARS.chunked(4)
                 rows.forEach { rowAvatars ->
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -377,39 +389,41 @@ private fun AddProfileDialog(
 
 @Composable
 private fun EditProfileDialog(
+    lang: String,
     profile: UserProfile,
     onDismiss: () -> Unit,
     onSave: (UserProfile) -> Unit,
     onDelete: () -> Unit
 ) {
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
     var name by remember { mutableStateOf(profile.name) }
     var avatar by remember { mutableStateOf(profile.avatar.ifBlank { AVATARS.first() }) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = { onSave(profile.copy(name = name.trim().ifBlank { "İzleyici" }, avatar = avatar)) }) { Text("Kaydet") }
+            Button(onClick = { onSave(profile.copy(name = name.trim().ifBlank { t("İzleyici") }, avatar = avatar)) }) { Text(t("Kaydet")) }
         },
         dismissButton = {
             Row {
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Filled.Delete, contentDescription = t("Sil"), tint = MaterialTheme.colorScheme.error)
                 }
                 Spacer(Modifier.width(8.dp))
-                TextButton(onClick = onDismiss) { Text("Vazgeç") }
+                TextButton(onClick = onDismiss) { Text(t("Vazgeç")) }
             }
         },
-        title = { Text("Profili Düzenle") },
+        title = { Text(t("Profili Düzenle")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(24) },
-                    label = { Text("Profil adı") },
+                    label = { Text(t("Profil adı")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("Avatar seç", style = MaterialTheme.typography.labelMedium)
+                Text(t("Avatar seç"), style = MaterialTheme.typography.labelMedium)
                 val rows = AVATARS.chunked(4)
                 rows.forEach { rowAvatars ->
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {

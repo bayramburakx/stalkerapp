@@ -1,6 +1,8 @@
 package com.stalkerapp.ui.live
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,16 +12,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,9 +44,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stalkerapp.StalkerApp
@@ -58,7 +65,6 @@ import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
-import com.stalkerapp.ui.multiview.MultiViewScreen
 import com.stalkerapp.playback.PlaybackManager
 import kotlinx.coroutines.launch
 
@@ -73,6 +79,8 @@ fun LiveTvScreen(
     val vm: MainViewModel = rememberMainViewModel(app)
     val cooldown by vm.cooldownSeconds.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val lang = app.store.settings().language
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
 
     // Aktif kanal kaynağı: Stalker portal (varsayılan) ya da M3U / Xtream.
     val kind = vm.activeSourceKind()
@@ -89,15 +97,14 @@ fun LiveTvScreen(
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                 Text(
-                    "Henüz bir kaynak eklemedin",
+                    t("Henüz bir kaynak eklemedin"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi " +
-                        "veya Xtream Codes ekleyerek kanalları burada görebilirsin.",
+                    t("Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi veya Xtream Codes ekleyerek kanalları burada görebilirsin."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -119,7 +126,6 @@ fun LiveTvScreen(
     var manageChannel by remember { mutableStateOf<Channel?>(null) }
     // Kanal adının altında gösterilecek "şu an oynayan" programlar (harici EPG).
     var nowPlaying by remember { mutableStateOf(emptyMap<Long, String>()) }
-    var multiView by remember { mutableStateOf(false) }
     val settings by vm.settings.collectAsStateWithLifecycle()
     val hiddenGroups = settings.hiddenChannelGroups.toSet()
 
@@ -135,8 +141,8 @@ fun LiveTvScreen(
         try {
             val loaded = vm.loadChannelsForActiveSource(profile)
             if (loaded == null) {
-                error = if (isExternal) "Kaynak yüklenemedi — Ayarlar'dan kontrol edin"
-                else "Portal bağlı değil"
+                error = if (isExternal) t("Kaynak yüklenemedi — Ayarlar'dan kontrol edin")
+                else t("Portal bağlı değil")
             } else {
                 val (g, ch) = loaded
                 genres = g
@@ -198,7 +204,7 @@ fun LiveTvScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Cooldown aktif — ${cooldown}s sonra istek gönderilebilir",
+                    t("Cooldown aktif") + " — " + cooldown + "s " + t("sonra istek gönderilebilir"),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -213,7 +219,7 @@ fun LiveTvScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 Text(
-                    "Kaynak: ${sourceName.ifBlank { if (kind == "m3u") "M3U" else "Xtream" }}",
+                    t("Kaynak") + ": " + sourceName.ifBlank { if (kind == "m3u") "M3U" else "Xtream" },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -253,25 +259,13 @@ fun LiveTvScreen(
                     decorationBox = { inner ->
                         if (query.isBlank()) {
                             Text(
-                                "Kanal ara…",
+                                t("Kanal ara…"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         inner()
                     }
-                )
-            }
-
-            // Multi View butonu: 2/4 kanalı aynı anda izle (TiviMate tarzı).
-            IconButton(
-                onClick = { if (!channels.isNullOrEmpty()) multiView = true },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    Icons.Default.GridView,
-                    contentDescription = "Multi View",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -285,7 +279,7 @@ fun LiveTvScreen(
                     GlassChip(
                         selected = selectedGenre == 0L && selectedCustomGroup == null,
                         onClick = { selectedGenre = 0L; selectedCustomGroup = null },
-                        label = "Tümü"
+                        label = t("Tümü")
                     )
                 }
                 items(genreList.filter { it.title != "Tümü" }, key = { it.title }) { g ->
@@ -309,9 +303,9 @@ fun LiveTvScreen(
 
         when {
             loading && channels == null -> LoadingBox()
-            error != null && channels == null -> EmptyState("$error\n\nGeri dönüp tekrar deneyin")
-            allChannels.isEmpty() -> EmptyState("Kanal bulunamadı")
-            displayed.isEmpty() -> EmptyState("Sonuç bulunamadı")
+            error != null && channels == null -> EmptyState("$error\n\n${t("Geri dönüp tekrar deneyin")}")
+            allChannels.isEmpty() -> EmptyState(t("Kanal bulunamadı"))
+            displayed.isEmpty() -> EmptyState(t("Sonuç bulunamadı"))
             else -> {
                 val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
                 LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -346,6 +340,7 @@ fun LiveTvScreen(
         // Kanal yönetimi dialog'u (Column kapsamındaki özelleştirme/sıra ile çalışır).
         manageChannel?.let { ch ->
             ChannelManageDialog(
+                lang = lang,
                 channel = ch,
                 customization = customization,
                 groupChannels = displayed,
@@ -357,42 +352,25 @@ fun LiveTvScreen(
             )
         }
         }
-
-        // Multi View: seçili listedeki kanallar 2/4 bölmeli ekranda aynı anda oynatılır.
-        if (multiView) {
-            MultiViewScreen(
-                channels = displayed,
-                profile = profile,
-                panes = settings.multiViewPanes,
-                onSelectChannel = { ch ->
-                    multiView = false
-                    scope.launch {
-                        val list = allChannels
-                        val idx = list.indexOfFirst { it.id == ch.id }
-                        if (idx >= 0) {
-                            PlaybackManager.playChannel(list, idx, profile)
-                            onOpenPlayer()
-                        }
-                    }
-                },
-                onClose = { multiView = false }
-            )
-        }
     }
 }
 
 /**
- * Kanal yönetimi dialog'u: özel logo, özel gruba taşıma, manuel sıralama
- * (yukarı/aşağı) ve sıralama sıfırlama. Her eylem [onAction] ile anında kaydedilir.
+ * Kanal yönetimi dialog'u: özel logo, EPG eşleştirme, özel gruba taşıma,
+ * manuel sıralama (yukarı/aşağı) ve sıralama sıfırlama. Her eylem [onAction]
+ * ile anında kaydedilir. Uygulamanın cam (glass) diline uygun tasarlanmıştır:
+ * yarı saydam scrim, yuvarlatılmış yüzey, bölüm başlıkları ve ince çerçeve.
  */
 @Composable
 private fun ChannelManageDialog(
+    lang: String,
     channel: Channel,
     customization: ChannelCustomization,
     groupChannels: List<Channel>,
     onAction: (ChannelCustomization) -> Unit,
     onDismiss: () -> Unit
 ) {
+    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
     val key = channel.id.toString()
     val currentGroup = ChannelCustomizer.groupOf(channel, customization)
     val inCustomGroup = customization.customGroups.any { it.name == currentGroup }
@@ -405,23 +383,73 @@ private fun ChannelManageDialog(
     val currentOrder = customization.channelOrder[currentGroup] ?: groupChannels.map { it.id }
     val pos = currentOrder.indexOf(channel.id)
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(ChannelCustomizer.displayName(channel.name, customization), maxLines = 1) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "Grup: $currentGroup",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    val dialogShape = RoundedCornerShape(22.dp)
 
-                Text("Özel Logo", style = MaterialTheme.typography.titleSmall)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.72f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth()
+                .shadow(24.dp, dialogShape)
+                .clip(dialogShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f), dialogShape)
+                .padding(vertical = 20.dp, horizontal = 18.dp)
+        ) {
+            // Başlık: kanal adı + mevcut grup
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        ChannelCustomizer.displayName(channel.name, customization),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "${t("Grup")}: $currentGroup",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = t("Kapat"),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+            )
+
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                SectionHeader(t("Özel Logo"), MaterialTheme.colorScheme.primary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = logoUrl,
                         onValueChange = { logoUrl = it },
-                        label = { Text("Logo URL (boş = kaldır)") },
+                        label = { Text(t("Logo URL (boş = kaldır)")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -430,12 +458,12 @@ private fun ChannelManageDialog(
                             customLogos = if (logoUrl.isBlank()) customLogos - key else customLogos + (key to logoUrl.trim())
                         )
                         onAction(updated)
-                    }) { Text("Uygula") }
+                    }) { Text(t("Uygula")) }
                 }
 
-                Text("EPG Eşleştirme (xmltv_id)", style = MaterialTheme.typography.titleSmall)
+                SectionHeader(t("EPG Eşleştirme (xmltv_id)"), MaterialTheme.colorScheme.primary)
                 Text(
-                    "Harici EPG'deki kanal kimliği ile manuel eşleştir (boş = otomatik).",
+                    t("Harici EPG'deki kanal kimliği ile manuel eşleştir (boş = otomatik)."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -443,7 +471,7 @@ private fun ChannelManageDialog(
                     OutlinedTextField(
                         value = epgId,
                         onValueChange = { epgId = it.take(60) },
-                        label = { Text("xmltv_id (örn. TRT1.tr)") },
+                        label = { Text(t("xmltv_id (örn. TRT1.tr)")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -453,10 +481,10 @@ private fun ChannelManageDialog(
                             else customization.channelEpgIds + (key to epgId.trim())
                         )
                         onAction(updated)
-                    }) { Text("Uygula") }
+                    }) { Text(t("Uygula")) }
                 }
 
-                Text("Özel Gruba Taşı", style = MaterialTheme.typography.titleSmall)
+                SectionHeader(t("Özel Gruba Taşı"), MaterialTheme.colorScheme.primary)
                 if (customization.customGroups.isNotEmpty()) {
                     customization.customGroups.forEach { g ->
                         val isCurrent = g.name == currentGroup
@@ -476,17 +504,17 @@ private fun ChannelManageDialog(
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             } else {
-                                TextButton(onClick = {
+                                OutlinedButton(onClick = {
                                     onAction(customization.copy(
                                         channelGroup = customization.channelGroup + (key to g.name)
                                     ))
-                                }) { Text("Taşı") }
+                                }) { Text(t("Taşı")) }
                             }
                         }
                     }
                 } else {
                     Text(
-                        "Henüz özel grup yok — aşağıdan bir tane oluştur.",
+                        t("Henüz özel grup yok — aşağıdan bir tane oluştur."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -495,7 +523,7 @@ private fun ChannelManageDialog(
                     OutlinedTextField(
                         value = newGroup,
                         onValueChange = { newGroup = it.take(30) },
-                        label = { Text("Yeni grup adı") },
+                        label = { Text(t("Yeni grup adı")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -516,18 +544,21 @@ private fun ChannelManageDialog(
                             }
                         },
                         enabled = newGroup.trim().isNotBlank()
-                    ) { Text("Oluştur & Taşı") }
+                    ) { Text(t("Oluştur & Taşı")) }
                 }
                 if (inCustomGroup) {
-                    TextButton(onClick = {
+                    OutlinedButton(onClick = {
                         onAction(customization.copy(
                             channelGroup = customization.channelGroup - key
                         ))
-                    }) { Text("Özel Gruptan Çıkar (orijinal gruba dön)") }
+                    }) { Text(t("Özel Gruptan Çıkar (orijinal gruba dön)")) }
                 }
 
-                Text("Manuel Sıralama", style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeader(t("Manuel Sıralama"), MaterialTheme.colorScheme.primary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     OutlinedButton(
                         onClick = {
                             val list = currentOrder.toMutableList()
@@ -539,8 +570,9 @@ private fun ChannelManageDialog(
                                 ))
                             }
                         },
-                        enabled = pos > 0
-                    ) { Text("↑ Yukarı") }
+                        enabled = pos > 0,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("↑ " + t("Yukarı")) }
                     OutlinedButton(
                         onClick = {
                             val list = currentOrder.toMutableList()
@@ -552,19 +584,44 @@ private fun ChannelManageDialog(
                                 ))
                             }
                         },
-                        enabled = pos >= 0 && pos < currentOrder.size - 1
-                    ) { Text("↓ Aşağı") }
+                        enabled = pos >= 0 && pos < currentOrder.size - 1,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("↓ " + t("Aşağı")) }
                     OutlinedButton(
                         onClick = {
                             onAction(customization.copy(
                                 channelOrder = customization.channelOrder - currentGroup
                             ))
                         },
-                        enabled = customization.channelOrder.containsKey(currentGroup)
-                    ) { Text("Sıralamayı Sıfırla") }
+                        enabled = customization.channelOrder.containsKey(currentGroup),
+                        modifier = Modifier.weight(1f)
+                    ) { Text(t("Sıralamayı Sıfırla")) }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } }
-    )
+
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(t("Kapat"), fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, accent: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(16.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accent)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    }
 }

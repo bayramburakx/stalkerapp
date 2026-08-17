@@ -41,6 +41,7 @@ import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.Store
 import com.stalkerapp.data.VodItem
+import com.stalkerapp.util.L10n
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +90,8 @@ object PlaybackManager {
     private lateinit var appContext: Context
     private lateinit var store: Store
     private lateinit var repository: PortalRepository
+
+    private fun l10n(text: String): String = L10n.t(store.settings().language, text)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -415,11 +418,11 @@ object PlaybackManager {
             val url = try {
                 repository.channelStreamUrl(ch, profile)
             } catch (e: Exception) {
-                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                setError(l10n("Akış alınamadı") + ": ${e.message ?: e::class.simpleName}")
                 return@launch
             }
             if (url.isBlank()) {
-                setError("Kanal akış URL'si boş")
+                setError(l10n("Kanal akış URL'si boş"))
                 return@launch
             }
             // "Açılışta son kanalı oynat" için son izlenen canlı kanalı kaydet.
@@ -471,7 +474,7 @@ object PlaybackManager {
                 appContext.startActivity(intent)
             }.isSuccess
             if (!externalPlaybackLaunched) {
-                setError("Harici oynatıcı bulunamadı (video desteği olan bir uygulama yükleyin)")
+                setError(l10n("Harici oynatıcı bulunamadı (video desteği olan bir uygulama yükleyin)"))
             }
             stopping = true
             activePlayer?.stop()
@@ -534,11 +537,11 @@ object PlaybackManager {
             val url = try {
                 repository.vodStreamUrl(item, profile, ep)
             } catch (e: Exception) {
-                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                setError(l10n("Akış alınamadı") + ": ${e.message ?: e::class.simpleName}")
                 return@launch
             }
             if (url.isBlank()) {
-                setError("Akış URL'si boş")
+                setError(l10n("Akış URL'si boş"))
                 return@launch
             }
             currentVodId = item.id
@@ -564,7 +567,7 @@ object PlaybackManager {
             val url = try {
                 repository.vodStreamUrl(item, profile, ep)
             } catch (e: Exception) {
-                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                setError(l10n("Akış alınamadı") + ": ${e.message ?: e::class.simpleName}")
                 return@launch
             }
             currentVodId = item.id
@@ -934,7 +937,7 @@ object PlaybackManager {
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "Oynatma",
+                    l10n("Oynatma"),
                     NotificationManager.IMPORTANCE_LOW
                 ).apply { setShowBadge(false) }
             )
@@ -987,17 +990,17 @@ object PlaybackManager {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIcon)
-            .setContentTitle(title.ifBlank { "Stalker Player" })
-            .setContentText(subtitle.ifBlank { "Oynatılıyor…" })
+            .setContentTitle(title.ifBlank { "Portio" })
+            .setContentText(subtitle.ifBlank { l10n("Oynatılıyor…") })
             .setOngoing(true)
             .setContentIntent(contentIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(action("Önceki", R.drawable.ic_prev, ACTION_PREV))
-            .addAction(action(if (isPlaying) "Duraklat" else "Oynat", playPauseIcon, ACTION_TOGGLE))
-            .addAction(action("Sonraki", R.drawable.ic_next, ACTION_NEXT))
-            .addAction(action("Kapat", R.drawable.ic_close, ACTION_STOP))
+            .addAction(action(l10n("Önceki"), R.drawable.ic_prev, ACTION_PREV))
+            .addAction(action(if (isPlaying) l10n("Duraklat") else l10n("Oynat"), playPauseIcon, ACTION_TOGGLE))
+            .addAction(action(l10n("Sonraki"), R.drawable.ic_next, ACTION_NEXT))
+            .addAction(action(l10n("Kapat"), R.drawable.ic_close, ACTION_STOP))
             .setStyle(MediaNotificationCompat.MediaStyle()
                 .setShowActionsInCompactView(0, 1, 2))
             .build()
@@ -1062,7 +1065,7 @@ object PlaybackManager {
                     return
                 }
                 liveRetryCount = 0
-                setError(error.message ?: "Oynatma hatası")
+                setError(error.message ?: l10n("Oynatma hatası"))
                 notifyStateChanged()
             }
 
@@ -1108,11 +1111,11 @@ object PlaybackManager {
             val url = try {
                 repository.channelStreamUrl(ch, ChannelQueue.profile)
             } catch (e: Exception) {
-                setError("Akış alınamadı: ${e.message ?: e::class.simpleName}")
+                setError(l10n("Akış alınamadı") + ": ${e.message ?: e::class.simpleName}")
                 return@launch
             }
             if (url.isBlank()) {
-                setError("Kanal akış URL'si boş")
+                setError(l10n("Kanal akış URL'si boş"))
                 return@launch
             }
             playInternal(url, ch.name, ch.logo, ch.tvGenreTitle, isVod = false)

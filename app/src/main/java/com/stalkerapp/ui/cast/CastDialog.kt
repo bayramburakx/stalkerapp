@@ -18,9 +18,22 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.stalkerapp.StalkerApp
 import com.stalkerapp.cast.CastManager
+
+private val L10nLocal: Map<String, String> = mapOf(
+    // Türkçe -> English
+    "Yayınla (Chromecast)" to "Cast (Chromecast)",
+    "Yayın devam ediyor.\nCihaz listesi şu an boş görünüyor." to "Casting is in progress.\nThe device list appears empty right now.",
+    "Yayın cihazı aranıyor…\nTelefon ve cihazın aynı Wi-Fi ağında olduğundan emin ol." to "Searching for cast devices…\nMake sure your phone and device are on the same Wi-Fi network.",
+    "Bağlanıyor…" to "Connecting…",
+    "Kapat" to "Close",
+)
+private fun str(lang: String, text: String): String =
+    if (lang == "en") L10nLocal[text] ?: text else text
 
 /**
  * Chromecast cihaz seçim dialog'u. Keşfedilen cihazları listeler; seçilen
@@ -34,17 +47,18 @@ fun CastDialog(
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val lang = (LocalContext.current.applicationContext as StalkerApp).store.settings().language
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Yayınla (Chromecast)") },
+        title = { Text(str(lang, "Yayınla (Chromecast)")) },
         text = {
             Column {
                 if (routes.isEmpty()) {
                     Text(
                         if (isCasting) {
-                            "Yayın devam ediyor.\nCihaz listesi şu an boş görünüyor."
+                            str(lang, "Yayın devam ediyor.\nCihaz listesi şu an boş görünüyor.")
                         } else {
-                            "Yayın cihazı aranıyor…\nTelefon ve cihazın aynı Wi-Fi ağında olduğundan emin ol."
+                            str(lang, "Yayın cihazı aranıyor…\nTelefon ve cihazın aynı Wi-Fi ağında olduğundan emin ol.")
                         }
                     )
                 } else {
@@ -76,7 +90,7 @@ fun CastDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             if (route.connecting) {
-                                Text("Bağlanıyor…", style = MaterialTheme.typography.labelMedium)
+                                Text(str(lang, "Bağlanıyor…"), style = MaterialTheme.typography.labelMedium)
                             } else if (route.selected) {
                                 Text("✓", color = MaterialTheme.colorScheme.primary)
                             }
@@ -87,7 +101,7 @@ fun CastDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Kapat") }
+            TextButton(onClick = onDismiss) { Text(str(lang, "Kapat")) }
         }
     )
 }
