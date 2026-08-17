@@ -27,10 +27,12 @@ import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.util.isWifiConnected
 import com.stalkerapp.util.L10n
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
@@ -279,9 +281,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     }
 
     fun saveM3uSource(source: M3uSource) {
+        // İçerik Store tarafında dosyaya yazılır; listeye boş content ile eklenir.
+        store.saveM3uContent(source.id, source.content)
         val list = store.m3uSources().toMutableList()
         val idx = list.indexOfFirst { it.id == source.id }
-        if (idx >= 0) list[idx] = source else list.add(source)
+        if (idx >= 0) list[idx] = source.copy(content = "") else list.add(source.copy(content = ""))
         store.saveM3uSources(list)
         m3uCache.remove(source.id)
         m3uVodCache.remove(source.id)
@@ -290,6 +294,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     fun deleteM3uSource(id: String) {
         store.saveM3uSources(store.m3uSources().filterNot { it.id == id })
+        store.deleteM3uContent(id)
         m3uCache.remove(id)
         m3uVodCache.remove(id)
         if (store.activeSourceKind() == "m3u" && store.activeSourceId() == id) {
@@ -339,7 +344,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         if (source.url.isBlank()) return L10n.t(store.settings().language, "URL boş")
         val content = M3uParser.fetch(source.url)
         if (content == null) return L10n.t(store.settings().language, "İndirilemedi (URL geçersiz veya erişilemiyor)")
-        val count = M3uParser.parse(content, source.id).size
+        // Parse ana iş parçacığını kilitlemesin (büyük listelerde donma) — IO'da çözülür.
+        val count = withContext(Dispatchers.IO) { M3uParser.parse(content, source.id).size }
         if (count == 0) return L10n.t(store.settings().language, "Kanal bulunamadı (geçerli M3U değil?)")
         saveM3uSource(source.copy(content = content))
         // İçerik değişti: kaynak aktifse dış katalog bayat kalmasın (bir sonraki
@@ -362,14 +368,15 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının kanallarını yükler (gerekirse indirir + çözer). */
     suspend fun loadM3uChannels(source: M3uSource): Pair<List<Genre>, List<Channel>> {
         m3uCache[source.id]?.let { return it }
-        var content = source.content
+        var content = store.loadM3uContent(source)
         if (content.isBlank() && source.url.isNotBlank()) {
             content = M3uParser.fetch(source.url).orEmpty()
             if (content.isNotBlank()) {
                 saveM3uSource(source.copy(content = content))
             }
         }
-        val channels = M3uParser.parse(content, source.id)
+        // Parse ana iş parçacığını kilitlemesin (yüzlerce MB liste olabilir).
+        val channels = withContext(Dispatchers.IO) { M3uParser.parse(content, source.id) }
         // group-title'lar kategori olarak kullanılır.
         val groups = channels.map { it.tvGenreTitle }.filter { it.isNotBlank() }.distinct().sorted()
         val genres = listOf(Genre(0, "Tümü")) +
@@ -399,14 +406,14 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının film/dizi kataloğunu yükler (gerekirse içeriği indirir). */
     suspend fun loadM3uVod(source: M3uSource): Pair<List<Genre>, List<VodItem>> {
         m3uVodCache[source.id]?.let { return it }
-        var content = source.content
+        var content = store.loadM3uContent(source)
         if (content.isBlank() && source.url.isNotBlank()) {
             content = M3uParser.fetch(source.url).orEmpty()
             if (content.isNotBlank()) {
                 saveM3uSource(source.copy(content = content))
             }
         }
-        val result = M3uParser.parseVod(content, source.id)
+        val result = withContext(Dispatchers.IO) { M3uParser.parseVod(content, source.id) }
         m3uVodCache[source.id] = result
         return result
     }

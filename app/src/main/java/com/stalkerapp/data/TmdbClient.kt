@@ -146,6 +146,43 @@ class TmdbClient(
         return info
     }
 
+    /**
+     * Başlığa göre TMDB film/dizi kimliğini arar. Xtream panelleri `tmdb_id`
+     * alanını çoğu zaman boş/0 döndürür — bu durumda detay ekranı ad + yıla
+     * göre eşleştirme yapıp buradan kimliği alır (oyuncu fotoğrafları, sezon
+     * kapakları ve fragmanlar için). Bulunamazsa 0 döner.
+     */
+    suspend fun searchTitle(name: String, year: String, isSeries: Boolean, apiKey: String): Long {
+        val type = if (isSeries) "tv" else "movie"
+        val cacheKey = "search:$type:$name:$year"
+        cache[cacheKey]?.let { return it as Long }
+        if (apiKey.isBlank() || name.isBlank()) return 0
+        val y = year.take(4).takeIf { it.length == 4 && it.all(Char::isDigit) }
+        val url = buildString {
+            append("https://api.themoviedb.org/3/search/$type?api_key=$apiKey&query=")
+            append(Uri.encode(name))
+            if (y != null) {
+                append(if (isSeries) "&first_air_date_year=$y" else "&year=$y")
+            }
+            append("&language=${languageProvider()}")
+        }
+        val obj = getJson(url) ?: return 0
+        val results = obj["results"] as? JsonArray ?: return 0
+        // Tam ad eşleşmesi önceliklidir; yoksa ilk sonuç kabul edilir.
+        val id = results.mapNotNull { it as? JsonObject }.firstNotNullOfOrNull { o ->
+            val n = (o["name"] as? JsonPrimitive)?.contentOrNull
+                ?: (o["title"] as? JsonPrimitive)?.contentOrNull
+                ?: return@firstNotNullOfOrNull null
+            if (n.equals(name.trim(), ignoreCase = true)) {
+                (o["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: return@firstNotNullOfOrNull null
+            } else null
+        } ?: results.mapNotNull { it as? JsonObject }.firstNotNullOfOrNull { o ->
+            (o["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+        } ?: 0
+        cache[cacheKey] = id
+        return id
+    }
+
     /** İsme göre kişi ara; fotoğraf yolu + TMDB kişi id'si döner. */
     suspend fun searchPerson(name: String, apiKey: String): TmdbPerson? {
         val cacheKey = "person:$name"

@@ -725,6 +725,17 @@ fun SettingsScreen(
     // ================= BÖLÜM SAYFASI =================
     SettingsPage(
         lang = lang,
+        icon = when (currentSection) {
+            "playlist" -> Icons.Default.Tv
+            "content" -> Icons.Default.VideoLibrary
+            "library" -> Icons.Default.Star
+            "player" -> Icons.Default.VolumeUp
+            "appearance" -> Icons.Default.Palette
+            "integrations" -> Icons.Default.Link
+            "account" -> Icons.Default.Person
+            "privacy" -> Icons.Default.VerifiedUser
+            else -> Icons.Default.Info
+        },
         title = when (currentSection) {
             "playlist" -> com.stalkerapp.util.L10n.t(settings.language, "Playlist & Kaynaklar")
             "content" -> com.stalkerapp.util.L10n.t(settings.language, "Kütüphane & İçerik")
@@ -736,6 +747,17 @@ fun SettingsScreen(
             "privacy" -> com.stalkerapp.util.L10n.t(settings.language, "Gizlilik & Güvenlik")
             else -> com.stalkerapp.util.L10n.t(settings.language, "Hakkında & Destek")
         },
+        subtitle = when (currentSection) {
+            "playlist" -> str(lang, "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını yönet")
+            "content" -> str(lang, "+18, gizlenen kategoriler, ana sayfa ve VOD senkron ayarları")
+            "library" -> str(lang, "Favoriler, Sonra İzle ve özel listelerin")
+            "player" -> str(lang, "Kalite, altyazı, çözücü ve jest ayarları")
+            "appearance" -> str(lang, "Tema, vurgu rengi, yazı ölçeği ve TV davranışı")
+            "integrations" -> str(lang, "TMDB ve diğer dış servisler")
+            "account" -> str(lang, "Profil ve hesap ayarları")
+            "privacy" -> str(lang, "PIN kilidi ve gizlilik tercihleri")
+            else -> str(lang, "Sürüm, güncelleme ve destek")
+        },
         onBack = { currentSection = null },
         modifier = modifier
     ) {
@@ -746,9 +768,12 @@ fun SettingsScreen(
                 val sourceStats = remember(sourcesVersion) { mutableStateMapOf<String, SourceStats>() }
                 LaunchedEffect(sourcesVersion, m3uSources, xtreamSources) {
                     m3uSources.forEach { s ->
-                        val live = runCatching { M3uParser.parse(s.content, s.id).size }.getOrDefault(0)
-                        val (_, items) = runCatching { M3uParser.parseVod(s.content, s.id) }
-                            .getOrDefault(emptyList<Genre>() to emptyList<VodItem>())
+                        // İçerik dosyada saklanır (SharedPreferences değil); parse IO'da yapılır.
+                        val content = vm.store.loadM3uContent(s)
+                        val live = runCatching { withContext(Dispatchers.IO) { M3uParser.parse(content, s.id).size } }.getOrDefault(0)
+                        val (_, items) = runCatching {
+                            withContext(Dispatchers.IO) { M3uParser.parseVod(content, s.id) }
+                        }.getOrDefault(emptyList<Genre>() to emptyList<VodItem>())
                         sourceStats[s.id] = SourceStats(
                             live = live,
                             movies = items.count { !it.isSeries },
@@ -1659,20 +1684,22 @@ fun SettingsScreen(
                 }
             }
             "library" -> {
-            Text(
-                str(lang, "Sonra izle, izlediklerin, favorilerin ve özel listelerin tek ekranda."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(
-                onClick = onOpenLibrary,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(str(lang, "Kütüphanemi Aç"))
-            }
-                Text(str(lang, "Özel Listelerim"), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    str(lang, "Sonra izle, izlediklerin, favorilerin ve özel listelerin tek ekranda."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = onOpenLibrary,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(str(lang, "Kütüphanemi Aç"))
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                SectionHeader(Icons.Default.ListAlt, str(lang, "Özel Listelerim"))
                 if (userLists.isEmpty()) {
                     Text(
                         str(lang, "Henüz liste yok. Aşağıdan yeni bir liste oluştur; içerik detayından listeye ekleyebilirsin."),
@@ -1714,7 +1741,6 @@ fun SettingsScreen(
                         enabled = newListName.trim().isNotBlank()
                     ) { Text(str(lang, "Oluştur")) }
                 }
-
             }
             "player" -> {
 
@@ -2645,6 +2671,7 @@ fun SettingsScreen(
 
 // ---------- Yardımcı bileşenler ----------
 
+/** Ayar satırı: her satır kendi kartında, ikon + başlık + açıklama + anahtar. */
 @Composable
 private fun ToggleRow(
     icon: ImageVector,
@@ -2654,12 +2681,25 @@ private fun ToggleRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        }
         Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
@@ -2763,13 +2803,19 @@ private fun SettingsNavRow(
     }
 }
 
-/** Bölüm sayfası kabuğu: geri oku + başlık + kaydırılabilir içerik kartı. */
+/**
+ * Bölüm sayfası kabuğu: geri oku + ikonlu başlık + açıklama + kaydırılabilir
+ * içerik kartı. İçerik tek büyük kart yerine bölümlere ayrılmış kartlardan
+ * oluşur (her ayar grubu kendi kartında — daha okunaklı ve kullanışlı).
+ */
 @Composable
 private fun SettingsPage(
     lang: String,
+    icon: ImageVector,
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String = "",
     content: @Composable () -> Unit
 ) {
     Column(
@@ -2781,22 +2827,44 @@ private fun SettingsPage(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Sabit başlık satırı: geri oku + ikonlu büyük başlık.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"))
+            IconButton(onClick = onBack, modifier = Modifier.size(42.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), modifier = Modifier.size(24.dp))
             }
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
-        SettingsCard(modifier = Modifier.fillMaxWidth()) {
-            content()
-        }
+        HorizontalDivider()
+        // Bölüm içerikleri: her mantıksal grup kendi kartında görünür.
+        // (Bölümler zaten SectionHeader ile ayrılmış — kartlar arası boşluk
+        // okunabilirliği artırır.)
+        content()
         Spacer(modifier = Modifier.height(96.dp))
     }
 }

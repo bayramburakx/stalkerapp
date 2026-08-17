@@ -319,10 +319,40 @@ private fun DiscoverContent(
     var genreFilter by remember { mutableStateOf<Long?>(null) }
 
     val catTitle = remember(catalog.categories) { catalog.categories.associate { it.id to it.title } }
-    val types = listOf(str(lang, "Tümü"), str(lang, "Film"), str(lang, "Dizi"), str(lang, "Belgesel"))
-    val genres = catalog.categories.take(14)
+    // Tür filtreleri kaynağa göre dinamiktir: katalogda o türden içerik yoksa
+    // buton gösterilmez (M3U/Xtream/Stalker kaynağına göre değişir).
+    val hasMovies = remember(catalog) { catalog.allItems.any { !catalog.isSeriesItem(it) } }
+    val hasSeries = remember(catalog) { catalog.allItems.any { catalog.isSeriesItem(it) } }
+    val hasDocs = remember(catalog) {
+        catalog.categories.any { c ->
+            c.title.contains("belgesel", ignoreCase = true) || c.title.contains("documentary", ignoreCase = true)
+        }
+    }
+    val typeOptions = remember(catalog, hasMovies, hasSeries, hasDocs) {
+        val opts = mutableListOf<Pair<Int, String>>()
+        opts += 0 to str(lang, "Tümü")
+        if (hasMovies) opts += 1 to str(lang, "Film")
+        if (hasSeries) opts += 2 to str(lang, "Dizi")
+        if (hasDocs) opts += 3 to str(lang, "Belgesel")
+        opts
+    }
+    // Kategori listesi kaynağın kategorileridir (Stalker VOD kategorileri,
+    // Xtream kategorileri ya da M3U group-title'ları) — sabit değildir.
+    val genres = catalog.categories.filter { it.id != 0L }.take(60)
+    val types = typeOptions.map { it.second }
+    val typeToIndex = typeOptions.associate { it.first to typeOptions.indexOf(it) }
+    // typeFilter int değeri 0/1/2/3; dinamik listede endekse çevrilir.
+    val selectedTypeIndex = typeToIndex[typeFilter] ?: 0
 
-    val discover = remember(catalog, typeFilter, genreFilter) {
+    // Katalog değişince artık var olmayan bir tür/kategori seçiliyse sıfırla
+    // (kaynak değişince filtreler yeni kaynağın içeriğine göre güncellensin).
+    LaunchedEffect(catalog, typeOptions) {
+        if (typeFilter != 0 && typeOptions.none { it.first == typeFilter }) typeFilter = 0
+        if (genreFilter != null && catalog.categories.none { it.id == genreFilter }) genreFilter = null
+    }
+
+    val discover = remember(catalog, typeFilter, genreFilter, typeOptions) {
+        val allowedTypes = typeOptions.map { it.first }.toSet()
         catalog.allItems.filter { item ->
             val isSeries = catalog.isSeriesItem(item)
             val okType = when (typeFilter) {
@@ -334,7 +364,7 @@ private fun DiscoverContent(
                 else -> true
             }
             val okGenre = genreFilter == null || item.categoryId == genreFilter
-            okType && okGenre
+            okType && okGenre && (typeFilter == 0 || typeFilter in allowedTypes)
         }.take(150)
     }
 
@@ -350,10 +380,10 @@ private fun DiscoverContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             DropdownFilterChip(
-                label = "${str(lang, "Tür")}: ${types[typeFilter]}",
+                label = "${str(lang, "Tür")}: ${types.getOrElse(selectedTypeIndex) { types.firstOrNull() ?: "" }}",
                 options = types,
-                selected = typeFilter,
-                onSelect = { typeFilter = it }
+                selected = selectedTypeIndex,
+                onSelect = { i -> typeFilter = typeOptions.getOrNull(i)?.first ?: 0 }
             )
             if (genres.isNotEmpty()) {
                 val genreOptions = listOf(null) + genres.map { it.id }

@@ -35,6 +35,11 @@ class VodSyncManager(
 
     private var job: kotlinx.coroutines.Job? = null
     private val mutex = Mutex()
+    // Sync sırasında UI yayınlarını throttle eder: her kategori bitişinde 80k+
+    // öğelik allItems listesini yayınlamak ana sayfa/VOD filtrelerini sürekli
+    // yeniden hesaplatıp sayfa geçişlerini takıldırıyordu. En fazla ~700ms'de
+    // bir tam liste yayınlanır; aradaki yayınlarda yalnızca sayaçlar güncellenir.
+    private var lastUiPublish = 0L
     private val seriesKeywords = listOf("dizi", "series", "serial", "diziler")
     // Last-resort enumeration strategy: single letters/digits via the portal's
     // `search` param. Many portals cap plain list paging but paginate search
@@ -335,13 +340,20 @@ class VodSyncManager(
         val prev = _progress.value
         // Syncing yayınlarında byId/seriesCategoryIds yeniden hesaplanmaz;
         // son hazır kataloğun haritası kullanılır (yarım liste için de faydalı).
-        if (status == VodCatalogStatus.Syncing && prev.byId.isNotEmpty()) {
+        if (status == VodCatalogStatus.Syncing) {
+            val now = System.currentTimeMillis()
+            // 80k+ öğelik listeyi her kategori bitişinde yayınlamak ana iş
+            // parçacığında ağır filtreleri (ana sayfa/VOD) sürekli tetikliyordu.
+            // En fazla ~700ms'de bir tam liste yayınlanır; aradakilerde liste
+            // korunur, yalnızca ilerleme sayaçları güncellenir.
+            val publish = now - lastUiPublish >= 700
+            if (publish) lastUiPublish = now
             return prev.copy(
                 status = status,
                 doneCategories = doneCategories,
                 totalCategories = totalCategories,
                 loadedCount = loadedCount,
-                allItems = allItems,
+                allItems = if (publish) allItems else prev.allItems,
                 categories = categories,
                 portalTotal = portalTotal,
                 lastSync = lastSync

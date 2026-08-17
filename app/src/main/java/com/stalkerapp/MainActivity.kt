@@ -111,6 +111,18 @@ private fun AppNav() {
     val app = LocalContext.current.applicationContext as StalkerApp
     val navController = rememberNavController()
     val vm: MainViewModel = rememberMainViewModel(app)
+
+    // Telefon geri tuşu: önceki ekrana dön; geri dönülecek ekran yoksa (back
+    // stack boş) uygulamadan çıkmak yerine Ana Sayfa'ya yönlendir — böylece
+    // sayfalar arasında geri tuşuna basınca uygulama kapanmaz.
+    fun safeBack() {
+        if (!navController.popBackStack()) {
+            navController.navigate("home") {
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
     // Ana ekran widget'ından gelen kanal: uygulama açılır açılmaz o kanal oynatılır.
     val activity = LocalContext.current as? Activity
     val widgetChannelId = remember {
@@ -190,7 +202,7 @@ private fun AppNav() {
                     vm.refreshFlows()
                     navController.navigate("profiles") { popUpTo("login") { inclusive = true } }
                 },
-                onBack = { navController.popBackStack() }
+                onBack = { safeBack() }
             )
         }
         composable("profiles") {
@@ -242,11 +254,11 @@ private fun AppNav() {
         composable("epg") {
             EpgGuideScreen(
                 profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
-                onBack = { navController.popBackStack() },
+                onBack = { safeBack() },
                 onOpenPlayer = { navController.navigate("player") }
             )
         }
-        composable("search") { SearchScreen(onBack = { navController.popBackStack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }
+        composable("search") { SearchScreen(onBack = { safeBack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }
         composable("player") { PlayerScreen(navController) }
         composable(
             route = "person/{name}?isDirector={isDirector}",
@@ -258,7 +270,7 @@ private fun AppNav() {
             PersonScreen(
                 name = Uri.decode(entry.arguments?.getString("name").orEmpty()),
                 isDirector = entry.arguments?.getBoolean("isDirector") ?: false,
-                onBack = { navController.popBackStack() },
+                onBack = { safeBack() },
                 onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }
             )
         }
@@ -272,7 +284,7 @@ private fun AppNav() {
             VodDetailScreen(
                 vodId = entry.arguments?.getLong("vodId") ?: 0L,
                 isSeriesHint = entry.arguments?.getBoolean("series") ?: false,
-                onBack = { navController.popBackStack() },
+                onBack = { safeBack() },
                 onOpenPlayer = { navController.navigate("player") },
                 onOpenVod = { id, series ->
                     navController.navigate("vod/$id?series=$series") { launchSingleTop = true }

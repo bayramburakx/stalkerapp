@@ -70,16 +70,59 @@ class Store(private val context: Context) {
     // ---------- M3U / Xtream kaynakları ----------
 
     fun m3uSources(): List<M3uSource> = runCatching {
-        json.decodeFromString(
+        val list = json.decodeFromString(
             ListSerializer(M3uSource.serializer()),
             prefs.getString(KEY_M3U_SOURCES, "[]").orEmpty()
         )
+        // Eski sürümlerde içerik SharedPreferences'ta saklanırdı; büyük listeler
+        // her okumada ana iş parçacığını kilitleyip sayfa geçişlerini yavaşlatırdı.
+        // İçerik dosyaya taşınıp listeden boşaltılır (bir kez, sonra otomatik).
+        val big = list.filter { it.content.length > 64 * 1024 }
+        if (big.isNotEmpty()) {
+            big.forEach { saveM3uContent(it.id, it.content) }
+            saveM3uSources(list)
+        }
+        list
     }.getOrDefault(emptyList())
 
+    /**
+     * M3U listesi içeriği (indirilen #EXTM3U metni) SharedPreferences yerine
+     * diskte ayrı bir dosyada tutulur. Büyük listeler (100MB+) SharedPreferences'a
+     * yazılamaz (ANR/OOM) ve her okumada ana iş parçacığını kilitlerdi; dosya
+     * hem kaydetmeyi hem okumayı güvenli yapar. Eski sürümlerden gelen
+     * `content` alanındaki veriler ilk okumada dosyaya taşınır (geriye dönük).
+     */
+    private fun m3uContentFile(id: String): File = File(context.filesDir, "m3u_content_$id.m3u")
+
+    fun saveM3uContent(id: String, content: String) {
+        if (content.isBlank()) return
+        runCatching { m3uContentFile(id).writeText(content) }
+    }
+
+    /** Kayıtlı M3U içeriğini döner; yoksa/boşsa eski `content` alanına bakar. */
+    fun loadM3uContent(source: M3uSource): String {
+        if (source.id.isNotBlank()) {
+            runCatching {
+                val f = m3uContentFile(source.id)
+                if (f.exists()) return f.readText()
+            }
+        }
+        return source.content
+    }
+
+    fun deleteM3uContent(id: String) {
+        runCatching { m3uContentFile(id).delete() }
+    }
+
+    /**
+     * M3U kaynaklarını kaydeder; içerik alanı dosyaya yazılıp listeden
+     * boşaltılır (SharedPreferences şişmesin). Eski içerik alanı da temizlenir.
+     */
     fun saveM3uSources(list: List<M3uSource>) {
+        list.forEach { s -> saveM3uContent(s.id, s.content) }
         prefs.edit().putString(
             KEY_M3U_SOURCES,
-            json.encodeToString(ListSerializer(M3uSource.serializer()), list)
+            json.encodeToString(ListSerializer(M3uSource.serializer()), list.map { it.copy(content = "") })
         ).apply()
     }
 

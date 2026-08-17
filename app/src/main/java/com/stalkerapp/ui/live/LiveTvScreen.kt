@@ -197,15 +197,16 @@ fun LiveTvScreen(
             }
         }
 
-        // Aktif kaynak rozeti (Stalker dışındaki kaynaklar için).
-        if (isExternal && sourceName != null) {
+        // Aktif kaynak rozeti (Stalker dışındaki kaynaklar için). M3U listelerinde
+        // gösterilmez — kullanıcı isteği (liste adı gereksiz kalabalık yapıyor).
+        if (isExternal && kind != "m3u" && sourceName != null) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 Text(
-                    t("Kaynak") + ": " + sourceName.ifBlank { if (kind == "m3u") "M3U" else "Xtream" },
+                    t("Kaynak") + ": " + sourceName.ifBlank { "Xtream" },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

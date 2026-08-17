@@ -170,14 +170,35 @@ fun VodDetailScreen(
 
     val catalog by vm.vodCatalog.collectAsStateWithLifecycle()
 
-    LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint) {
+    // Xtream panelleri `tmdb_id`'yi çoğu zaman 0 döndürür — bu durumda ad + yıl
+    // ile TMDB'de arayıp kimliği çözeriz (oyuncu fotoğrafları, sezon kapakları,
+    // fragmanlar böyle çalışır). Çözülen kimlik diğer zenginleştirme
+    // LaunchedEffect'lerinin anahtarına eklenir (öğe değişince yeniden çözülür).
+    var resolvedTmdbId by remember { mutableStateOf(0L) }
+    LaunchedEffect(item?.id, item?.name, item?.year, item?.isSeries, isSeriesHint) {
+        val i = item ?: return@LaunchedEffect
+        val key = app.store.settings().tmdbApiKey
+        if (key.isBlank()) {
+            resolvedTmdbId = 0
+            return@LaunchedEffect
+        }
+        if (i.tmdbId > 0) {
+            resolvedTmdbId = i.tmdbId
+        } else {
+            resolvedTmdbId = runCatching {
+                app.tmdb.searchTitle(i.name, i.year, i.isSeries || isSeriesHint, key)
+            }.getOrDefault(0)
+        }
+    }
+
+    LaunchedEffect(resolvedTmdbId, item?.isSeries, isSeriesHint) {
         val i = item ?: return@LaunchedEffect
         val settings = app.store.settings()
         val key = settings.tmdbApiKey
-        if (key.isNotBlank() && i.tmdbId > 0) {
+        if (key.isNotBlank() && resolvedTmdbId > 0) {
             // Zenginleştirme alt-anahtarları (Ayarlar → Entegrasyonlar).
             if (settings.tmdbPeople || settings.tmdbTrailers) {
-                val enr = app.tmdb.enrich(i.tmdbId, i.isSeries || isSeriesHint, key)
+                val enr = app.tmdb.enrich(resolvedTmdbId, i.isSeries || isSeriesHint, key)
                 if (settings.tmdbPeople) tmdbCast = enr.cast
                 if (settings.tmdbTrailers) trailerKey = enr.trailerKey
             }
@@ -186,16 +207,16 @@ fun VodDetailScreen(
 
     // Sezon posterleri: TMDB'de gerçek sezon posteri varsa o, yoksa portalın
     // sezon görseli (varsa), o da yoksa dizi afişi kart üzerinde gösterilir.
-    LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint, seasons) {
+    LaunchedEffect(resolvedTmdbId, item?.isSeries, isSeriesHint, seasons) {
         val i = item ?: return@LaunchedEffect
         if (seasons.isEmpty() || !(i.isSeries || isSeriesHint)) return@LaunchedEffect
         val key = app.store.settings().tmdbApiKey
-        val withKey = key.isNotBlank() && i.tmdbId > 0
+        val withKey = key.isNotBlank() && resolvedTmdbId > 0
         val map = mutableMapOf<Long, String>()
         seasons.forEach { s ->
             val num = s.id.toInt().coerceAtLeast(1)
             if (withKey) {
-                val p = runCatching { app.tmdb.seasonPoster(i.tmdbId, num, key) }.getOrDefault("")
+                val p = runCatching { app.tmdb.seasonPoster(resolvedTmdbId, num, key) }.getOrDefault("")
                 if (p.isNotBlank()) {
                     map[s.id] = TmdbClient.photoUrl(p, large = true)
                     return@forEach
@@ -208,18 +229,18 @@ fun VodDetailScreen(
 
     // Bölüm küçük resimleri + gerçek adları: portal görseli önce, yoksa TMDB'den
     // still + bölüm adı çekilir (bölüm bölüm eklenir, anında görünür).
-    LaunchedEffect(item?.tmdbId, item?.isSeries, isSeriesHint, selectedSeason, episodes) {
+    LaunchedEffect(resolvedTmdbId, item?.isSeries, isSeriesHint, selectedSeason, episodes) {
         val i = item ?: return@LaunchedEffect
         val eps = episodes.orEmpty()
         if (eps.isEmpty() || !(i.isSeries || isSeriesHint)) return@LaunchedEffect
         val key = app.store.settings().tmdbApiKey
-        val withKey = key.isNotBlank() && i.tmdbId > 0
+        val withKey = key.isNotBlank() && resolvedTmdbId > 0
         val seasonNum = selectedSeason?.toInt()?.coerceAtLeast(1) ?: 1
         var thumbs = emptyMap<Long, String>()
         var names = emptyMap<Long, String>()
         eps.forEach { e ->
             val info = if (withKey) {
-                runCatching { app.tmdb.episodeInfo(i.tmdbId, seasonNum, e.episodeNumber.coerceAtLeast(1), key) }
+                runCatching { app.tmdb.episodeInfo(resolvedTmdbId, seasonNum, e.episodeNumber.coerceAtLeast(1), key) }
                     .getOrDefault(TmdbEpisodeInfo())
             } else TmdbEpisodeInfo()
             val url = when {
@@ -249,17 +270,28 @@ fun VodDetailScreen(
             // Bu portal tek-öğe isteğini (vod_id) yok sayar — katalog henüz
             // senkronlanırken byId'de öğe yoksa vodById'ye güvenmek hep aynı
             // (ilk) filmi açar. Dönen öğenin id'si istenenle eşleşmiyorsa kabul
-            // etme; katalog yüklenene dek bekle (en fazla 60 sn).
+            // etme. Katalog Syncing iken byId haritası güncellenmez (performans),
+            // ama allItems listesi güncellenir — öğeyi orada da ara. Katalog
+            // hazır olunca öğe yoksa beklemeden hata döndür (en fazla 60 sn).
             var base: VodItem? = null
             val deadline = System.currentTimeMillis() + 60_000L
             while (base == null && System.currentTimeMillis() < deadline) {
-                base = vm.vodCatalog.value.byId[vodId]
+                val cat = vm.vodCatalog.value
+                base = cat.byId[vodId]
+                    ?: cat.allItems.firstOrNull { it.id == vodId }
                     ?: if (p != null) {
                         runCatching { vm.repository.vodById(p, vodId) }
                             .getOrNull()
                             ?.takeIf { it.id == vodId }
                     } else null
-                if (base == null) delay(400)
+                if (base == null) {
+                    // Katalog tamamlandıysa (ya da hata verdişse) ve öğe hâlâ
+                    // yoksa beklemeyi bırak — içerik gerçekten yok demektir.
+                    if (cat.status == com.stalkerapp.ui.VodCatalogStatus.Ready ||
+                        cat.status == com.stalkerapp.ui.VodCatalogStatus.Error
+                    ) break
+                    delay(400)
+                }
             }
             if (base == null) {
                 error = str(lang, "İçerik bulunamadı")

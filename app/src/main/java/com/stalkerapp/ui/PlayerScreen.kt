@@ -734,6 +734,66 @@ fun PlayerScreen(navController: NavHostController) {
             )
         }
 
+        // ---------- CENTER CONTROLS (Film/Dizi) ----------
+        // Durdur / geri sar / ileri sar ikonları altta değil ekranın ortasında
+        // gösterilir (Netflix tarzı); altta yalnızca ses + altyazı kalır.
+        if (overlayVisible && !isLive && !isBuffering) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                IconButton(
+                    onClick = { PlaybackManager.seekBack(10_000L) },
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Replay10,
+                        contentDescription = str(lang, "10 sn Geri"),
+                        tint = Color.White,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
+                IconButton(
+                    onClick = { PlaybackManager.togglePlayPause() },
+                    modifier = Modifier.size(88.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = str(lang, "Oynat/Duraklat"),
+                        tint = Color.White,
+                        modifier = Modifier.size(64.dp)
+                    )
+                }
+                IconButton(
+                    onClick = { PlaybackManager.seekForward(10_000L) },
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Forward10,
+                        contentDescription = str(lang, "10 sn İleri"),
+                        tint = Color.White,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
+                // Sonraki Bölüm: yalnızca dizilerde gösterilir.
+                val queueIsSeries = VodQueue.item?.isSeries == true || (VodQueue.item?.seriesId ?: 0L) > 0
+                if (VodQueue.hasNext && queueIsSeries) {
+                    IconButton(
+                        onClick = { PlaybackManager.playNextEpisode() },
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.SkipNext,
+                            contentDescription = str(lang, "Sonraki Bölüm"),
+                            tint = Color.White,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         if (overlayVisible) {
             // ---------- TOP BAR ----------
             Box(
@@ -751,50 +811,46 @@ fun PlayerScreen(navController: NavHostController) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = { exitPlayer() },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = str(lang, "Geri"),
                             tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                     if (isLive) {
                         ChannelLogo(
                             logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(34.dp)
                         )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 6.dp)
-                    ) {
-                        Text(
-                            text = currentChannel?.name ?: PlaybackManager.currentTitle,
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (currentChannel != null && isLive) {
+                        // Canlı TV: kanal adı + tür + numara üst barda gösterilir.
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 6.dp)
+                        ) {
                             Text(
-                                text = "${currentChannel?.tvGenreTitle ?: ""}  •  ${str(lang, "Kanal")} ${currentChannel?.number ?: ""}",
-                                color = Color.White.copy(alpha = 0.7f),
-                                style = MaterialTheme.typography.labelSmall,
+                                text = currentChannel?.name ?: PlaybackManager.currentTitle,
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                        } else if (!isLive && PlaybackManager.currentSubtitle.isNotBlank()) {
-                            Text(
-                                text = PlaybackManager.currentSubtitle,
-                                color = Color.White.copy(alpha = 0.7f),
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (currentChannel != null && isLive) {
+                                Text(
+                                    text = "${currentChannel?.tvGenreTitle ?: ""}  •  ${str(lang, "Kanal")} ${currentChannel?.number ?: ""}",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
+                    } else {
+                        // Film/Dizi: üst barda başlık gösterilmez (sadece geri + butonlar).
+                        Spacer(modifier = Modifier.weight(1f))
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -807,44 +863,44 @@ fun PlayerScreen(navController: NavHostController) {
                                 onClick = {
                                     currentChannel?.let { vm.toggleFavoriteChannel(it) }
                                 },
-                                modifier = Modifier.size(34.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
                                     imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = str(lang, "Favori"),
                                     tint = if (isFav) Color(0xFFFF5252) else Color.White,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
                         IconButton(
                             onClick = { castDialogVisible = true },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
                                 contentDescription = "Chromecast",
                                 tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                         // Uyku zamanlayıcısı: aktifken kalan süre ikonun altında görünür.
                         IconButton(
                             onClick = { showSleepDialog = true },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
                                     Icons.Default.Bedtime,
                                     contentDescription = str(lang, "Uyku zamanlayıcısı"),
                                     tint = if (sleepRemaining != 0L) Color(0xFFFFB74D) else Color.White,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                                 if (sleepRemaining != 0L) {
                                     Text(
                                         sleepLabel(sleepRemaining, lang),
                                         color = Color(0xFFFFB74D),
-                                        fontSize = 8.sp,
+                                        fontSize = 9.sp,
                                         maxLines = 1
                                     )
                                 }
@@ -860,34 +916,34 @@ fun PlayerScreen(navController: NavHostController) {
                                     }
                                 }
                             },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = str(lang, "Harici oynatıcı"), tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.OpenInNew, contentDescription = str(lang, "Harici oynatıcı"), tint = Color.White, modifier = Modifier.size(24.dp))
                         }
                         // Lock icon and PiP icon side-by-side
                         IconButton(
                             onClick = { locked = true; overlayVisible = false },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.Lock, contentDescription = str(lang, "Kilit"), tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Lock, contentDescription = str(lang, "Kilit"), tint = Color.White, modifier = Modifier.size(24.dp))
                         }
                         IconButton(
                             onClick = { PlaybackManager.enterPip(activity) },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = str(lang, "PiP (Resim içinde resim)"), tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = str(lang, "PiP (Resim içinde resim)"), tint = Color.White, modifier = Modifier.size(24.dp))
                         }
                         IconButton(
                             onClick = { showInfo = true },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.Info, contentDescription = str(lang, "Bilgi"), tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Info, contentDescription = str(lang, "Bilgi"), tint = Color.White, modifier = Modifier.size(24.dp))
                         }
                         IconButton(
                             onClick = { showPlayerSettings = true },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.Settings, contentDescription = str(lang, "Ayarlar"), tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Settings, contentDescription = str(lang, "Ayarlar"), tint = Color.White, modifier = Modifier.size(24.dp))
                         }
                     }
                 }
@@ -906,120 +962,90 @@ fun PlayerScreen(navController: NavHostController) {
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 if (!isLive) {
-                    // PROGRESS BAR (Middle Seek Bar for Movies & Series)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = formatMs(position),
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                        Slider(
-                            value = position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(1f)),
-                            onValueChange = {
-                                seeking = true
-                                position = it.toLong()
-                            },
-                            onValueChangeFinished = {
-                                PlaybackManager.seekTo(position)
-                                seeking = false
-                            },
-                            valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = formatMs(duration),
-                            color = Color.White.copy(alpha = 0.8f),
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Movie & Series Playback Controls (Centered, Guide & Channels buttons removed)
+                    // Film/Dizi alt barı: solda süre, sağda yalnızca ses + altyazı
+                    // (oynat/durdur, geri/ileri sar ikonları ekranın ORTASINDA —
+                    // Netflix tarzı). En altta ince, dokunulabilir progress çizgisi.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(
-                            onClick = { PlaybackManager.seekBack(10_000L) },
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Replay10,
-                                contentDescription = str(lang, "10 sn Geri"),
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        IconButton(
-                            onClick = { PlaybackManager.togglePlayPause() },
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = str(lang, "Oynat/Duraklat"),
-                                tint = Color.White,
-                                modifier = Modifier.size(48.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        IconButton(
-                            onClick = { PlaybackManager.seekForward(10_000L) },
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Forward10,
-                                contentDescription = str(lang, "10 sn İleri"),
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(24.dp))
-                        IconButton(
-                            onClick = { showTracks = true },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = str(lang, "Ses Dili"),
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = { showSubs = true },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Subtitles,
-                                contentDescription = str(lang, "Altyazı"),
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        // Sonraki Bölüm: yalnızca dizilerde gösterilir (filmlerde
-                        // kuyruk boş bırakılır — bayat diz kuyruğu butonu yanlış göstermesin).
-                        val queueIsSeries = VodQueue.item?.isSeries == true || (VodQueue.item?.seriesId ?: 0L) > 0
-                        if (VodQueue.hasNext && queueIsSeries) {
-                            Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "${formatMs(position)} / ${formatMs(duration)}",
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
-                                onClick = { PlaybackManager.playNextEpisode() },
-                                modifier = Modifier.size(44.dp)
+                                onClick = { showTracks = true },
+                                modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.SkipNext,
-                                    contentDescription = str(lang, "Sonraki Bölüm"),
+                                    Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = str(lang, "Ses Dili"),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { showSubs = true },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Subtitles,
+                                    contentDescription = str(lang, "Altyazı"),
                                     tint = Color.White,
                                     modifier = Modifier.size(28.dp)
                                 )
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Netflix tarzı ince progress çizgisi: dokun/sürükle → atla.
+                    val progressFraction = if (duration > 0) {
+                        (position.toFloat() / duration).coerceIn(0f, 1f)
+                    } else 0f
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = 0.25f))
+                            .pointerInput(duration) {
+                                detectTapGestures { offset ->
+                                    if (duration > 0) {
+                                        val target = (offset.x / size.width * duration).toLong().coerceIn(0L, duration)
+                                        PlaybackManager.seekTo(target)
+                                        position = target
+                                    }
+                                }
+                            }
+                            .pointerInput(duration) {
+                                detectDragGestures(
+                                    onDragStart = { seeking = true },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        if (duration > 0) {
+                                            position = (change.position.x / size.width * duration)
+                                                .toLong().coerceIn(0L, duration)
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        PlaybackManager.seekTo(position)
+                                        seeking = false
+                                    },
+                                    onDragCancel = { seeking = false }
+                                )
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progressFraction)
+                                .fillMaxHeight()
+                                .background(Color(0xFFE50914))
+                        )
                     }
                 } else {
                     // LIVE TV CONTROLS
@@ -1074,61 +1100,79 @@ fun PlayerScreen(navController: NavHostController) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = {
-                                val idx = ChannelQueue.index - 1
-                                if (idx >= 0) switchTo(idx)
-                            }) {
+                            IconButton(
+                                onClick = {
+                                    val idx = ChannelQueue.index - 1
+                                    if (idx >= 0) switchTo(idx)
+                                },
+                                modifier = Modifier.size(56.dp)
+                            ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                     contentDescription = str(lang, "Önceki"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(44.dp)
                                 )
                             }
-                            IconButton(onClick = { PlaybackManager.togglePlayPause() }) {
+                            IconButton(
+                                onClick = { PlaybackManager.togglePlayPause() },
+                                modifier = Modifier.size(64.dp)
+                            ) {
                                 Icon(
                                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = str(lang, "Oynat/Duraklat"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(52.dp)
+                                    modifier = Modifier.size(56.dp)
                                 )
                             }
                             // Timeshift: canlı yayında 30 sn geri sar (sunucu destekliyorsa).
                             if (liveSeekable) {
-                                IconButton(onClick = { PlaybackManager.seekBack(30_000L) }) {
+                                IconButton(
+                                    onClick = { PlaybackManager.seekBack(30_000L) },
+                                    modifier = Modifier.size(52.dp)
+                                ) {
                                     Icon(
                                         Icons.Default.Replay10,
                                         contentDescription = str(lang, "30 sn geri sar"),
                                         tint = Color.White,
-                                        modifier = Modifier.size(30.dp)
+                                        modifier = Modifier.size(36.dp)
                                     )
                                 }
                             }
-                            IconButton(onClick = {
-                                val idx = ChannelQueue.index + 1
-                                if (idx < ChannelQueue.channels.size) switchTo(idx)
-                            }) {
+                            IconButton(
+                                onClick = {
+                                    val idx = ChannelQueue.index + 1
+                                    if (idx < ChannelQueue.channels.size) switchTo(idx)
+                                },
+                                modifier = Modifier.size(56.dp)
+                            ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                     contentDescription = str(lang, "Sonraki"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(44.dp)
                                 )
                             }
-                            IconButton(onClick = { showTracks = true }) {
+                            IconButton(
+                                onClick = { showTracks = true },
+                                modifier = Modifier.size(52.dp)
+                            ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.VolumeUp,
                                     contentDescription = str(lang, "Ses"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
-                            IconButton(onClick = { showSubs = true }) {
+                            IconButton(
+                                onClick = { showSubs = true },
+                                modifier = Modifier.size(52.dp)
+                            ) {
                                 Icon(
                                     Icons.Default.Subtitles,
                                     contentDescription = str(lang, "Altyazı"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
                         }
