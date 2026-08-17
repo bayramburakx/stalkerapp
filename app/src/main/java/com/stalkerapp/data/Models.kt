@@ -144,7 +144,7 @@ data class Settings(
 
     // ---------- Görünüm & Cihaz ----------
     /** Tema: "system" | "light" | "dark" | "amoled". */
-    val themeMode: String = "system",
+    val themeMode: String = "amoled",
     /** Vurgu rengi (ARGB int). 0 = varsayılan (siyah/beyaz palet). */
     val accentColor: Long = 0L,
     /** Arayüz yazı boyutu ölçeği (0.85 - 1.4). */
@@ -173,12 +173,6 @@ data class Settings(
     val tmdbTrailers: Boolean = true,
     /** Detay ekranında TMDB oyuncu fotoğrafları gösterilsin mi? */
     val tmdbPeople: Boolean = true,
-    /** Trakt.tv API client id (cihaz akışı bağlantısı için). */
-    val traktClientId: String = "",
-    /** Trakt.tv erişim belirteci (cihaz akışı sonrası). */
-    val traktAccessToken: String = "",
-    /** Trakt.tv kullanıcı adı (bağlantı sonrası). */
-    val traktUsername: String = "",
 
     // ---------- Gizlilik ----------
     /** Ayarlar girişi için 4 haneli PIN. Boşsa PIN kilidi kapalıdır. */
@@ -324,31 +318,6 @@ data class Episode(
     val cmd: String = "",
     /** Portal'ın bölüm küçük resmi (yoksa TMDB'den çekilir). */
     val thumb: String = ""
-)
-
-/**
- * Cihaz üzerinde kayıt (recording): akış [startTs]'de [stopTs]'ye kadar bir
- * dosyaya indirilir. Sunucu kaydı yerine cihaz kaydı — MPEG-TS / ilerlemeli
- * akışlarda güvenilir, HLS'de bazı kaynaklarda çalışmayabilir.
- */
-@Serializable
-data class Recording(
-    val id: String = "",
-    val channelId: Long = 0,
-    val channelName: String = "",
-    val programName: String = "",
-    val startTs: Long = 0,
-    val stopTs: Long = 0,
-    /** "scheduled" | "recording" | "done" | "failed" | "cancelled" */
-    val status: String = "scheduled",
-    /** İndirilen dosyanın yolu (tamamlanınca dolar). */
-    val filePath: String = "",
-    /** Başlangıçta çözülen akış URL'si (elle başlatılan kayıtlarda hazır gelir). */
-    val streamUrl: String = "",
-    /** Kaydın ait olduğu kaynak türü ("stalker"|"m3u"|"xtream"). */
-    val sourceKind: String = "",
-    /** URL'yi başlangıçta çözmek için gereken kanal bilgisi. */
-    val channel: Channel = Channel()
 )
 
 /** EPG program hatırlatıcısı: program başlayınca bildirim gönderilir. */

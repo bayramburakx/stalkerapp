@@ -15,7 +15,6 @@ import com.stalkerapp.data.StalkerClient
 import com.stalkerapp.data.Store
 import com.stalkerapp.data.TmdbClient
 import com.stalkerapp.playback.PlaybackManager
-import com.stalkerapp.playback.RecordingManager
 import com.stalkerapp.ui.VodSyncManager
 import com.stalkerapp.ui.VodSyncService
 import com.stalkerapp.util.isWifiConnected
@@ -52,16 +51,14 @@ class StalkerApp : Application() {
             languageProvider = { store.settings().tmdbLanguage }
         )
         PlaybackManager.init(this, store, repository)
-        RecordingManager.init(this)
         firebase = FirebaseSyncManager.init(this)
         instance = this
         // Oturum açıksa veri deposunu o hesaba bağla (her hesabın kendi verisi).
         if (firebase.isSignedIn) {
             store.setAccount(firebase.currentUser.value?.uid)
         }
-        // Zamanlanmış görevler: 30 sn'de bir kontrol edilir — EPG program
-        // hatırlatıcıları (başlama vaktine yaklaşınca bildirim) ve planlı
-        // kayıtlar (başlama/bitiş zamanında akış indirme).
+        // Zamanlanmış görev: 30 sn'de bir EPG program hatırlatıcıları kontrol edilir
+        // (başlama vaktine yaklaşınca bildirim gönderilir).
         startReminderChecker()
 
         // Auto-login: diske kayıtlı profil ile doğrudan Ana Sayfa'ya başlanır
@@ -102,54 +99,8 @@ class StalkerApp : Application() {
         appScope.launch {
             while (true) {
                 runCatching { checkEpgReminders() }
-                runCatching { checkRecordings() }
                 delay(30_000)
             }
-        }
-    }
-
-    /**
-     * Planlı kayıtları yönetir: başlama zamanı gelenleri başlatır (akış URL'sini
-     * o anda çözer — token'lar bayatlamış olabilir), bitiş zamanı gelenleri kapatır.
-     */
-    private fun checkRecordings() {
-        val now = System.currentTimeMillis() / 1000
-        val recs = store.recordings()
-        if (recs.isEmpty()) return
-        // Başlama zamanı geçmiş ama bitiş zamanı gelmemiş planlı kayıtlar.
-        recs.filter { it.status == "scheduled" && now >= it.startTs && now < it.stopTs }.forEach { r ->
-            appScope.launch {
-                val url = r.streamUrl.ifBlank {
-                    runCatching { repository.channelStreamUrl(r.channel, repository.cachedProfile()) }
-                        .getOrNull().orEmpty()
-                }
-                if (url.isBlank()) {
-                    store.updateRecording(r.copy(status = "failed"))
-                } else {
-                    RecordingManager.start(r.id, url, r.stopTs)
-                    store.updateRecording(r.copy(status = "recording"))
-                }
-            }
-        }
-        // Bitiş zamanı geçen aktif kayıtlar → tamamlandı.
-        recs.filter { it.status == "recording" && now >= it.stopTs }.forEach { r ->
-            RecordingManager.stop(r.id)
-            val file = RecordingManager.fileFor(this, r.id)
-            store.updateRecording(
-                r.copy(
-                    status = if (file.exists() && file.length() > 0) "done" else "failed",
-                    filePath = file.absolutePath
-                )
-            )
-        }
-        // Başlama zamanı da geçmiş (uygulama kapalıyken kaçırılan) planlı kayıtlar.
-        recs.filter { it.status == "scheduled" && now >= it.stopTs }.forEach { r ->
-            store.updateRecording(r.copy(status = "cancelled"))
-        }
-        // 7 günden eski tamamlanmış kayıt kayıtlarını temizle.
-        val old = recs.filter { it.status == "done" && now - it.stopTs > 7 * 86400 }
-        if (old.isNotEmpty()) {
-            store.saveRecordings(recs.filterNot { it in old })
         }
     }
 

@@ -1,8 +1,7 @@
 package com.stalkerapp.ui.live
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,28 +11,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +44,6 @@ import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.ChannelCustomization
 import com.stalkerapp.data.ChannelCustomizer
-import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.ui.MainViewModel
@@ -121,9 +108,8 @@ fun LiveTvScreen(
     var selectedGenre by remember { mutableStateOf(0L) }
     var selectedCustomGroup by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
-    // Kanal yönetimi: özelleştirme sürümü değişince liste yeniden okunur (uzun bas → yönet).
+    // Kanal yönetimi: özelleştirme sürümü değişince liste yeniden okunur.
     var customVersion by remember { mutableStateOf(0) }
-    var manageChannel by remember { mutableStateOf<Channel?>(null) }
     // Kanal adının altında gösterilecek "şu an oynayan" programlar (harici EPG).
     var nowPlaying by remember { mutableStateOf(emptyMap<Long, String>()) }
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -318,8 +304,6 @@ fun LiveTvScreen(
                             isFavorite = isFav,
                             nowPlaying = nowPlaying[ch.id],
                             onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
-                            // Uzun bas → kanal yönetimi (özel logo, gruba taşı, sıralama).
-                            onLongClick = { manageChannel = it },
                             onClick = {
                                 scope.launch {
                                     val list = allChannels
@@ -337,291 +321,6 @@ fun LiveTvScreen(
             }
         }
 
-        // Kanal yönetimi dialog'u (Column kapsamındaki özelleştirme/sıra ile çalışır).
-        manageChannel?.let { ch ->
-            ChannelManageDialog(
-                lang = lang,
-                channel = ch,
-                customization = customization,
-                groupChannels = displayed,
-                onAction = { updated ->
-                    app.store.saveChannelCustomization(updated)
-                    customVersion++
-                },
-                onDismiss = { manageChannel = null }
-            )
         }
-        }
-    }
-}
-
-/**
- * Kanal yönetimi dialog'u: özel logo, EPG eşleştirme, özel gruba taşıma,
- * manuel sıralama (yukarı/aşağı) ve sıralama sıfırlama. Her eylem [onAction]
- * ile anında kaydedilir. Uygulamanın cam (glass) diline uygun tasarlanmıştır:
- * yarı saydam scrim, yuvarlatılmış yüzey, bölüm başlıkları ve ince çerçeve.
- */
-@Composable
-private fun ChannelManageDialog(
-    lang: String,
-    channel: Channel,
-    customization: ChannelCustomization,
-    groupChannels: List<Channel>,
-    onAction: (ChannelCustomization) -> Unit,
-    onDismiss: () -> Unit
-) {
-    fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
-    val key = channel.id.toString()
-    val currentGroup = ChannelCustomizer.groupOf(channel, customization)
-    val inCustomGroup = customization.customGroups.any { it.name == currentGroup }
-    val customLogos = customization.customLogos
-    var logoUrl by remember(key) { mutableStateOf(customLogos[key].orEmpty()) }
-    var epgId by remember(key) { mutableStateOf(customization.channelEpgIds[key].orEmpty()) }
-    var newGroup by remember { mutableStateOf("") }
-
-    // Geçerli grubun sıralaması: kayıtlı manuel sıralama yoksa özgün sıra.
-    val currentOrder = customization.channelOrder[currentGroup] ?: groupChannels.map { it.id }
-    val pos = currentOrder.indexOf(channel.id)
-
-    val dialogShape = RoundedCornerShape(22.dp)
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.72f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onDismiss() },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth()
-                .shadow(24.dp, dialogShape)
-                .clip(dialogShape)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f), dialogShape)
-                .padding(vertical = 20.dp, horizontal = 18.dp)
-        ) {
-            // Başlık: kanal adı + mevcut grup
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        ChannelCustomizer.displayName(channel.name, customization),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        "${t("Grup")}: $currentGroup",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = t("Kapat"),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-            )
-
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                SectionHeader(t("Özel Logo"), MaterialTheme.colorScheme.primary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = logoUrl,
-                        onValueChange = { logoUrl = it },
-                        label = { Text(t("Logo URL (boş = kaldır)")) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(onClick = {
-                        val updated = customization.copy(
-                            customLogos = if (logoUrl.isBlank()) customLogos - key else customLogos + (key to logoUrl.trim())
-                        )
-                        onAction(updated)
-                    }) { Text(t("Uygula")) }
-                }
-
-                SectionHeader(t("EPG Eşleştirme (xmltv_id)"), MaterialTheme.colorScheme.primary)
-                Text(
-                    t("Harici EPG'deki kanal kimliği ile manuel eşleştir (boş = otomatik)."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = epgId,
-                        onValueChange = { epgId = it.take(60) },
-                        label = { Text(t("xmltv_id (örn. TRT1.tr)")) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(onClick = {
-                        val updated = customization.copy(
-                            channelEpgIds = if (epgId.isBlank()) customization.channelEpgIds - key
-                            else customization.channelEpgIds + (key to epgId.trim())
-                        )
-                        onAction(updated)
-                    }) { Text(t("Uygula")) }
-                }
-
-                SectionHeader(t("Özel Gruba Taşı"), MaterialTheme.colorScheme.primary)
-                if (customization.customGroups.isNotEmpty()) {
-                    customization.customGroups.forEach { g ->
-                        val isCurrent = g.name == currentGroup
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                g.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (isCurrent) {
-                                Text(
-                                    "✓",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            } else {
-                                OutlinedButton(onClick = {
-                                    onAction(customization.copy(
-                                        channelGroup = customization.channelGroup + (key to g.name)
-                                    ))
-                                }) { Text(t("Taşı")) }
-                            }
-                        }
-                    }
-                } else {
-                    Text(
-                        t("Henüz özel grup yok — aşağıdan bir tane oluştur."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = newGroup,
-                        onValueChange = { newGroup = it.take(30) },
-                        label = { Text(t("Yeni grup adı")) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            val name = newGroup.trim()
-                            if (name.isNotBlank()) {
-                                val g = CustomChannelGroup(
-                                    id = "g_" + System.currentTimeMillis().toString(36),
-                                    name = name
-                                )
-                                val updated = customization.copy(
-                                    customGroups = customization.customGroups + g,
-                                    channelGroup = customization.channelGroup + (key to name)
-                                )
-                                onAction(updated)
-                                newGroup = ""
-                            }
-                        },
-                        enabled = newGroup.trim().isNotBlank()
-                    ) { Text(t("Oluştur & Taşı")) }
-                }
-                if (inCustomGroup) {
-                    OutlinedButton(onClick = {
-                        onAction(customization.copy(
-                            channelGroup = customization.channelGroup - key
-                        ))
-                    }) { Text(t("Özel Gruptan Çıkar (orijinal gruba dön)")) }
-                }
-
-                SectionHeader(t("Manuel Sıralama"), MaterialTheme.colorScheme.primary)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            val list = currentOrder.toMutableList()
-                            val p = list.indexOf(channel.id)
-                            if (p > 0) {
-                                list[p] = list[p - 1].also { list[p - 1] = list[p] }
-                                onAction(customization.copy(
-                                    channelOrder = customization.channelOrder + (currentGroup to list)
-                                ))
-                            }
-                        },
-                        enabled = pos > 0,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("↑ " + t("Yukarı")) }
-                    OutlinedButton(
-                        onClick = {
-                            val list = currentOrder.toMutableList()
-                            val p = list.indexOf(channel.id)
-                            if (p >= 0 && p < list.size - 1) {
-                                list[p] = list[p + 1].also { list[p + 1] = list[p] }
-                                onAction(customization.copy(
-                                    channelOrder = customization.channelOrder + (currentGroup to list)
-                                ))
-                            }
-                        },
-                        enabled = pos >= 0 && pos < currentOrder.size - 1,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("↓ " + t("Aşağı")) }
-                    OutlinedButton(
-                        onClick = {
-                            onAction(customization.copy(
-                                channelOrder = customization.channelOrder - currentGroup
-                            ))
-                        },
-                        enabled = customization.channelOrder.containsKey(currentGroup),
-                        modifier = Modifier.weight(1f)
-                    ) { Text(t("Sıralamayı Sıfırla")) }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text(t("Kapat"), fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String, accent: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .height(16.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(accent)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
     }
 }

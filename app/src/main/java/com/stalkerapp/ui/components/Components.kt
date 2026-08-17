@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,13 +20,17 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.stalkerapp.data.Channel
+import com.stalkerapp.data.UpdateInfo
+import com.stalkerapp.util.L10n
 
 @Composable
 fun LoadingBox() {
@@ -56,6 +63,48 @@ fun EmptyState(text: String) {
     ) {
         Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/**
+ * Uygulama içi güncelleme pop-up'ı. Üç eylem sunar:
+ * - "Şimdi Güncelle": APK linkini açar (tarayıcıda indirme başlar)
+ * - "Sonra Hatırlat": kapatır, 24 saat sonra yeniden sorulur
+ * - "Bir Daha Sorma": bu sürüm için bir daha sorulmaz (cihazda saklanır)
+ */
+@Composable
+fun UpdateDialog(
+    info: UpdateInfo,
+    lang: String,
+    onDismiss: () -> Unit,
+    onUpdateNow: () -> Unit,
+    onRemindLater: () -> Unit,
+    onNeverAsk: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(L10n.t(lang, "Vazgeç")) } },
+        title = { Text(L10n.t(lang, "Yeni sürüm var!")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "v${info.version} ${L10n.t(lang, "yayınlandı")} (${info.publishedAt.take(10)}). " +
+                        L10n.t(lang, "Güncel APK'yı indirip kurmak ister misin?"),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(4.dp))
+                Button(onClick = onUpdateNow, modifier = Modifier.fillMaxWidth()) {
+                    Text(L10n.t(lang, "Şimdi Güncelle"), fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(onClick = onRemindLater, modifier = Modifier.fillMaxWidth()) {
+                    Text(L10n.t(lang, "Sonra Hatırlat"))
+                }
+                TextButton(onClick = onNeverAsk, modifier = Modifier.fillMaxWidth()) {
+                    Text(L10n.t(lang, "Bir Daha Sorma"))
+                }
+            }
+        }
+    )
 }
 
 @Composable

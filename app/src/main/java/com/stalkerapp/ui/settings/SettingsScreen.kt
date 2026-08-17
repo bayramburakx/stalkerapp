@@ -108,25 +108,16 @@ import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.FirebaseSyncManager
-import com.stalkerapp.data.TraktManager
 import com.stalkerapp.data.CustomChannelGroup
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.GlassChip
+import com.stalkerapp.ui.components.UpdateDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private fun recordingStatusLabel(status: String, lang: String): String = when (status) {
-    "scheduled" -> str(lang, "Planlandı")
-    "recording" -> str(lang, "Kaydediliyor…")
-    "done" -> str(lang, "Tamamlandı")
-    "failed" -> str(lang, "Başarısız")
-    "cancelled" -> str(lang, "İptal")
-    else -> status
-}
 
 private val L10nLocal: Map<String, String> = mapOf(
     // Türkçe -> English
@@ -570,8 +561,6 @@ fun SettingsScreen(
     var stripSuffixesText by remember { mutableStateOf(vm.store.channelCustomization().stripSuffixes.joinToString(", ")) }
     var newChannelGroupName by remember { mutableStateOf("") }
     var channelCustVersion by remember { mutableStateOf(0) }
-    // Kayıtlar (recording) listesi tazeleme.
-    var recordingsVersion by remember { mutableStateOf(0) }
     // Görünüm: yazı ölçeği kaydırıcısı.
     var uiFontScale by remember(settings.uiFontScale) { mutableFloatStateOf(settings.uiFontScale) }
 
@@ -594,11 +583,6 @@ fun SettingsScreen(
     // TMDB anahtar testi + görsel önbelleği.
     var tmdbTest by remember { mutableStateOf<String?>(null) }
     var testingTmdb by remember { mutableStateOf(false) }
-    // Trakt.tv bağlantı akışı.
-    var traktClientIdInput by remember(settings.traktClientId) { mutableStateOf(settings.traktClientId) }
-    var traktDialog by remember { mutableStateOf(false) }
-    var traktSyncing by remember { mutableStateOf(false) }
-    var traktSyncResult by remember { mutableStateOf<String?>(null) }
     // Hakkında: lisans diyaloğu.
     var showLicense by remember { mutableStateOf(false) }
     // Gizlilik bölümündeki PIN alanı (mevcut PIN ile başlar).
@@ -1156,7 +1140,7 @@ fun SettingsScreen(
                 // ---- Kanal Yönetimi: ad düzenleyici, özel gruplar, açılışta son kanal ----
                 SectionHeader(Icons.Default.Tv, str(lang, "Kanal Yönetimi"))
                 Text(
-                    str(lang, "Kanal listesinde bir kanala uzun basarak özel logo atayabilir, özel gruba taşıyabilir ve sıralayabilirsin."),
+                    str(lang, "Kanal adlarını düzenle, özel gruplar oluştur ve kanalları özel gruplara taşı."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1197,7 +1181,7 @@ fun SettingsScreen(
                 Text(str(lang, "Özel Gruplar"), style = MaterialTheme.typography.titleSmall)
                 if (channelCust.customGroups.isEmpty()) {
                     Text(
-                        str(lang, "Henüz özel grup yok. Kanal listesinde bir kanala uzun basıp \"Yeni grup oluştur\" ile ekleyebilirsin."),
+                        str(lang, "Henüz özel grup yok. Aşağıdan yeni bir grup oluşturabilirsin."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1731,60 +1715,6 @@ fun SettingsScreen(
                     ) { Text(str(lang, "Oluştur")) }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                // ---- Kayıtlar (recording) ----
-                SectionHeader(Icons.Default.VideoLibrary, str(lang, "Kayıtlar"))
-                Text(
-                    str(lang, "EPG rehberinden planlanan kayıtlar cihaza indirilir. MPEG-TS / ilerlemeli akışlarda güvenilirdir."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val recordings = remember(recordingsVersion) { vm.store.recordings() }
-                if (recordings.isEmpty()) {
-                    Text(
-                        str(lang, "Henüz kayıt yok. Oynatıcıdaki rehberden bir programa \"Kaydet\" deyip planlayabilirsin."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    recordings.sortedByDescending { it.startTs }.forEach { r ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    r.programName.ifBlank { r.channelName },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    "${r.channelName} • ${recordingStatusLabel(r.status, lang)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (r.status == "done" && r.filePath.isNotBlank()) {
-                                TextButton(onClick = {
-                                    PlaybackManager.play("file://" + r.filePath, r.programName.ifBlank { r.channelName })
-                                    onOpenPlayer()
-                                }) { Text(str(lang, "Oynat")) }
-                            }
-                            IconButton(onClick = {
-                                vm.store.removeRecording(r.id)
-                                recordingsVersion++
-                            }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = str(lang, "Kaydı sil"),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                }
             }
             "player" -> {
 
@@ -2381,83 +2311,6 @@ fun SettingsScreen(
                     onCheckedChange = { vm.saveSettings(settings.copy(tmdbPeople = it)) }
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                SectionHeader(Icons.Default.Favorite, str(lang, "Trakt.tv"))
-                Text(
-                    str(lang, "İzleme geçmişini Trakt.tv hesabına senkronize eder. Bağlamak için bir Trakt Client ID gerekir ") +
-                        str(lang, "(trakt.tv/settings/apps üzerinden ücretsiz uygulama oluşturup alınır)."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    value = traktClientIdInput,
-                    onValueChange = { traktClientIdInput = it },
-                    label = { Text(str(lang, "Trakt Client ID")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Button(
-                    onClick = {
-                        vm.saveSettings(settings.copy(traktClientId = traktClientIdInput.trim()))
-                        vm.showMessage(str(lang, "Trakt Client ID kaydedildi"))
-                    },
-                    enabled = traktClientIdInput.trim().isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(str(lang, "Client ID'yi Kaydet")) }
-
-                if (settings.traktAccessToken.isBlank()) {
-                    OutlinedButton(
-                        onClick = { traktDialog = true },
-                        enabled = settings.traktClientId.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text(str(lang, "Trakt.tv ile Bağlan")) }
-                } else {
-                    Text(
-                        "✓ " + str(lang, "Bağlı") + ": @${settings.traktUsername.ifBlank { "?" }}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF2E7D32)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    traktSyncing = true
-                                    traktSyncResult = null
-                                    val movies = vm.store.loadVodProgress()
-                                        .filterValues { it.durationMs > 0 && it.positionMs >= it.durationMs * 0.85 }
-                                        .keys
-                                        .mapNotNull { vm.repository.findVodById(it)?.tmdbId?.takeIf { id -> id > 0 } }
-                                    val shows = vm.store.watchedEpisodes()
-                                        .mapNotNull { it.substringBefore(":").toLongOrNull() }
-                                        .mapNotNull { vm.repository.findVodById(it)?.tmdbId?.takeIf { id -> id > 0 } }
-                                    val err = TraktManager.syncWatched(
-                                        settings.traktClientId,
-                                        settings.traktAccessToken,
-                                        movies,
-                                        shows
-                                    )
-                                    traktSyncResult = err ?: "✓ ${movies.size + shows.size} " + str(lang, "öğe Trakt geçmişine eklendi")
-                                    traktSyncing = false
-                                }
-                            },
-                            enabled = !traktSyncing
-                        ) { Text(if (traktSyncing) str(lang, "Senkronize ediliyor…") else str(lang, "Geçmişi Senkronize Et")) }
-                        OutlinedButton(onClick = {
-                            scope.launch {
-                                TraktManager.revoke(settings.traktClientId, settings.traktAccessToken)
-                                vm.saveSettings(settings.copy(traktAccessToken = "", traktUsername = ""))
-                                vm.showMessage(str(lang, "Trakt bağlantısı kaldırıldı"))
-                            }
-                        }) { Text(str(lang, "Bağlantıyı Kaldır")) }
-                    }
-                    if (traktSyncResult != null) {
-                        Text(
-                            traktSyncResult.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (traktSyncResult?.startsWith("✓") == true) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
             }
             "account" -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2706,20 +2559,6 @@ fun SettingsScreen(
                     )
                 }
 
-                if (traktDialog) {
-                    TraktConnectDialog(
-                        lang = lang,
-                        clientId = settings.traktClientId,
-                        onDone = { token, username ->
-                            if (token.isNotBlank()) {
-                                vm.saveSettings(settings.copy(traktAccessToken = token, traktUsername = username))
-                                vm.showMessage(str(lang, "Trakt bağlantısı kuruldu ✓"))
-                            }
-                            traktDialog = false
-                        },
-                        onDismiss = { traktDialog = false }
-                    )
-                }
             }
         }
     }
@@ -2781,23 +2620,24 @@ fun SettingsScreen(
     }
 
     updateDialog?.let { info ->
-        AlertDialog(
-            onDismissRequest = { updateDialog = null },
-            confirmButton = {
-                TextButton(onClick = {
-                    updateDialog = null
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.url)))
-                    }
-                }) { Text(str(lang, "İndir")) }
+        UpdateDialog(
+            info = info,
+            lang = lang,
+            onDismiss = { updateDialog = null },
+            onUpdateNow = {
+                updateDialog = null
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.url)))
+                }
             },
-            dismissButton = { TextButton(onClick = { updateDialog = null }) { Text(str(lang, "Sonra")) } },
-            title = { Text(str(lang, "Yeni sürüm var!")) },
-            text = {
-                Text(
-                    "v${info.version} " + str(lang, "yayınlandı") + " (${info.publishedAt.take(10)}). " +
-                        str(lang, "Güncel APK'yı indirip kurmak ister misin?")
-                )
+            onRemindLater = {
+                updateDialog = null
+                vm.store.setUpdateRemindTs(System.currentTimeMillis() + 24 * 60 * 60 * 1000L)
+            },
+            onNeverAsk = {
+                updateDialog = null
+                vm.store.setUpdateSkipVersion(info.version)
+                vm.showMessage(str(lang, "Bu sürüm için bir daha sorulmayacak"))
             }
         )
     }
@@ -3348,90 +3188,3 @@ private fun XtreamDialog(
     )
 }
 
-/**
- * Trakt.tv cihaz akışı bağlantı dialog'u.
- * Kod alınır, kullanıcıya gösterilir, onaylanana dek yoklanır.
- */
-@Composable
-private fun TraktConnectDialog(
-    lang: String,
-    clientId: String,
-    onDone: (token: String, username: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var devResult by remember { mutableStateOf<TraktManager.DeviceCodeResult?>(null) }
-    var status by remember { mutableStateOf<String?>(null) }
-    var pollActive by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        status = str(lang, "Kod alınıyor…")
-        val res = TraktManager.requestDeviceCode(clientId)
-        if (res.deviceCode.isBlank()) {
-            status = str(lang, "Kod alınamadı. Client ID geçerli mi kontrol edin.")
-            pollActive = false
-            return@LaunchedEffect
-        }
-        devResult = res
-        status = null
-        while (pollActive) {
-            val r = TraktManager.pollToken(clientId, res.deviceCode)
-            when {
-                r.startsWith("ok:") -> {
-                    val parts = r.removePrefix("ok:").split(":", limit = 2)
-                    onDone(parts[0], parts.getOrElse(1) { "" })
-                    return@LaunchedEffect
-                }
-                r == "pending" -> TraktManager.waitForNextPoll(res.intervalSec)
-                else -> {
-                    status = if (r == "expired") str(lang, "Kodun süresi doldu — bağlantıyı yeniden deneyin.")
-                    else str(lang, "Bağlantı reddedildi veya süresi doldu.")
-                    pollActive = false
-                }
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = {
-            pollActive = false
-            onDismiss()
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                pollActive = false
-                onDismiss()
-            }) { Text(str(lang, "Kapat")) }
-        },
-        title = { Text(str(lang, "Trakt.tv Bağlantısı")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (devResult == null) {
-                    Text(status ?: "…", style = MaterialTheme.typography.bodyMedium)
-                } else if (status != null) {
-                    Text(status.orEmpty(), style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Text(
-                        str(lang, "trakt.tv/activate adresinde aşağıdaki kodu girin:"),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        devResult!!.userCode,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        str(lang, "Adres: ") + "${devResult!!.verificationUrl}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        str(lang, "Onay bekleniyor… Pencere otomatik kapanır."),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-    )
-}

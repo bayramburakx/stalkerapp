@@ -1,6 +1,7 @@
 package com.stalkerapp
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -14,7 +15,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +45,9 @@ import com.stalkerapp.ui.search.SearchScreen
 import com.stalkerapp.ui.theme.StalkerTheme
 import com.stalkerapp.ui.vod.VodDetailScreen
 import com.stalkerapp.playback.PlaybackManager
+import com.stalkerapp.data.UpdateChecker
+import com.stalkerapp.data.UpdateInfo
+import com.stalkerapp.ui.components.UpdateDialog
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -117,6 +124,42 @@ private fun AppNav() {
     }
     // Firebase hesap yönetimi (giriş/çıkış için uygulama genelinde kullanılır).
     val firebase = remember { FirebaseSyncManager.init(app) }
+
+    // Uygulama içi güncelleme: açılışta bir kez kontrol edilir. Yeni sürüm
+    // varsa pop-up gösterilir — "Şimdi Güncelle" / "Sonra Hatırlat" / "Bir Daha Sorma".
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    LaunchedEffect(Unit) {
+        val store = app.store
+        val info = runCatching { UpdateChecker().latest() }.getOrNull() ?: return@LaunchedEffect
+        if (!UpdateChecker.isNewer(info.version, BuildConfig.VERSION_NAME)) return@LaunchedEffect
+        // "Bir daha sorma" denmişse bu sürüm tekrar sorulmaz; "sonra hatırlat"
+        // süresi dolmadıysa beklenir.
+        if (store.updateSkipVersion() == info.version) return@LaunchedEffect
+        if (System.currentTimeMillis() < store.updateRemindTs()) return@LaunchedEffect
+        updateInfo = info
+    }
+    updateInfo?.let { info ->
+        UpdateDialog(
+            info = info,
+            lang = app.store.settings().language,
+            onDismiss = { updateInfo = null },
+            onUpdateNow = {
+                updateInfo = null
+                runCatching {
+                    val ctx = LocalContext.current
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.url)))
+                }
+            },
+            onRemindLater = {
+                updateInfo = null
+                app.store.setUpdateRemindTs(System.currentTimeMillis() + 24 * 60 * 60 * 1000L)
+            },
+            onNeverAsk = {
+                updateInfo = null
+                app.store.setUpdateSkipVersion(info.version)
+            }
+        )
+    }
 
     // Başlangıç ekranı: ilk açılışta onboarding; sonrasında oturum varsa
     // Netflix tarzı profil seçici, yoksa Giriş ekranı.

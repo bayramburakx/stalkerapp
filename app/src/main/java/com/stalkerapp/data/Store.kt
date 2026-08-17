@@ -338,36 +338,20 @@ class Store(private val context: Context) {
         saveEpgReminders(epgReminders().filterNot { it.channelId == channelId && it.startTs == startTs })
     }
 
-    // ---------- Kayıtlar (recording) ----------
+    // ---------- Uygulama içi güncelleme bildirimi (cihaz seviyesinde global) ----------
 
-    fun recordings(): List<Recording> = runCatching {
-        json.decodeFromString(
-            ListSerializer(Recording.serializer()),
-            prefs.getString(KEY_RECORDINGS, "[]").orEmpty()
-        )
-    }.getOrDefault(emptyList())
+    /** Kullanıcının "bir daha sorma" dediği sürüm (bu sürüm tekrar sorulmaz). */
+    fun updateSkipVersion(): String = globalPrefs.getString(KEY_UPDATE_SKIP_VERSION, "").orEmpty()
 
-    fun saveRecordings(list: List<Recording>) {
-        prefs.edit().putString(
-            KEY_RECORDINGS,
-            json.encodeToString(ListSerializer(Recording.serializer()), list)
-        ).apply()
+    fun setUpdateSkipVersion(version: String) {
+        globalPrefs.edit().putString(KEY_UPDATE_SKIP_VERSION, version).apply()
     }
 
-    /** Yeni kayıt planlar (aynı program için tekrarlamaz). */
-    fun addRecording(r: Recording) {
-        val list = recordings().toMutableList()
-        if (list.any { it.channelId == r.channelId && it.startTs == r.startTs && it.status != "done" }) return
-        list.add(r)
-        saveRecordings(list)
-    }
+    /** "Sonra hatırlat" seçilince bir sonraki soruş zamanı (epoch ms). */
+    fun updateRemindTs(): Long = globalPrefs.getLong(KEY_UPDATE_REMIND_TS, 0L)
 
-    fun updateRecording(r: Recording) {
-        saveRecordings(recordings().map { if (it.id == r.id) r else it })
-    }
-
-    fun removeRecording(id: String) {
-        saveRecordings(recordings().filterNot { it.id == id })
+    fun setUpdateRemindTs(ts: Long) {
+        globalPrefs.edit().putLong(KEY_UPDATE_REMIND_TS, ts).apply()
     }
 
     /** Tüm kullanıcı verilerini tek JSON olarak dışa aktarır (yedek). */
@@ -813,7 +797,8 @@ class Store(private val context: Context) {
         private const val KEY_CHANNEL_CUSTOMIZATION = "channel_customization"
         private const val KEY_LAST_LIVE_CHANNEL = "last_live_channel"
         private const val KEY_EPG_REMINDERS = "epg_reminders"
-        private const val KEY_RECORDINGS = "recordings"
+        private const val KEY_UPDATE_SKIP_VERSION = "update_skip_version"
+        private const val KEY_UPDATE_REMIND_TS = "update_remind_ts"
 
         /** Varsayılan profil kimliği (eski tek profil). Bu profilde veri anahtarları izole edilmez. */
         const val DEFAULT_PROFILE_ID = "default"
@@ -834,7 +819,7 @@ class Store(private val context: Context) {
             KEY_ACTIVE_SOURCE_KIND, KEY_ACTIVE_SOURCE_ID, KEY_USER_PROFILE,
             KEY_USER_PROFILES, KEY_ACTIVE_PROFILE,
             KEY_WATCH_LATER, KEY_USER_LISTS, KEY_CHANNEL_CUSTOMIZATION,
-            KEY_LAST_LIVE_CHANNEL, KEY_EPG_REMINDERS, KEY_RECORDINGS
+            KEY_LAST_LIVE_CHANNEL, KEY_EPG_REMINDERS
         )
 
         /** JSON olarak kodlanmış (putString + serialize) yedek anahtarları. */

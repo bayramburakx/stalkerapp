@@ -246,14 +246,19 @@ fun VodDetailScreen(
             val p = profile
             val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
             if (p == null && !externalSource) return@LaunchedEffect
-            // This portal ignores the single-item fetch (vod_id), so rely on the
-            // already-loaded catalog item keyed by id — otherwise every title would
-            // resolve to the same (first) item.
+            // Bu portal tek-öğe isteğini (vod_id) yok sayar — katalog henüz
+            // senkronlanırken byId'de öğe yoksa vodById'ye güvenmek hep aynı
+            // (ilk) filmi açar. Dönen öğenin id'si istenenle eşleşmiyorsa kabul
+            // etme; katalog yüklenene dek bekle (en fazla 60 sn).
             var base: VodItem? = null
             val deadline = System.currentTimeMillis() + 60_000L
             while (base == null && System.currentTimeMillis() < deadline) {
                 base = vm.vodCatalog.value.byId[vodId]
-                    ?: if (p != null) runCatching { vm.repository.vodById(p, vodId) }.getOrNull() else null
+                    ?: if (p != null) {
+                        runCatching { vm.repository.vodById(p, vodId) }
+                            .getOrNull()
+                            ?.takeIf { it.id == vodId }
+                    } else null
                 if (base == null) delay(400)
             }
             if (base == null) {
@@ -930,30 +935,46 @@ fun VodDetailScreen(
                                                 }
                                             }
                                             // Bölüm adı kartın İÇİNDE (küçük resmin altında).
+                                            // Sabit yükseklik: ad uzunluğu ne olursa olsun tüm kartlar
+                                            // aynı boyutta kalır (2 satır için yer ayrılır, taşarsa …).
                                             Spacer(Modifier.height(6.dp))
-                                            Text(
-                                                name,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-                                            )
-                                            // Bölüm yarıda bırakıldıysa progress bar (kartın altında).
-                                            val prog = episodeProg[episodeKey(ep, seasonNum)]
-                                            if (prog != null && prog.durationMs > 0 &&
-                                                prog.positionMs > 0 && prog.positionMs < prog.durationMs * 0.85
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(34.dp)
+                                                    .padding(horizontal = 10.dp),
+                                                contentAlignment = Alignment.CenterStart
                                             ) {
-                                                LinearProgressIndicator(
-                                                    progress = { (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f) },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(4.dp)
-                                                        .padding(horizontal = 10.dp)
-                                                        .padding(top = 2.dp),
-                                                    color = MaterialTheme.colorScheme.primary
+                                                Text(
+                                                    name,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
+                                            }
+                                            // Bölüm yarıda bırakıldıysa progress bar (kartın altında).
+                                            // Alan her kartta sabit tutulur — bar yalnızca ilerleme varsa dolar.
+                                            val prog = episodeProg[episodeKey(ep, seasonNum)]
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(8.dp)
+                                                    .padding(horizontal = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (prog != null && prog.durationMs > 0 &&
+                                                    prog.positionMs > 0 && prog.positionMs < prog.durationMs * 0.85
+                                                ) {
+                                                    LinearProgressIndicator(
+                                                        progress = { (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f) },
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(4.dp),
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
                                             }
                                             Spacer(Modifier.height(6.dp))
                                         }

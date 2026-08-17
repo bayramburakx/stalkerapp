@@ -8,8 +8,7 @@ A modern IPTV player for Android, built with Kotlin + Jetpack Compose + ExoPlaye
 - **Live TV** — Genre-based channel lists, channel logos, channel numbers and fast zapping. Hide unwanted groups from Live TV and Home.
 - **VOD (Movies & Series)** — Posters, cast/director info, synopsis, IMDb ratings, and season/episode structure for series.
 - **Audio & Subtitle selection** — Multiple audio tracks and embedded subtitles via ExoPlayer track selection; default language preferences and external XMLTV EPG support.
-- **EPG guide** — Per-channel program guide with the current program highlighted, catch-up viewing of past broadcasts, and scheduled recordings.
-- **Recordings** — Schedule recordings from the EPG guide; they are saved to the device as MPEG-TS.
+- **EPG guide** — Per-channel program guide with the current program highlighted, catch-up viewing of past broadcasts, and reminders.
 - **Favorites** — Persist favorite channels and VOD content.
 - **Library** — Watch later, watched history, favorites and custom lists in one screen.
 - **Picture-in-Picture (PiP) & background playback** — Playback continues with the screen off via a foreground media service.
@@ -20,7 +19,7 @@ A modern IPTV player for Android, built with Kotlin + Jetpack Compose + ExoPlaye
 - **Stream reliability** — TS live-stream optimizations (access units, HD audio, non-IDR keyframes) and enlarged buffers reduce stutter; a fallback forces HLS/MPEG-TS resolution when a channel won't open.
 - **Accounts & cloud sync** — Optional email/Google sign-in stores your portals, settings, favorites and watch history in Firebase and syncs them across devices.
 - **Privacy & safety** — PIN lock, adult-content filtering, and a per-source content filter.
-- **Integrations** — Trakt.tv watch-history sync and TMDB enrichment (posters, trailers, real episode names).
+- **Integrations** — TMDB enrichment (posters, trailers, real episode names).
 
 ## Project layout
 

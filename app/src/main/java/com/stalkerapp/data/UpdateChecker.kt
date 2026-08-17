@@ -69,12 +69,14 @@ class UpdateChecker(private val repo: String = "bayramburakx/stalkerapp") {
     companion object {
         /** Semver karşılaştırması: latest > current ise true. */
         fun isNewer(latest: String, current: String): Boolean {
-            val parse = { v: String -> v.split(".").mapNotNull { it.toIntOrNull() } }
+            // Long kullanılır: CI'dan gelen büyük yapı numaraları (ör. 1.0.20260817)
+            // Int'e sığmayabilir ve karşılaştırma yanlış sonuç verirdi.
+            val parse = { v: String -> v.split(".").mapNotNull { it.toLongOrNull() } }
             val a = parse(latest)
             val b = parse(current)
             for (i in 0 until maxOf(a.size, b.size)) {
-                val x = a.getOrElse(i) { 0 }
-                val y = b.getOrElse(i) { 0 }
+                val x = a.getOrElse(i) { 0L }
+                val y = b.getOrElse(i) { 0L }
                 if (x != y) return x > y
             }
             return false

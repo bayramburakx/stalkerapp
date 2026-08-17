@@ -1436,10 +1436,9 @@ fun EpgSheet(
     }
     var programs by remember { mutableStateOf<List<com.stalkerapp.data.EpgProgram>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    // Hatırlatıcı ekle/kaldır + kayıt planla sonrası listeyi tazele.
+    // Hatırlatıcı ekle/kaldır sonrası listeyi tazele.
     var remindersVersion by remember { mutableStateOf(0) }
     val reminders = remember(remindersVersion) { vm.store.epgReminders() }
-    val recordings = remember(remindersVersion) { vm.store.recordings() }
     val nowTs = System.currentTimeMillis() / 1000
     // Catch-up URL çözmek için (onClick içinde @Composable çağrısı yapılamaz).
     val epgScope = rememberCoroutineScope()
@@ -1543,39 +1542,6 @@ fun EpgSheet(
                                         color = if (reminded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.labelMedium
                                     )
-                                }
-                                // Kayıt: gelecekteki/şu anki program için cihaza kayıt planlar.
-                                if (p.stopTs > nowTs) {
-                                    val planned = recordings.any { it.channelId == channel.id && it.startTs == p.startTs }
-                                    TextButton(
-                                        onClick = {
-                                            if (planned) {
-                                                recordings.filter { it.channelId == channel.id && it.startTs == p.startTs }
-                                                    .forEach { vm.store.removeRecording(it.id) }
-                                            } else {
-                                                vm.store.addRecording(
-                                                    com.stalkerapp.data.Recording(
-                                                        id = "rec_${channel.id}_${p.startTs}",
-                                                        channelId = channel.id,
-                                                        channelName = channel.name,
-                                                        programName = p.name,
-                                                        startTs = p.startTs,
-                                                        stopTs = p.stopTs,
-                                                        sourceKind = vm.store.activeSourceKind(),
-                                                        channel = channel
-                                                    )
-                                                )
-                                            }
-                                            remindersVersion++
-                                        },
-                                        contentPadding = PaddingValues(0.dp)
-                                    ) {
-                                        Text(
-                                            if (planned) str(lang, "⏺ Kayıt planlandı (dokun: iptal)") else str(lang, "⏺ Kaydet (cihaza)"),
-                                            color = if (planned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    }
                                 }
                             }
                             // Catch-up: geçmişteki programı şimdi izle (sunucu destekliyorsa).
