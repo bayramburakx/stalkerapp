@@ -127,7 +127,9 @@ fun LibraryScreen(
         val seriesIds = episodeProgress.keys.mapNotNull { key ->
             key.substringBefore(':').toLongOrNull()
         }.toSet()
-        (vodIds + seriesIds).mapNotNull { id -> byId[id] }
+        // Katalog byId'sinde yoksa ilerleme kaydındaki öğe anlık görüntüsüne düş
+        // (katalog senkronu tamamlanmamış olsa bile "Devam Eden" dolu görünür).
+        (vodIds + seriesIds).mapNotNull { id -> byId[id] ?: vodProgress[id]?.toVodItem(id) }
             .distinctBy { it.id }
             .sortedByDescending { vodProgress[it.id]?.lastUpdated ?: 0L }
             .take(20)

@@ -435,6 +435,7 @@ fun VodDetailScreen(
                         // dosyayı doğrudan oynat (aksi halde hiç oynatılamazdı).
                         val url = vm.repository.vodStreamUrl(it, p, null)
                         PlaybackManager.currentVodId = it.id
+                        PlaybackManager.currentVodItem = it
                         PlaybackManager.play(url, it.name, it.poster)
                         onOpenPlayer()
                         return@launch
@@ -451,6 +452,7 @@ fun VodDetailScreen(
                     ) prog.positionMs else 0L
                     val url = vm.repository.vodStreamUrl(it, p, null)
                     PlaybackManager.currentVodId = it.id
+                    PlaybackManager.currentVodItem = it
                     PlaybackManager.play(url, it.name, it.poster, startPositionMs = startMs)
                 } else {
                     // Dizi: bölüm HER ZAMAN playEpisode ile oynatılır. Kuyruk

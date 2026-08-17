@@ -167,11 +167,16 @@ fun HomeDashboardScreen(
     // İzleme ilerlemeleri oynatma sırasında değişir; watchedVersion her
     // değişimde bu listeler Store'dan taze okunur (yoksa bayat kalırdı).
     val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
+    // Katalog byId'sinde yoksa ilerleme kaydındaki öğe anlık görüntüsüne düş
+    // (katalog senkronu henüz tamamlanmamış olsa bile listeler dolu görünür).
+    fun itemFor(id: Long, p: com.stalkerapp.data.VodProgress): com.stalkerapp.data.VodItem? =
+        catalog.byId[id] ?: p.toVodItem(id)
+
     val continueWatching = remember(catalog, watchedVersion, hiddenFromHome) {
         val progress = app.store.loadVodProgress()
         progress.mapNotNull { (id, p) ->
             if (id !in hiddenFromHome && p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85) {
-                catalog.byId[id]?.let { it to p }
+                itemFor(id, p)?.let { it to p }
             } else null
         }
     }
@@ -180,14 +185,13 @@ fun HomeDashboardScreen(
     // son izlenme zamanına göre sıralanır (tamamlanmışlar da dahil).
     val recentlyWatched = remember(catalog, watchedVersion, hiddenFromHome) {
         val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
-            if (id in hiddenFromHome) null else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
+            if (id in hiddenFromHome) null else itemFor(id, p)?.let { Triple(it, p.lastUpdated, p.positionMs) }
         }
         val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
             val id = key.substringBefore(':').toLongOrNull()
             if (id == null || id in hiddenFromHome) null
             else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
         }
-        // byId garantili: katalogda olmayan öğe map'te bulunmaz.
         (vod + eps)
             .sortedByDescending { it.second }
             .distinctBy { it.first.id }

@@ -277,7 +277,21 @@ fun LiveTvScreen(
         }
 
         when {
-            loading && channels == null -> LoadingBox()
+            loading && channels == null -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                LoadingBox()
+                if (kind == "m3u") {
+                    Text(
+                        t("Büyük M3U listesi indiriliyor, birkaç dakika sürebilir…"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                }
+            }
             error != null && channels == null -> EmptyState("$error\n\n${t("Geri dönüp tekrar deneyin")}")
             allChannels.isEmpty() -> EmptyState(t("Kanal bulunamadı"))
             displayed.isEmpty() -> EmptyState(t("Sonuç bulunamadı"))

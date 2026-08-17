@@ -94,6 +94,9 @@ class Store(private val context: Context) {
      */
     private fun m3uContentFile(id: String): File = File(context.filesDir, "m3u_content_$id.m3u")
 
+    /** M3U içerik dosyasının yolunu döndürür (streaming indirme/parse için). */
+    fun m3uContentFileFor(id: String): File = m3uContentFile(id)
+
     fun saveM3uContent(id: String, content: String) {
         if (content.isBlank()) return
         runCatching { m3uContentFile(id).writeText(content) }
@@ -784,9 +787,21 @@ class Store(private val context: Context) {
         }
     }
 
-    fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long) {
+    fun saveVodProgress(id: Long, positionMs: Long, durationMs: Long, item: VodItem? = null) {
         val map = loadVodProgress().toMutableMap()
-        map[id] = VodProgress(positionMs, durationMs, System.currentTimeMillis())
+        val prev = map[id]
+        map[id] = VodProgress(
+            positionMs = positionMs,
+            durationMs = durationMs,
+            lastUpdated = System.currentTimeMillis(),
+            // Öğe anlık görüntüsü: katalog henüz senkronize olmasa bile ana sayfa
+            // "İzlemeye Devam / Son İzlenenler" listelerini gösterebilsin (byId'ye
+            // bağımlılık kalkar). Eski kayıttaki bilgiler korunur.
+            name = item?.name?.ifBlank { prev?.name.orEmpty() } ?: prev?.name.orEmpty(),
+            poster = item?.poster?.ifBlank { prev?.poster.orEmpty() } ?: prev?.poster.orEmpty(),
+            isSeries = item?.isSeries ?: prev?.isSeries ?: false,
+            categoryId = item?.categoryId ?: prev?.categoryId ?: 0
+        )
         prefs.edit().putString(
             scoped(KEY_VOD_PROGRESS),
             json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), map)
@@ -895,4 +910,25 @@ data class CatalogMetaFile(
 )
 
 @kotlinx.serialization.Serializable
-data class VodProgress(val positionMs: Long, val durationMs: Long, val lastUpdated: Long = 0)
+data class VodProgress(
+    val positionMs: Long,
+    val durationMs: Long,
+    val lastUpdated: Long = 0,
+    /** Katalog senkronu beklenmeden ana sayfada gösterilebilmesi için öğe anlık görüntüsü. */
+    val name: String = "",
+    val poster: String = "",
+    val isSeries: Boolean = false,
+    val categoryId: Long = 0
+) {
+    /** Katalog byId'sinde öğe yoksa ana sayfa için yeterli bir [VodItem] üretir. */
+    fun toVodItem(id: Long): VodItem? =
+        if (name.isBlank()) null
+        else VodItem(
+            id = id,
+            categoryId = categoryId,
+            name = name,
+            originalName = name,
+            poster = poster,
+            isSeries = isSeries
+        )
+}

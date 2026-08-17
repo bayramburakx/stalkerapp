@@ -32,6 +32,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class MainViewModel(private val app: StalkerApp) : ViewModel() {
@@ -235,6 +237,22 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     private val m3uCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
     private val xtreamCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
 
+    // Silinen M3U kaynaklarının izleri: arka planda hâlâ süren indirme/parse
+    // (testM3u, loadM3uChannels vb.) bitince kaynağı GERİ EKLEMESİN.
+    private val deletedM3uIds = HashSet<String>()
+
+    // M3U içerik dosyasına aynı anda iki coroutine yazmasın (134MB liste iki kez
+    // indirilip bozuk dosya oluşturabiliyordu) — tekilleştirme kilidi.
+    private val m3uContentMutex = Mutex()
+
+    /** İçerik dosyasını (gerekirse indirerek) hazırlar; hazırsa true döner. */
+    private suspend fun ensureM3uContentFile(source: M3uSource): Boolean = m3uContentMutex.withLock {
+        val file = store.m3uContentFileFor(source.id)
+        if (file.exists() && file.length() > 0) return@withLock true
+        if (source.url.isBlank()) return@withLock false
+        M3uParser.fetchToFile(source.url, file)
+    }
+
     // Kaynak listeleri/anahtarları değişince ayarlar ekranının yeniden okuması
     // için sürüm sayaçı (kompozisyon içinde doğrudan prefs okumak donmalara yol
     // açıyordu; ekranlar bu sürümü dinleyip `remember` içinde taze okur).
@@ -281,6 +299,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     }
 
     fun saveM3uSource(source: M3uSource) {
+        // Silinen kaynak arka planda süren bir test/indirme tarafından yeniden
+        // eklenmesin (kullanıcı "Sil" bastığında kaynak anlık kaybolmalı).
+        if (source.id in deletedM3uIds) return
         // İçerik Store tarafında dosyaya yazılır; listeye boş content ile eklenir.
         // Yüzlerce MB'lık içerik ana iş parçacığını kilitlemesin diye dosya
         // yazımı arka planda (IO) yapılır — liste kaydı senkron güncellenir.
@@ -299,6 +320,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     }
 
     fun deleteM3uSource(id: String) {
+        // Tombstone: süren arka plan işlemleri bitince kaynağı geri eklemesin.
+        deletedM3uIds += id
         store.saveM3uSources(store.m3uSources().filterNot { it.id == id })
         store.deleteM3uContent(id)
         m3uCache.remove(id)
@@ -348,16 +371,19 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U URL'sini indirmeyi dener; içerik alınamazsa hata döner. */
     suspend fun testM3u(source: M3uSource): String? {
         if (source.url.isBlank()) return L10n.t(store.settings().language, "URL boş")
-        val content = M3uParser.fetch(source.url)
-        if (content == null) return L10n.t(store.settings().language, "İndirilemedi (URL geçersiz veya erişilemiyor)")
+        // Kaynak bu sırada silinmiş olabilir — test etme, yeniden ekleme.
+        if (store.m3uSources().none { it.id == source.id }) return null
+        val file = store.m3uContentFileFor(source.id)
+        val ok = withContext(Dispatchers.IO) { M3uParser.fetchToFile(source.url, file) }
+        if (!ok) return L10n.t(store.settings().language, "İndirilemedi (URL geçersiz veya erişilemiyor)")
         // Parse + dosya yazımı ana iş parçacığını kilitlemesin (yüzlerce MB
         // liste ANR'a yol açıyordu) — tamamı IO'da yapılır.
         val count = withContext(Dispatchers.IO) {
-            store.saveM3uContent(source.id, content)
-            M3uParser.parse(content, source.id).size
+            runCatching { M3uParser.parseFile(file, source.id).size }.getOrDefault(0)
         }
         if (count == 0) return L10n.t(store.settings().language, "Kanal bulunamadı (geçerli M3U değil?)")
-        // İçerik dosyada; listedeki kayıt boş content ile güncellenir.
+        // İçerik dosyada; listedeki kayıt boş content ile güncellenir. Kaynak bu
+        // sırada silindiyse saveM3uSource tombstone nedeniyle eklemez.
         saveM3uSource(source.copy(content = ""))
         // İçerik değişti: kaynak aktifse dış katalog bayat kalmasın (bir sonraki
         // açılışta yeniden kurulur).
@@ -379,17 +405,16 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının kanallarını yükler (gerekirse indirir + çözer). */
     suspend fun loadM3uChannels(source: M3uSource): Pair<List<Genre>, List<Channel>> {
         m3uCache[source.id]?.let { return it }
-        // Dosya okuma, indirme, dosya yazma ve ayrıştırma ana iş parçacığını
-        // kilitleyip ANR'a yol açıyordu (yüzlerce MB liste) — tamamı IO'da.
+        // İndirme, dosya okuma ve ayrıştırma ana iş parçacığını kilitleyip ANR'a
+        // yol açıyordu (yüzlerce MB liste) — tamamı IO'da, dosyadan akışla.
         val result = withContext(Dispatchers.IO) {
-            var content = store.loadM3uContent(source)
-            if (content.isBlank() && source.url.isNotBlank()) {
-                content = M3uParser.fetch(source.url).orEmpty()
-                if (content.isNotBlank()) {
-                    store.saveM3uContent(source.id, content)
-                }
+            val ok = ensureM3uContentFile(source)
+            val channels = if (ok) {
+                runCatching { M3uParser.parseFile(store.m3uContentFileFor(source.id), source.id) }
+                    .getOrDefault(emptyList())
+            } else {
+                M3uParser.parse(source.content, source.id)
             }
-            val channels = M3uParser.parse(content, source.id)
             // group-title'lar kategori olarak kullanılır.
             val groups = channels.map { it.tvGenreTitle }.filter { it.isNotBlank() }.distinct().sorted()
             val genres = listOf(Genre(0, "Tümü")) +
@@ -420,16 +445,16 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının film/dizi kataloğunu yükler (gerekirse içeriği indirir). */
     suspend fun loadM3uVod(source: M3uSource): Pair<List<Genre>, List<VodItem>> {
         m3uVodCache[source.id]?.let { return it }
-        // Dosya okuma/indirme/yazma + ayrıştırma ana iş parçacığını kilitlemesin.
+        // İndirme/okuma + ayrıştırma ana iş parçacığını kilitlemesin — dosyadan
+        // akışla, dev String kurulmadan çalışır.
         val result = withContext(Dispatchers.IO) {
-            var content = store.loadM3uContent(source)
-            if (content.isBlank() && source.url.isNotBlank()) {
-                content = M3uParser.fetch(source.url).orEmpty()
-                if (content.isNotBlank()) {
-                    store.saveM3uContent(source.id, content)
-                }
+            val ok = ensureM3uContentFile(source)
+            if (ok) {
+                runCatching { M3uParser.parseVodFile(store.m3uContentFileFor(source.id), source.id) }
+                    .getOrDefault(listOf(Genre(0, "Tümü")) to emptyList())
+            } else {
+                M3uParser.parseVod(source.content, source.id)
             }
-            M3uParser.parseVod(content, source.id)
         }
         m3uVodCache[source.id] = result
         return result
@@ -479,15 +504,20 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         }
         if (result != null) {
             val (genres, items) = result!!
-            _externalCatalog.value = VodCatalogState.of(
-                status = VodCatalogStatus.Ready,
-                doneCategories = genres.size,
-                totalCategories = genres.size,
-                loadedCount = items.size,
-                allItems = items,
-                categories = genres,
-                lastSync = System.currentTimeMillis()
-            )
+            // 400k+ öğelik M3U kataloğunda associateBy + kategori hesapları ana
+            // iş parçacığını kilitleyip donmaya yol açıyordu — arka planda kurulur.
+            val state = withContext(Dispatchers.Default) {
+                VodCatalogState.of(
+                    status = VodCatalogStatus.Ready,
+                    doneCategories = genres.size,
+                    totalCategories = genres.size,
+                    loadedCount = items.size,
+                    allItems = items,
+                    categories = genres,
+                    lastSync = System.currentTimeMillis()
+                )
+            }
+            _externalCatalog.value = state
         } else {
             // Geçici hata: eski hazır katalog varsa Error'a düşürme, onu koru.
             _externalCatalog.value = if (prev.status == VodCatalogStatus.Ready && prev.loadedCount > 0) {
@@ -501,14 +531,15 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının içeriğini yeniden indirir ve katalogları tazeler. */
     fun refreshM3u(source: M3uSource) {
         viewModelScope.launch {
-            val fresh = if (source.url.isNotBlank()) M3uParser.fetch(source.url) else null
-            if (fresh != null) {
-                // İçerik dosyaya IO'da yazılır (ana iş parçacığı kilitlenmesin).
-                withContext(Dispatchers.IO) { store.saveM3uContent(source.id, fresh) }
+            val file = store.m3uContentFileFor(source.id)
+            val ok = if (source.url.isNotBlank()) {
+                withContext(Dispatchers.IO) { M3uParser.fetchToFile(source.url, file) }
+            } else false
+            if (ok) {
+                m3uCache.remove(source.id)
+                m3uVodCache.remove(source.id)
+                ensureExternalVodCatalog(force = true)
             }
-            m3uCache.remove(source.id)
-            m3uVodCache.remove(source.id)
-            ensureExternalVodCatalog(force = true)
         }
     }
 

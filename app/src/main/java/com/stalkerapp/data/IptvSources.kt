@@ -11,6 +11,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -174,13 +175,12 @@ object M3uParser {
     )
 
     /**
-     * #EXTINF bloklarını tür etiketiyle birlikte çözer. Yüzlerce MB'lık
-     * listelerde `split("\n")` 400k+ String üretip bellek taşmasına yol
-     * açabiliyordu — bunun yerine satır satır (lazy) okunur.
+     * #EXTINF bloklarını tür etiketiyle birlikte satır satır (lazy) çözer.
+     * Yüzlerce MB'lık listelerde `split("\n")` 400k+ String üretip bellek
+     * taşmasına yol açabiliyordu; bu sürüm her girdiyi [onEntry] ile anında
+     * iletir ve tüm girdileri bellekte tutmaz.
      */
-    private fun parseAll(text: String): List<ParsedEntry> {
-        val out = mutableListOf<ParsedEntry>()
-        val lines = text.lineSequence()
+    private fun forEachEntry(lines: Sequence<String>, onEntry: (ParsedEntry) -> Unit) {
         var pending: ParsedEntry? = null
         for (line in lines) {
             val trimmed = line.trim()
@@ -190,7 +190,7 @@ object M3uParser {
                     if (pending.url.isEmpty()) pending = pending.copy(url = trimmed)
                 } else if (trimmed.startsWith("#EXTINF")) {
                     // Ardışık #EXTINF (URL'siz girdi): öncekini kapat, yenisini başlat.
-                    finishEntry(out, pending)
+                    finishEntry(pending)?.let(onEntry)
                     pending = parseExtinf(trimmed)
                 }
             } else if (trimmed.startsWith("#EXTINF")) {
@@ -198,12 +198,11 @@ object M3uParser {
             }
             // URL alındıysa girdiyi kapat (sonraki #EXTINF'te de kapatılır).
             if (pending != null && pending.url.isNotEmpty()) {
-                finishEntry(out, pending)
+                finishEntry(pending)?.let(onEntry)
                 pending = null
             }
         }
-        if (pending != null) finishEntry(out, pending)
-        return out
+        if (pending != null) finishEntry(pending)?.let(onEntry)
     }
 
     /** Bir #EXTINF satırını öznitelikler + başlık ile ayrıştırır. */
@@ -222,62 +221,139 @@ object M3uParser {
         )
     }
 
-    private fun finishEntry(out: MutableList<ParsedEntry>, e: ParsedEntry) {
+    /** Girdiyi kapatır; URL + isim doluysa sınıflandırılmış haliyle döner (yoksa null). */
+    private fun finishEntry(e: ParsedEntry): ParsedEntry? {
         if (e.url.isNotBlank() && e.name.isNotBlank()) {
-            // URL geldiğine göre sınıflandırmayı URL + isim ile birlikte yeniden
-            // yap (dosya uzantısı ve isimdeki yıl/bölüm desenleri URL'ye bağlı
-            // olabilir). attrs artık gerekmiyor — 400k+ girdide bellekten düşür.
-            out += e.copy(type = classifyEntry(e.attrs, e.url, e.name), attrs = emptyMap())
+            // URL + isim geldiğine göre sınıflandırmayı yeniden yap (dosya uzantısı
+            // ve isimdeki yıl/bölüm desenleri URL'ye bağlı olabilir). attrs artık
+            // gerekmiyor — 400k+ girdide bellekten düşür.
+            return e.copy(type = classifyEntry(e.attrs, e.url, e.name), attrs = emptyMap())
         }
+        return null
     }
+
+    private fun channelFrom(e: ParsedEntry, sourceId: String, number: Int): Channel = Channel(
+        id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+        name = e.name,
+        number = number,
+        logo = e.logo,
+        cmd = e.url,
+        tvGenreTitle = e.group,
+        xmltvId = e.xmltvId
+    )
 
     /** Yalnızca canlı kanalları döndürür (film/dizi girdileri ayrılır). */
     fun parse(text: String, sourceId: String): List<Channel> {
-        return parseAll(text)
-            .filter { it.type == M3uEntryType.LIVE }
-            .mapIndexed { index, e ->
-                Channel(
-                    id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
-                    name = e.name,
-                    number = index + 1,
-                    logo = e.logo,
-                    cmd = e.url,
-                    tvGenreTitle = e.group,
-                    xmltvId = e.xmltvId
-                )
+        val out = ArrayList<Channel>()
+        var number = 1
+        forEachEntry(text.lineSequence()) { e ->
+            if (e.type == M3uEntryType.LIVE) {
+                out.add(channelFrom(e, sourceId, number))
+                number++
             }
+        }
+        return out
+    }
+
+    /** Aynı işi diskteki dosyadan yapar (büyük listelerde dev String'den kaçınır). */
+    fun parseFile(file: File, sourceId: String): List<Channel> {
+        val out = ArrayList<Channel>()
+        var number = 1
+        file.bufferedReader(Charsets.UTF_8).use { r ->
+            forEachEntry(r.lineSequence()) { e ->
+                if (e.type == M3uEntryType.LIVE) {
+                    out.add(channelFrom(e, sourceId, number))
+                    number++
+                }
+            }
+        }
+        return out
     }
 
     /**
      * M3U içeriğinden film/dizi kataloğu üretir (canlı kanallar dahil edilmez).
      * group-title'lar kategori olur; dizi olarak sınıflananlar dizi, diğerleri
      * film sayılır (her öğe tek dosyalıdır — bölüm bilgisi standart M3U'da yoktur).
-     * Dönüş: (kategoriler, öğeler).
+     * İki geçişli çalışır: önce grup adları, sonra öğeler. Dönüş: (kategoriler, öğeler).
      */
-    fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> {
-        val entries = parseAll(text).filter { it.type != M3uEntryType.LIVE }
-        if (entries.isEmpty()) return listOf(Genre(0, "Tümü")) to emptyList()
-        val groups = entries.map { it.group }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sorted()
-        val groupIds = groups.mapIndexed { i, g -> g to (i + 1).toLong() }.toMap()
-        val items = entries.map { e ->
-            VodItem(
-                id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
-                categoryId = groupIds[e.group] ?: 0L,
-                name = e.name,
-                originalName = e.name,
-                poster = e.logo,
-                description = "",
-                year = "",
-                cmd = e.url,
-                isSeries = e.type == M3uEntryType.SERIES
-            )
+    private fun vodItemsFrom(
+        linesProvider: () -> Sequence<String>,
+        sourceId: String
+    ): Pair<List<Genre>, List<VodItem>> {
+        val groups = LinkedHashSet<String>()
+        forEachEntry(linesProvider()) { e ->
+            if (e.type != M3uEntryType.LIVE && e.group.isNotBlank()) groups.add(e.group)
+        }
+        val sorted = groups.sorted()
+        val groupIds = sorted.mapIndexed { i, g -> g to (i + 1).toLong() }.toMap()
+        val items = ArrayList<VodItem>()
+        forEachEntry(linesProvider()) { e ->
+            if (e.type != M3uEntryType.LIVE) {
+                items.add(
+                    VodItem(
+                        id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                        categoryId = groupIds[e.group] ?: 0L,
+                        name = e.name,
+                        originalName = e.name,
+                        poster = e.logo,
+                        description = "",
+                        year = "",
+                        cmd = e.url,
+                        isSeries = e.type == M3uEntryType.SERIES
+                    )
+                )
+            }
         }
         val genres = listOf(Genre(0, "Tümü")) +
-            groups.map { g -> Genre(groupIds.getValue(g), g) }
+            sorted.map { g -> Genre(groupIds.getValue(g), g) }
         return genres to items
+    }
+
+    /** String tabanlı VOD kataloğu (küçük listeler / geriye dönük). */
+    fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> =
+        vodItemsFrom({ text.lineSequence() }, sourceId)
+
+    /** Dosyadan VOD kataloğu (büyük listeler — dev String kurulmaz). */
+    fun parseVodFile(file: File, sourceId: String): Pair<List<Genre>, List<VodItem>> =
+        vodItemsFrom({ file.bufferedReader(Charsets.UTF_8).use { it.lineSequence() } }, sourceId)
+
+    /** Tek geçişte canlı/film/dizi sayılarını döndürür (kaynak istatistikleri). */
+    fun countTypes(file: File): Triple<Int, Int, Int> {
+        var live = 0
+        var movies = 0
+        var series = 0
+        file.bufferedReader(Charsets.UTF_8).use { r ->
+            forEachEntry(r.lineSequence()) { e ->
+                when (e.type) {
+                    M3uEntryType.LIVE -> live++
+                    M3uEntryType.MOVIE -> movies++
+                    M3uEntryType.SERIES -> series++
+                }
+            }
+        }
+        return Triple(live, movies, series)
+    }
+
+    /**
+     * M3U içeriğini URL'den doğrudan [dest] dosyasına akış olarak indirir.
+     * Yüzlerce MB'lık listelerde `body.string()` dev bir String kurup bellek
+     * taşmasına yol açıyordu; bu sürüm diskten akışla yazar.
+     */
+    suspend fun fetchToFile(url: String, dest: File): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url(url)
+                .header("User-Agent", "StalkerPlayer/1.0")
+                .build()
+            val resp = http.newCall(req).execute()
+            resp.use { r ->
+                if (!r.isSuccessful) return@use false
+                val body = r.body ?: return@use false
+                body.byteStream().use { input ->
+                    dest.outputStream().use { out -> input.copyTo(out, 1 shl 16) }
+                }
+                return@use true
+            }
+        }.getOrDefault(false)
     }
 }
 

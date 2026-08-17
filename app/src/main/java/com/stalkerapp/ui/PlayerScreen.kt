@@ -351,6 +351,13 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     fun exitPlayer() {
+        // Önce son konumu KAYDET + ana sayfayı tazele: stop() oynatıcıyı release
+        // eder, bu yüzden onDispose'daki kayıt çalışmaz (player null olur).
+        // Kayıtsız çıkışta "İzlemeye Devam / Son İzlenenler" boş kalıyordu.
+        if (PlaybackManager.player != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
+            PlaybackManager.saveProgressBeforeExit()
+            vm.bumpWatched()
+        }
         PlaybackManager.stop()
         if (!navController.popBackStack()) {
             navController.navigate("home") {
@@ -512,7 +519,9 @@ fun PlayerScreen(navController: NavHostController) {
                             pos, dur
                         )
                     } else if (pos < dur * 0.95) {
-                        app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                        app.store.saveVodProgress(
+                            PlaybackManager.currentVodId, pos, dur, PlaybackManager.currentVodItem
+                        )
                     }
                 }
             }
@@ -533,7 +542,9 @@ fun PlayerScreen(navController: NavHostController) {
                             pos, dur
                         )
                     } else {
-                        app.store.saveVodProgress(PlaybackManager.currentVodId, pos, dur)
+                        app.store.saveVodProgress(
+                            PlaybackManager.currentVodId, pos, dur, PlaybackManager.currentVodItem
+                        )
                     }
                     // Ana sayfa/Kütüphane "İzlemeye Devam" & "Son İzlenenler"
                     // listelerinin tazelenmesi için watchedVersion'ı arttır.

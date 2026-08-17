@@ -768,17 +768,13 @@ fun SettingsScreen(
                 val sourceStats = remember(sourcesVersion) { mutableStateMapOf<String, SourceStats>() }
                 LaunchedEffect(sourcesVersion, m3uSources, xtreamSources) {
                     m3uSources.forEach { s ->
-                        // İçerik dosyada saklanır (SharedPreferences değil); parse IO'da yapılır.
-                        val content = vm.store.loadM3uContent(s)
-                        val live = runCatching { withContext(Dispatchers.IO) { M3uParser.parse(content, s.id).size } }.getOrDefault(0)
-                        val (_, items) = runCatching {
-                            withContext(Dispatchers.IO) { M3uParser.parseVod(content, s.id) }
-                        }.getOrDefault(emptyList<Genre>() to emptyList<VodItem>())
-                        sourceStats[s.id] = SourceStats(
-                            live = live,
-                            movies = items.count { !it.isSeries },
-                            series = items.count { it.isSeries }
-                        )
+                        // İçerik dosyada saklanır; yüzlerce MB'lık listelerde iki kez
+                        // tam parse yerine tek geçişte canlı/film/dizi sayılır.
+                        val file = vm.store.m3uContentFileFor(s.id)
+                        val (live, movies, series) = runCatching {
+                            withContext(Dispatchers.IO) { M3uParser.countTypes(file) }
+                        }.getOrDefault(Triple(0, 0, 0))
+                        sourceStats[s.id] = SourceStats(live = live, movies = movies, series = series)
                     }
                     xtreamSources.forEach { s ->
                         val live = runCatching { withContext(Dispatchers.IO) { vm.loadXtreamChannels(s) }.second.size }.getOrDefault(0)

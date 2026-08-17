@@ -216,6 +216,11 @@ object PlaybackManager {
 
     var currentVodId: Long = 0
 
+    // Oynatılan VOD öğesinin anlık görüntüsü: katalog senkronu tamamlanmasa da
+    // ilerleme kaydına öğe bilgisi (ad/afiş/tür) yazılabilsin — ana sayfa
+    // "İzlemeye Devam / Son İzlenenler" listeleri katalog byId'sine bağımlı kalmaz.
+    var currentVodItem: com.stalkerapp.data.VodItem? = null
+
     @Volatile var errorMessage: String? = null
         private set
 
@@ -263,7 +268,7 @@ object PlaybackManager {
             // üzerinden hesaplandığı için film buradan izlendi sayılır.
             val prog = store.loadVodProgress()[currentVodId]
             if (prog == null || prog.positionMs < dur * 0.85) {
-                store.saveVodProgress(currentVodId, pos, dur)
+                store.saveVodProgress(currentVodId, pos, dur, currentVodItem)
             }
         }
     }
@@ -544,6 +549,7 @@ object PlaybackManager {
         VodQueue.episodes = episodes
         VodQueue.season = season
         VodQueue.index = index
+        currentVodItem = item
         scope.launch {
             val url = try {
                 repository.vodStreamUrl(item, profile, ep)
@@ -574,6 +580,7 @@ object PlaybackManager {
         // aktif kaynağa göre çözer (Stalker dışı kaynaklar profil istemez).
         val profile = VodQueue.profile
         val ep = VodQueue.current ?: return false
+        currentVodItem = item
         scope.launch {
             val url = try {
                 repository.vodStreamUrl(item, profile, ep)
@@ -661,6 +668,10 @@ object PlaybackManager {
         // Ayardan kapatılabilir (Oynatıcı → Kanal Ön Yükleme). Kapalıyken sıradaki
         // kanal önceden hazırlanmaz; kanal değişince normal akışla açılır.
         if (!store.settings().zappingPrefetch) return
+        // Xtream panelleri bağlantı limiti uygular (max_connections); ön yükleme
+        // sıradaki kanal için ekstra bir akış bağlantısı açıp AKTİF kanalın
+        // bağlantısını düşürebilir → "belli bir süre sonra hiçbir şey oynatmıyor".
+        if (store.activeSourceKind() == "xtream") return
         val next = ChannelQueue.next ?: return
         val queue = ChannelQueue.channels
         scope.launch {
@@ -842,6 +853,25 @@ object PlaybackManager {
 
     /** "Arka planda oynatmaya devam et" ayarı (MainActivity.onStop tarafından okunur). */
     fun isBackgroundPlaybackEnabled(): Boolean = store.settings().backgroundPlayback
+
+    /**
+     * Oynatıcı serbest bırakılmadan ÖNCE son konumu kalıcı kaydeder (çıkışta).
+     * [stop] oynatıcıyı release eder; bu yüzden PlayerScreen'in onDispose'ındaki
+     * kayıt çalışmaz — kayıt stop'tan önce burada yapılmalı.
+     */
+    fun saveProgressBeforeExit() {
+        val p = activePlayer ?: return
+        if (!vodPlayback || currentVodId == 0L) return
+        val pos = p.currentPosition
+        val dur = p.duration
+        if (dur <= 0 || pos <= 0) return
+        val cur = VodQueue.current
+        if (cur != null) {
+            store.saveEpisodeProgress("${currentVodId}:${VodQueue.season}:${cur.episodeNumber}", pos, dur)
+        } else {
+            store.saveVodProgress(currentVodId, pos, dur, currentVodItem)
+        }
+    }
 
     fun stop() {
         // Oynatıcıdan çıkılırken son konum %85+ ise bölüm izlendi işaretlenir
@@ -1148,7 +1178,9 @@ object PlaybackManager {
     private fun retryLiveChannel() {
         val ch = ChannelQueue.current ?: return
         scope.launch {
-            delay(2000)
+            // Uyarlanabilir bekleme: paneller bağlantı limiti uyguladığında eski
+            // oturumun sunucuda kapanması için daha uzun beklenir (2sn, 4sn, 6sn).
+            delay(2000L * liveRetryCount.coerceAtLeast(1))
             // Bu sırada kullanıcı oynatmayı durdurduysa (stop() çağrıldıysa)
             // yeniden başlatma — oynatma öldürülmüş olabilir.
             if (stopping) return@launch
