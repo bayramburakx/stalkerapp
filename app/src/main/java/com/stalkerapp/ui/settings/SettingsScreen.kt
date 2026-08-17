@@ -482,7 +482,7 @@ private val L10nLocal: Map<String, String> = mapOf(
     "Vazgeç" to "Cancel",
     "Tüm veriler sıfırlanacak" to "All data will be reset",
     "PIN'i unuttuysan tek seçenek tüm verileri silmek: portallar, ayarlar, izleme geçmişi ve katalog silinir. Devam edilsin mi?" to "If you forgot your PIN, the only option is to delete all data: portals, settings, watch history and catalog will be removed. Continue?",
-    "Hepsini Göster (${hiddenCatSet.size})" to "Show All (${hiddenCatSet.size})",
+    "Hepsini Göster (" to "Show All (",
     "Yeni sürüm var!" to "New version available!",
     "Yanlış PIN" to "Wrong PIN",
     "Kilidi Aç" to "Unlock",
@@ -1373,7 +1373,7 @@ fun SettingsScreen(
                         TextButton(onClick = {
                             vm.saveSettings(settings.copy(hiddenCategories = emptyList()))
                             vm.showMessage(str(lang, "Gizlenen kategoriler tekrar gösteriliyor"))
-                        }) { Text(str(lang, "Hepsini Göster (${hiddenCatSet.size})")) }
+                        }) { Text(str(lang, "Hepsini Göster (") + hiddenCatSet.size.toString() + ")") }
                     }
                 }
 
