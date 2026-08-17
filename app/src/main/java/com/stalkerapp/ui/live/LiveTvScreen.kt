@@ -73,11 +73,6 @@ fun LiveTvScreen(
     val kind = vm.activeSourceKind()
     val sourceId = vm.activeSourceId()
     val isExternal = kind == "m3u" || kind == "xtream"
-    val sourceName = when (kind) {
-        "m3u" -> vm.m3uSources().firstOrNull { it.id == sourceId }?.name
-        "xtream" -> vm.xtreamSources().firstOrNull { it.id == sourceId }?.name
-        else -> null
-    }
 
     // Hiçbir kaynak eklenmemiş veya aktif kaynak türü Ayarlar'dan kapatılmış.
     if (vm.enabledSourceKind() == null) {
@@ -153,20 +148,29 @@ fun LiveTvScreen(
         val customization = remember(customVersion) { app.store.channelCustomization() }
 
         // Kanal yönetimi uygulanmış liste: ad düzenleyici + özel logo + özel grup.
+        // 10k+ kanallı M3U listelerinde bu hesaplar her arama tuşunda yeniden
+        // çalışmasın diye remember ile önbelleğe alınır (yalnızca kanal listesi,
+        // özelleştirme veya gizlenen gruplar değişince yeniden hesaplanır).
         val rawChannels = channels.orEmpty()
-        val customGroups = customization.customGroups.filter { g ->
-            rawChannels.any { customization.channelGroup[it.id.toString()] == g.name }
+        val customGroups = remember(rawChannels, customization) {
+            customization.customGroups.filter { g ->
+                rawChannels.any { customization.channelGroup[it.id.toString()] == g.name }
+            }
         }
-        val genreList = (
-            ChannelCustomizer.sortedGenres(
-                genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups },
-                customization
-            ) +
-            customGroups.map { Genre(0, it.name) }
-        ).distinctBy { it.title }
-        val allChannels = rawChannels
-            .map { ChannelCustomizer.apply(it, customization) }
-            .filter { it.tvGenreTitle !in hiddenGroups }
+        val genreList = remember(genres, hiddenGroups, customGroups, customization) {
+            (
+                ChannelCustomizer.sortedGenres(
+                    genres.orEmpty().filter { it.id == 0L || it.title !in hiddenGroups },
+                    customization
+                ) +
+                customGroups.map { Genre(0, it.name) }
+            ).distinctBy { it.title }
+        }
+        val allChannels = remember(rawChannels, customization, hiddenGroups) {
+            rawChannels
+                .map { ChannelCustomizer.apply(it, customization) }
+                .filter { it.tvGenreTitle !in hiddenGroups }
+        }
         // Kategori filtresi tür başlığına göre yapılır (Stalker/M3U/Xtream hepsinde çalışır).
         val activeGenreTitle = genreList.firstOrNull { it.id == selectedGenre }?.title
         val filtered = allChannels.filter { ch ->
@@ -193,22 +197,6 @@ fun LiveTvScreen(
                     t("Cooldown aktif") + " — " + cooldown + "s " + t("sonra istek gönderilebilir"),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-
-        // Aktif kaynak rozeti (Stalker dışındaki kaynaklar için). M3U listelerinde
-        // gösterilmez — kullanıcı isteği (liste adı gereksiz kalabalık yapıyor).
-        if (isExternal && kind != "m3u" && sourceName != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    t("Kaynak") + ": " + sourceName.ifBlank { "Xtream" },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }

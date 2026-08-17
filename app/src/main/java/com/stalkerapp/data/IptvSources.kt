@@ -55,7 +55,7 @@ object M3uParser {
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -97,10 +97,42 @@ object M3uParser {
     )
 
     /**
-     * Girdiyi canlı/film/dizi olarak sınıflandırır. Öncelik: açık `tvg-type`
-     * özniteliği, ardından URL dosya uzantısı, son çare grup anahtar kelimeleri.
+     * VOD isim sinyalleri: parantez içi yıl "(1994)", " - 1994", ".1987" gibi
+     * biçimler. Canlı kanal adlarında ("FIFA World Cup 2022" gibi) yıl genelde
+     * düz boşlukla yazılır ve bu desene takılmaz.
      */
-    private fun classifyEntry(attrs: Map<String, String>, url: String): M3uEntryType {
+    private val YEAR_IN_NAME = Regex("""\((19\d\d|20\d\d)\)?|[-–.]\s*(19\d\d|20\d\d)\s*$""")
+
+    /** Dizi bölüm sinyali: "S01E05", "S1 E5" vb. */
+    private val EPISODE_IN_NAME = Regex("""\bS\d{1,2}\s*E\d{1,3}\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Tür tabanlı VOD grupları (yıl sinyali olmayan film/dizi grupları — ör:
+     * "DE ✪ DRAMA", "DE ✪ KOMODIE"). Canlı kanal paketlerinde (ülke/spor/radyo)
+     * bu kelimeler nadiren bulunur, bu yüzden güvenle VOD sayılabilir.
+     */
+    private val VOD_GROUP_KEYWORDS = listOf(
+        "drama", "komödie", "komedie", "comedy", "thriller", "krimi", "crime", "horror",
+        "korku", "sci-fi", "scifi", "science fiction", "fantasy", "abenteuer", "adventure",
+        "anime", "cartoon", "belgesel", "dokumentation", "documentary", "doku", "kungfu",
+        "liebesfilm", "romantik", "biopic", "netflix", "disney", "hbo", "imdb",
+        "amazon prime", "apple tv"
+    )
+
+    /** VOD grubunun dizi mi film mi olduğunu belirleyen anahtarlar. */
+    private val VOD_SERIES_GROUP_KEYWORDS = listOf(
+        "serie", "dizi", "anime", "netflix", "disney", "hbo", "amazon", "cartoon",
+        "animation", "animasyon"
+    )
+
+    /**
+     * Girdiyi canlı/film/dizi olarak sınıflandırır. Öncelik: açık `tvg-type`
+     * özniteliği, ardından isimdeki dizi bölümü/yıl desenleri, sonra URL dosya
+     * uzantısı ve grup anahtar kelimeleri. İsim sinyalleri önemlidir: token bazlı
+     * URL kullanan sağlayıcılarda (dosya uzantısı yok) film/dizi girdileri isimden
+     * ayırt edilir — aksi halde hepsi canlı TV'ye düşerdi.
+     */
+    private fun classifyEntry(attrs: Map<String, String>, url: String, name: String = ""): M3uEntryType {
         when (attrs["tvg-type"]?.lowercase()?.trim().orEmpty()) {
             "vod", "movie", "film", "movies", "movie_live" -> return M3uEntryType.MOVIE
             "series", "tvshow", "show", "dizi", "serial", "serie", "serien" -> return M3uEntryType.SERIES
@@ -109,16 +141,25 @@ object M3uParser {
         }
         val group = attrs["group-title"].orEmpty().lowercase()
         val u = url.lowercase()
+        // Dizi bölümü deseni ("S01E05") → kesin dizi.
+        if (EPISODE_IN_NAME.containsMatchIn(name)) return M3uEntryType.SERIES
         // URL bir VOD dosya uzantısıyla bitiyorsa kesin olarak canlı değildir.
         val fileLike = VOD_FILE_EXTENSIONS.any { u.endsWith(it) }
-        if (fileLike) {
+        // İsimde yıl sinyali ("(1994)", " - 1994") → VOD (film/dizi).
+        val hasYear = YEAR_IN_NAME.containsMatchIn(name)
+        if (fileLike || hasYear) {
             return if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) M3uEntryType.SERIES
             else M3uEntryType.MOVIE
         }
-        // Uzantı yoksa grup adı anahtar kelimelerine bakılır — Stalker/Xtream gibi
+        // Uzantı/yıl sinyali yoksa grup adı anahtar kelimelerine bakılır —
         // film/dizi içeriği canlı TV'ye değil Filmler/Diziler kataloğuna düşsün.
         if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) return M3uEntryType.SERIES
         if (MOVIE_KEYWORDS.any { group.contains(it) }) return M3uEntryType.MOVIE
+        // Tür tabanlı VOD grupları (yıl sinyali olmayan film/dizi grupları).
+        if (VOD_GROUP_KEYWORDS.any { group.contains(it) }) {
+            return if (VOD_SERIES_GROUP_KEYWORDS.any { group.contains(it) }) M3uEntryType.SERIES
+            else M3uEntryType.MOVIE
+        }
         return M3uEntryType.LIVE
     }
 
@@ -176,16 +217,17 @@ object M3uParser {
             logo = attrs["tvg-logo"].orEmpty(),
             group = attrs["group-title"].orEmpty(),
             xmltvId = attrs["tvg-id"].orEmpty(),
-            type = classifyEntry(attrs, ""),
+            type = classifyEntry(attrs, "", name),
             attrs = attrs
         )
     }
 
     private fun finishEntry(out: MutableList<ParsedEntry>, e: ParsedEntry) {
         if (e.url.isNotBlank() && e.name.isNotBlank()) {
-            // URL geldiğine göre sınıflandırmayı URL ile birlikte yeniden yap
-            // (dosya uzantısı + grup anahtar kelimeleri URL'ye bağlı olabilir).
-            out += e.copy(type = classifyEntry(e.attrs, e.url))
+            // URL geldiğine göre sınıflandırmayı URL + isim ile birlikte yeniden
+            // yap (dosya uzantısı ve isimdeki yıl/bölüm desenleri URL'ye bağlı
+            // olabilir). attrs artık gerekmiyor — 400k+ girdide bellekten düşür.
+            out += e.copy(type = classifyEntry(e.attrs, e.url, e.name), attrs = emptyMap())
         }
     }
 
@@ -254,7 +296,7 @@ class XtreamClient {
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 

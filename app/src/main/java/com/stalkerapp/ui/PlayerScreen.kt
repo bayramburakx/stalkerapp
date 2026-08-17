@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
@@ -22,6 +23,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -1404,7 +1407,13 @@ fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) ->
         tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO)
     }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 24.dp)
+        ) {
             Text(str(lang, "Ses Dili"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             ListItem(
                 headlineContent = { Text(str(lang, "Varsayılan (Otomatik)")) },
@@ -1442,7 +1451,13 @@ fun SubtitleSheet(
         tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_TEXT)
     }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 24.dp)
+        ) {
             Text(str(lang, "Altyazı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             ListItem(
                 headlineContent = { Text(str(lang, "Altyazılar")) },
@@ -1760,7 +1775,13 @@ fun PlayerSettingsSheet(
         str(lang, "Yakınlaştır") to AspectRatioFrameLayout.RESIZE_MODE_ZOOM
     )
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 24.dp)
+        ) {
             Text(str(lang, "Oynatma Hızı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
             speeds.forEach { s ->
                 ListItem(
