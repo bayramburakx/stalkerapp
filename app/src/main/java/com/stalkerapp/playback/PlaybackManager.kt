@@ -621,7 +621,7 @@ object PlaybackManager {
         val channels = ChannelQueue.channels
         val nextIndex = ChannelQueue.index + 1
         if (nextIndex >= channels.size) return false
-        val profile = ChannelQueue.profile ?: return false
+        val profile = ChannelQueue.profile
         // Hazır bekleyen (ön tampon) bir sonraki kanal varsa, referansları takasla
         // ve anında zapping yap (yeniden akış çekmeye gerek yok).
         val standby = standbyPlayer
@@ -694,8 +694,8 @@ object PlaybackManager {
         val channels = ChannelQueue.channels
         val prevIndex = ChannelQueue.index - 1
         if (prevIndex < 0) return false
-        val profile = ChannelQueue.profile ?: return false
-        playChannel(channels, prevIndex, profile)
+        // Xtream/M3U'da profil null olabilir; playChannel zaten Profile? kabul eder.
+        playChannel(channels, prevIndex, ChannelQueue.profile)
         return true
     }
 

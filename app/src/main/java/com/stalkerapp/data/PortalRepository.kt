@@ -384,7 +384,7 @@ class PortalRepository(
         return result
     }
 
-    suspend fun loadEpg(profile: Profile, channel: Channel): List<EpgProgram> {
+    suspend fun loadEpg(profile: Profile?, channel: Channel): List<EpgProgram> {
         val channelId = channel.id
         // Önbellekte GERÇEK program varsa (varsayılan değil) dön. Varsayılan
         // programlar (kanalın adı) önbelleğe alınmaz — EPG URL'si sonradan
@@ -393,7 +393,7 @@ class PortalRepository(
             if (cached.none { it.isDefault }) return cached
         }
         val st = store.settings()
-        val zone = portalZone(profile)
+        val zone = profile?.let { portalZone(it) }
         val now = System.currentTimeMillis() / 1000
         // Geçmiş gün sayısı (Ayarlar → EPG): programlar bugünden önceki N güne
         // kadar çekilir (catch-up rehberi için).
@@ -403,7 +403,9 @@ class PortalRepository(
         // (portal EPG'si eksik/hatalıysa faydalıdır).
         val externalFirst = st.epgSourcePriority == "external"
         var programs = if (externalFirst) externalEpgFor(profile, channel) else emptyList()
-        if (programs.isEmpty()) {
+        // Portal EPG'si yalnızca Stalker kaynağı etkinken çekilir; Xtream/M3U'da
+        // kanal kimlikleri portal EPG'siyle eşleşmez — rehber harici XMLTV'den beslenir.
+        if (programs.isEmpty() && profile != null && store.activeSourceKind() == "stalker") {
             programs = portalEpg(profile, channel, zone, now, from, to)
         }
         if (programs.isEmpty() && !externalFirst) {
@@ -485,7 +487,7 @@ class PortalRepository(
      * Kanal `xmltv_id` ile eşleştirilir. Dosya 6 saatte bir yeniden indirilir
      * (ilk istekte). URL boşsa ya da kanal eşleşmezse boş döner.
      */
-    private suspend fun externalEpgFor(profile: Profile, channel: Channel): List<EpgProgram> {
+    private suspend fun externalEpgFor(profile: Profile?, channel: Channel): List<EpgProgram> {
         val url = store.settings().epgUrl.trim()
         if (url.isBlank()) return emptyList()
         ensureExternalEpg(url)
@@ -499,7 +501,7 @@ class PortalRepository(
         val xmltvId = channel.xmltvId.ifBlank {
             // Kanal önbellekte değilse (örn. ana sayfadan doğrudan oynatılan
             // favori kanal) kanal listesinden bul.
-            channelsCache[profile.portal?.id]?.values?.asSequence()
+            channelsCache[profile?.portal?.id]?.values?.asSequence()
                 ?.flatten()?.firstOrNull { it.id == channel.id }?.xmltvId.orEmpty()
         }
         externalEpg[xmltvId]?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -770,14 +772,14 @@ class PortalRepository(
      * adı tek program olarak gösterilir — rehber boş kalmaz ama yalan bir
      * program listesi de sunulmaz (şu an oynayan = kanalın yayını).
      */
-    private fun defaultEpg(profile: Profile, channel: Channel): List<EpgProgram> {
+    private fun defaultEpg(profile: Profile?, channel: Channel): List<EpgProgram> {
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis() / 1000
         val todayStart = runCatching {
             java.time.LocalDate.now(zone).atStartOfDay(zone).toEpochSecond()
         }.getOrDefault(now - (now % 86400))
         val name = channel.name.ifBlank {
-            channelsCache[profile.portal?.id]?.values?.asSequence()
+            channelsCache[profile?.portal?.id]?.values?.asSequence()
                 ?.flatten()?.firstOrNull { it.id == channel.id }?.name.orEmpty()
         }.ifBlank { l10n("Yayın") }
         return listOf(

@@ -94,13 +94,6 @@ fun EpgGuideScreen(
     val vm: MainViewModel = rememberMainViewModel(app)
     val lang = vm.store.settings().language
 
-    if (profile == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(str(lang, "Portal bağlı değil"))
-        }
-        return
-    }
-
     var genres by remember { mutableStateOf<List<Genre>?>(null) }
     var channels by remember { mutableStateOf<List<Channel>?>(null) }
     var epg by remember { mutableStateOf<Map<Long, List<EpgProgram>>>(emptyMap()) }
@@ -111,17 +104,39 @@ fun EpgGuideScreen(
     // Liste / Izgara (TiviMate tarzı kanal × zaman) görünümü.
     var gridMode by remember { mutableStateOf(false) }
 
+    // Aktif kaynak: Stalker portal (profil) ya da Xtream/M3U (profil null olabilir).
+    // Rehber her iki durumda da çalışır — Xtream/M3U'da kanallar kaynaktan,
+    // programlar harici XMLTV EPG'sinden gelir.
+    val isExternal = vm.activeSourceKind() == "m3u" || vm.activeSourceKind() == "xtream"
+
     LaunchedEffect(profile) {
-        runCatching { vm.repository.loadGenres(profile) }
-            .onSuccess { genres = it }
-            .onFailure { error = it.message; genres = emptyList() }
+        if (isExternal) {
+            val loaded = runCatching { vm.loadChannelsForActiveSource(profile) }
+                .getOrNull()
+            genres = loaded?.first?.filter { it.id != 0L } ?: emptyList()
+            error = null
+        } else if (profile != null) {
+            runCatching { vm.repository.loadGenres(profile) }
+                .onSuccess { genres = it }
+                .onFailure { error = it.message; genres = emptyList() }
+        }
     }
 
     LaunchedEffect(selectedGenre, profile) {
         loading = true
         error = null
         try {
-            val list = vm.repository.loadChannels(profile, selectedGenre)
+            val list = if (isExternal) {
+                val all = vm.loadChannelsForActiveSource(profile)?.second.orEmpty()
+                // Xtream/M3U'da tür filtresi kanalın tvGenreId/tvGenreTitle'ına göre
+                // bellekte uygulanır (Stalker'daki sunucu tarafı filtre yerine).
+                if (selectedGenre <= 0L) all
+                else all.filter { it.tvGenreId == selectedGenre || it.tvGenreTitle == genres?.firstOrNull { g -> g.id == selectedGenre }?.title }
+            } else if (profile != null) {
+                vm.repository.loadChannels(profile, selectedGenre)
+            } else {
+                emptyList()
+            }
             channels = list
             // EPG'yi ilk 60 kanal için çek (her kanal ayrı istek; tamamı çok yavaş olur).
             val map = mutableMapOf<Long, List<EpgProgram>>()
@@ -264,7 +279,7 @@ fun EpgGuideScreen(
                 gridMode -> EpgGridView(
                     channels = filtered,
                     epg = epg,
-                    baseUrl = profile.baseUrl,
+                    baseUrl = profile?.baseUrl.orEmpty(),
                     onPlay = { ch ->
                         val idx = list.indexOfFirst { it.id == ch.id }
                         if (idx >= 0) {
@@ -296,7 +311,7 @@ fun EpgGuideScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 ChannelLogo(
-                                    logo = resolveUrl(ch.logo, profile.baseUrl),
+                                    logo = resolveUrl(ch.logo, profile?.baseUrl.orEmpty()),
                                     modifier = Modifier.size(40.dp)
                                 )
                                 Spacer(Modifier.width(12.dp))

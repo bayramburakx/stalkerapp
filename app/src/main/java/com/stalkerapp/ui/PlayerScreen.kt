@@ -545,8 +545,9 @@ fun PlayerScreen(navController: NavHostController) {
 
     fun switchTo(index: Int) {
         val ch = queueChannels.getOrNull(index) ?: return
-        val p = queueProfile ?: return
-        PlaybackManager.playChannel(queueChannels, index, p)
+        // Profil Stalker dışı (Xtream/M3U) kaynaklarda null olabilir; playChannel
+        // zaten Profile? kabul eder (cmd doğrudan oynatılabilir URL'dir).
+        PlaybackManager.playChannel(queueChannels, index, queueProfile)
         currentChannel = ch
         error = PlaybackManager.errorMessage
     }
@@ -1074,7 +1075,6 @@ fun PlayerScreen(navController: NavHostController) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = {
-                                val p = queueProfile ?: return@IconButton
                                 val idx = ChannelQueue.index - 1
                                 if (idx >= 0) switchTo(idx)
                             }) {
@@ -1105,7 +1105,6 @@ fun PlayerScreen(navController: NavHostController) {
                                 }
                             }
                             IconButton(onClick = {
-                                val p = queueProfile ?: return@IconButton
                                 val idx = ChannelQueue.index + 1
                                 if (idx < ChannelQueue.channels.size) switchTo(idx)
                             }) {
@@ -1431,7 +1430,7 @@ fun EpgSheet(
     onDismiss: () -> Unit,
     vm: MainViewModel
 ) {
-    if (channel == null || profile == null) {
+    if (channel == null) {
         onDismiss()
         return
     }
@@ -1633,10 +1632,11 @@ fun PlayerInfoSheet(
     profile: Profile?,
     onDismiss: () -> Unit
 ) {
-    if (channel == null || profile == null) {
+    if (channel == null) {
         onDismiss()
         return
     }
+
     val rows = remember { mutableStateListOf<Pair<String, String>>() }
 
     fun rebuild() {
@@ -1676,7 +1676,7 @@ fun PlayerInfoSheet(
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelLogo(logo = resolveUrl(channel.logo, profile.baseUrl), modifier = Modifier.size(56.dp))
+                ChannelLogo(logo = resolveUrl(channel.logo, profile?.baseUrl.orEmpty()), modifier = Modifier.size(56.dp))
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(channel.name, style = MaterialTheme.typography.titleLarge)

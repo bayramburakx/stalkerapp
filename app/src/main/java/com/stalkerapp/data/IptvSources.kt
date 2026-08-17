@@ -89,23 +89,34 @@ object M3uParser {
         ".m4v", ".mpg", ".mpeg", ".3gp", ".vob", ".divx", ".ogv"
     )
 
+    /** Film/VOD grup anahtar kelimeleri: grup adı bunlardan birini içeriyorsa film sayılır. */
+    private val MOVIE_KEYWORDS = listOf(
+        "film", "movie", "sinema", "cinema", "kino", "vod", "filmler", "movies"
+    )
+
     /**
      * Girdiyi canlı/film/dizi olarak sınıflandırır. Öncelik: açık `tvg-type`
      * özniteliği, ardından URL dosya uzantısı, son çare grup anahtar kelimeleri.
      */
     private fun classifyEntry(attrs: Map<String, String>, url: String): M3uEntryType {
         when (attrs["tvg-type"]?.lowercase()?.trim().orEmpty()) {
-            "vod", "movie", "film" -> return M3uEntryType.MOVIE
-            "series", "tvshow", "show", "dizi", "serial" -> return M3uEntryType.SERIES
-            "live", "radio" -> return M3uEntryType.LIVE
+            "vod", "movie", "film", "movies" -> return M3uEntryType.MOVIE
+            "series", "tvshow", "show", "dizi", "serial", "serie" -> return M3uEntryType.SERIES
+            "live", "radio", "tv" -> return M3uEntryType.LIVE
+
         }
+        val group = attrs["group-title"].orEmpty().lowercase()
         val u = url.lowercase()
+        // URL bir VOD dosya uzantısıyla bitiyorsa kesin olarak canlı değildir.
         val fileLike = VOD_FILE_EXTENSIONS.any { u.endsWith(it) }
         if (fileLike) {
-            val group = attrs["group-title"].orEmpty().lowercase()
             return if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) M3uEntryType.SERIES
             else M3uEntryType.MOVIE
         }
+        // Uzantı yoksa grup adı anahtar kelimelerine bakılır — Stalker/Xtream gibi
+        // film/dizi içeriği canlı TV'ye değil Filmler/Diziler kataloğuna düşsün.
+        if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) return M3uEntryType.SERIES
+        if (MOVIE_KEYWORDS.any { group.contains(it) }) return M3uEntryType.MOVIE
         return M3uEntryType.LIVE
     }
 
