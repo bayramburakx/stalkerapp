@@ -80,11 +80,49 @@ object M3uParser {
         return attrs
     }
 
-    fun parse(text: String, sourceId: String): List<Channel> {
-        val channels = mutableListOf<Channel>()
+    /** Bir M3U girdisinin türü: canlı kanal, film veya dizi. */
+    private enum class M3uEntryType { LIVE, MOVIE, SERIES }
+
+    /** Film/VOD dosya uzantıları: böyle bir URL'ye sahip girdi canlı kanal değildir. */
+    private val VOD_FILE_EXTENSIONS = listOf(
+        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm",
+        ".m4v", ".mpg", ".mpeg", ".3gp", ".vob", ".divx", ".ogv"
+    )
+
+    /**
+     * Girdiyi canlı/film/dizi olarak sınıflandırır. Öncelik: açık `tvg-type`
+     * özniteliği, ardından URL dosya uzantısı, son çare grup anahtar kelimeleri.
+     */
+    private fun classifyEntry(attrs: Map<String, String>, url: String): M3uEntryType {
+        when (attrs["tvg-type"]?.lowercase()?.trim().orEmpty()) {
+            "vod", "movie", "film" -> return M3uEntryType.MOVIE
+            "series", "tvshow", "show", "dizi", "serial" -> return M3uEntryType.SERIES
+            "live", "radio" -> return M3uEntryType.LIVE
+        }
+        val u = url.lowercase()
+        val fileLike = VOD_FILE_EXTENSIONS.any { u.endsWith(it) }
+        if (fileLike) {
+            val group = attrs["group-title"].orEmpty().lowercase()
+            return if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) M3uEntryType.SERIES
+            else M3uEntryType.MOVIE
+        }
+        return M3uEntryType.LIVE
+    }
+
+    private data class ParsedEntry(
+        val name: String,
+        val url: String,
+        val logo: String,
+        val group: String,
+        val xmltvId: String,
+        val type: M3uEntryType
+    )
+
+    /** #EXTINF bloklarını tür etiketiyle birlikte çözer. */
+    private fun parseAll(text: String): List<ParsedEntry> {
+        val out = mutableListOf<ParsedEntry>()
         val lines = text.split("\n").map { it.trim() }
         var i = 0
-        var index = 0
         while (i < lines.size) {
             val line = lines[i]
             if (line.startsWith("#EXTINF")) {
@@ -100,52 +138,64 @@ object M3uParser {
                 }
                 i = j
                 if (url.isNotBlank() && name.isNotBlank()) {
-                    index++
-                    channels += Channel(
-                        id = (sourceId + "|" + url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                    out += ParsedEntry(
                         name = name,
-                        number = index,
+                        url = url,
                         logo = attrs["tvg-logo"].orEmpty(),
-                        cmd = url,
-                        tvGenreTitle = attrs["group-title"].orEmpty(),
-                        xmltvId = attrs["tvg-id"].orEmpty()
+                        group = attrs["group-title"].orEmpty(),
+                        xmltvId = attrs["tvg-id"].orEmpty(),
+                        type = classifyEntry(attrs, url)
                     )
                 }
             } else {
                 i++
             }
         }
-        return channels
+        return out
+    }
+
+    /** Yalnızca canlı kanalları döndürür (film/dizi girdileri ayrılır). */
+    fun parse(text: String, sourceId: String): List<Channel> {
+        return parseAll(text)
+            .filter { it.type == M3uEntryType.LIVE }
+            .mapIndexed { index, e ->
+                Channel(
+                    id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                    name = e.name,
+                    number = index + 1,
+                    logo = e.logo,
+                    cmd = e.url,
+                    tvGenreTitle = e.group,
+                    xmltvId = e.xmltvId
+                )
+            }
     }
 
     /**
-     * M3U içeriğinden film/dizi kataloğu üretir. group-title'lar kategori olur;
-     * "dizi/series" içeren gruplar dizi, diğerleri film sayılır (her öğe tek
-     * dosyalıdır — bölüm bilgisi standart M3U'da yoktur).
+     * M3U içeriğinden film/dizi kataloğu üretir (canlı kanallar dahil edilmez).
+     * group-title'lar kategori olur; dizi olarak sınıflananlar dizi, diğerleri
+     * film sayılır (her öğe tek dosyalıdır — bölüm bilgisi standart M3U'da yoktur).
      * Dönüş: (kategoriler, öğeler).
      */
     fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> {
-        val channels = parse(text, sourceId)
-        if (channels.isEmpty()) return listOf(Genre(0, "Tümü")) to emptyList()
-        val groups = channels.map { it.tvGenreTitle }
+        val entries = parseAll(text).filter { it.type != M3uEntryType.LIVE }
+        if (entries.isEmpty()) return listOf(Genre(0, "Tümü")) to emptyList()
+        val groups = entries.map { it.group }
             .filter { it.isNotBlank() }
             .distinct()
             .sorted()
         val groupIds = groups.mapIndexed { i, g -> g to (i + 1).toLong() }.toMap()
-        val items = channels.map { ch ->
-            val isSeries = ch.tvGenreTitle.let { t ->
-                t.isNotBlank() && ExternalVod.SERIES_KEYWORDS.any { t.contains(it, ignoreCase = true) }
-            }
+        val items = entries.map { e ->
             VodItem(
-                id = ch.id,
-                categoryId = groupIds[ch.tvGenreTitle] ?: 0L,
-                name = ch.name,
-                originalName = ch.name,
-                poster = ch.logo,
+                id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                categoryId = groupIds[e.group] ?: 0L,
+                name = e.name,
+                originalName = e.name,
+                poster = e.logo,
                 description = "",
                 year = "",
-                cmd = ch.cmd,
-                isSeries = isSeries
+                cmd = e.url,
+                isSeries = e.type == M3uEntryType.SERIES
             )
         }
         val genres = listOf(Genre(0, "Tümü")) +
@@ -153,6 +203,12 @@ object M3uParser {
         return genres to items
     }
 }
+
+/**
+ * Xtream API isteği ağ/HTTP hatası nedeniyle başarısız olduğunda fırlatılır
+ * (VOD senkronu bunu yakalayıp "Senkronizasyon hatası" olarak gösterir).
+ */
+class XtreamApiException(message: String) : Exception(message)
 
 /**
  * Xtream Codes API istemcisi. `player_api.php` uç noktasını kullanır
@@ -163,7 +219,7 @@ class XtreamClient {
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -177,6 +233,54 @@ class XtreamClient {
 
     private fun playerApi(source: XtreamSource): String =
         "${apiBase(source)}/player_api.php?username=${source.username}&password=${source.password}"
+
+    /** Panel ayraç satırları ("----- ITALIA -----", "END OF LIST") gerçek içerik değildir. */
+    private fun isSeparatorRow(name: String): Boolean {
+        val t = name.trim()
+        if (t.equals("END OF LIST", ignoreCase = true)) return true
+        return t.startsWith("-----")
+    }
+
+    private fun parseCategories(el: JsonElement): List<Genre> =
+        (el as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { o ->
+            val id = (o["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+                ?: return@mapNotNull null
+            Genre(
+                id = id,
+                title = (o["category_name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+            )
+        }
+
+    /** Başarısızlıkta [XtreamApiException] fırlatan sürüm (VOD senkronu için). */
+    private suspend fun getJsonOrThrow(url: String): JsonElement = withContext(Dispatchers.IO) {
+        var lastError: Exception? = null
+        repeat(2) {
+            try {
+                val req = Request.Builder().url(url)
+                    .header("User-Agent", "StalkerPlayer/1.0")
+                    .build()
+                http.newCall(req).execute().use { r ->
+                    if (!r.isSuccessful) throw XtreamApiException("HTTP ${r.code} (${r.request.url})")
+                    val text = r.body?.string().orEmpty()
+                    if (text.isBlank()) throw XtreamApiException("empty response: ${r.request.url}")
+                    return@withContext json.parseToJsonElement(text)
+                }
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw lastError ?: XtreamApiException("request failed: $url")
+    }
+
+    private suspend fun fetchListOrThrow(url: String): List<JsonObject> {
+        val el = getJsonOrThrow(url)
+        return when (el) {
+            is JsonArray -> el.mapNotNull { it as? JsonObject }
+            is JsonObject -> (el["available_channels"] as? JsonArray)
+                ?.mapNotNull { it as? JsonObject }.orEmpty()
+            else -> emptyList()
+        }
+    }
 
     private suspend fun getJson(url: String): JsonElement? = withContext(Dispatchers.IO) {
         runCatching {
@@ -202,14 +306,7 @@ class XtreamClient {
     /** Canlı TV kategorileri. */
     suspend fun liveCategories(source: XtreamSource): List<Genre> {
         val el = getJson("${playerApi(source)}&action=get_live_categories") ?: return emptyList()
-        return (el as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { o ->
-            val id = (o["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
-                ?: return@mapNotNull null
-            Genre(
-                id = id,
-                title = (o["category_name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
-            )
-        }
+        return parseCategories(el)
     }
 
     /** Canlı kanallar (sayfalı). `page=-1` tümünü tek istekte döndürür (çoğu panelde çalışır). */
@@ -225,9 +322,11 @@ class XtreamClient {
         return raw.mapNotNull { it as? JsonObject }.mapNotNull { o ->
             val id = (o["stream_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
                 ?: return@mapNotNull null
+            val name = (o["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+            if (isSeparatorRow(name)) return@mapNotNull null
             Channel(
                 id = id,
-                name = (o["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                name = name,
                 number = (o["num"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0,
                 logo = (o["stream_icon"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
                 cmd = streamUrl(source, id),
@@ -259,14 +358,7 @@ class XtreamClient {
 
     private suspend fun getCategories(source: XtreamSource, action: String): List<Genre> {
         val el = getJson("${playerApi(source)}&action=$action") ?: return emptyList()
-        return (el as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { o ->
-            val id = (o["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
-                ?: return@mapNotNull null
-            Genre(
-                id = id,
-                title = (o["category_name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
-            )
-        }
+        return parseCategories(el)
     }
 
     /**
@@ -280,6 +372,59 @@ class XtreamClient {
     /** Tüm dizileri çeker ([categoryId] > 0 ise o kategori). */
     suspend fun seriesStreams(source: XtreamSource, categoryId: Long = 0): List<VodItem> =
         pageAll(source, "get_series", categoryId) { o -> seriesItemFrom(o) }
+
+    /**
+     * VOD senkronu için film + dizi kataloğunu tek akışta çeker. Ağ/HTTP
+     * hatasında (geçici 401/taşma dahil) bir kez yeniden dener ve hâlâ
+     * başarısızsa [XtreamApiException] fırlatır — böylece gerçek arıza
+     * "Senkronizasyon hatası" olarak görünür, boş panel yanıtıyla karışmaz.
+     */
+    suspend fun fetchVodCatalog(source: XtreamSource): Pair<List<Genre>, List<VodItem>> {
+        val vcats = parseCategories(
+            getJsonOrThrow("${playerApi(source)}&action=get_vod_categories")
+        )
+        val scats = parseCategories(
+            getJsonOrThrow("${playerApi(source)}&action=get_series_categories")
+        )
+        val vods = pageAllOrThrow(source, "get_vod_streams") { o -> vodItemFrom(source, o) }
+        val series = pageAllOrThrow(source, "get_series") { o -> seriesItemFrom(o) }
+        val genres = listOf(Genre(0, "Tümü")) +
+            vcats +
+            scats.map { it.copy(id = ExternalVod.seriesCatId(it.id)) }
+        return genres to (vods + series)
+    }
+
+    private suspend fun pageAllOrThrow(
+        source: XtreamSource,
+        action: String,
+        categoryId: Long = 0,
+        mapItem: (JsonObject) -> VodItem?
+    ): List<VodItem> {
+        val catParam = if (categoryId > 0) "&category_id=$categoryId" else ""
+        val base = "${playerApi(source)}&action=$action$catParam"
+        val first = fetchListOrThrow(base)
+        if (first.isNotEmpty()) return mapItems(first, mapItem)
+
+        // Sayfalı fallback (bazı paneller page'siz boş döner).
+        val out = mutableListOf<VodItem>()
+        val seen = HashSet<Long>()
+        var page = 1
+        var dupStreak = 0
+        while (page <= 200) {
+            val items = mapItems(fetchListOrThrow("$base&page=$page"), mapItem)
+            if (items.isEmpty()) break
+            var added = 0
+            items.forEach { if (seen.add(it.id)) { out += it; added++ } }
+            if (added == 0) {
+                if (++dupStreak >= 2) break
+                page++
+                continue
+            }
+            dupStreak = 0
+            page++
+        }
+        return out
+    }
 
     private suspend fun pageAll(
         source: XtreamSource,
@@ -339,6 +484,7 @@ class XtreamClient {
             ?: return null
         val ext = (o["container_extension"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val name = (o["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        if (isSeparatorRow(name)) return null
         return VodItem(
             id = ExternalVod.XTREAM_VOD_BASE + streamId,
             categoryId = (o["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0,
@@ -364,6 +510,7 @@ class XtreamClient {
         val seriesId = (o["series_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
             ?: return null
         val name = (o["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        if (isSeparatorRow(name)) return null
         return VodItem(
             id = ExternalVod.XTREAM_SERIES_BASE + seriesId,
             categoryId = ExternalVod.seriesCatId(
@@ -394,28 +541,34 @@ class XtreamClient {
             ?: return emptyList()
         val obj = el as? JsonObject ?: return emptyList()
         val seasonsArr = obj["seasons"] as? JsonArray ?: return emptyList()
+        // Bazı paneller sezon içi bölümleri üst seviye "episodes" sözlüğünde döner
+        // ({ sezonNo: [bölüm...] }); standart paneller seasons[].episodes kullanır.
+        val episodesBySeason: Map<String, JsonArray> = (obj["episodes"] as? JsonObject).orEmpty()
+            .mapNotNull { (k, v) -> (v as? JsonArray)?.let { k to it } }
+            .toMap()
         return seasonsArr.mapNotNull { it as? JsonObject }.mapNotNull { s ->
             val num = (s["season_number"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
                 ?: return@mapNotNull null
-            val eps = (s["episodes"] as? JsonArray).orEmpty()
-                .mapNotNull { it as? JsonObject }
-                .mapNotNull { e ->
-                    val eid = (e["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
-                        ?: return@mapNotNull null
-                    val info = e["info"] as? JsonObject
-                    XtreamEpisodeInfo(
-                        id = eid,
-                        number = (e["episode_num"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0,
-                        name = (e["title"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
-                        thumb = info?.get("movie_image")?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                        container = (e["container_extension"] as? JsonPrimitive)?.contentOrNull.orEmpty()
-                    )
-                }
+            val inline = (s["episodes"] as? JsonArray).orEmpty()
+            val eps = if (inline.isNotEmpty()) inline
+            else episodesBySeason[num.toString()] ?: JsonArray(emptyList())
+            val parsed = eps.mapNotNull { it as? JsonObject }.mapNotNull { e ->
+                val eid = (e["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+                    ?: return@mapNotNull null
+                val info = e["info"] as? JsonObject
+                XtreamEpisodeInfo(
+                    id = eid,
+                    number = (e["episode_num"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0,
+                    name = (e["title"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    thumb = info?.get("movie_image")?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                    container = (e["container_extension"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                )
+            }
             XtreamSeasonInfo(
                 number = num,
                 name = (s["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                     .ifBlank { "Sezon $num" },
-                episodes = eps
+                episodes = parsed
             )
         }.sortedBy { it.number }
     }

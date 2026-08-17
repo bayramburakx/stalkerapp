@@ -296,7 +296,9 @@ object PlaybackManager {
             append(st.decoder).append('|')
             append(st.streamFormat).append('|')
             append(st.audioPassthrough).append('|')
-            append(st.maxBufferMs)
+            append(st.maxBufferMs).append('|')
+            // Aktif kaynak değişince UA da değişir; oyuncu yeniden kurulur.
+            append(store.activeSourceKind())
         }
     }
 
@@ -318,11 +320,20 @@ object PlaybackManager {
             )
             .build()
 
+        // Stalker portal akışları bazı STB portallarının beklediği MAG User-Agent'i
+        // ile açılır; ancak çoğu Xtream/M3U paneli/CDN'si MAG/STB UA'sını 401 ile
+        // reddeder. Bu yüzden dış kaynaklarda genel bir Android/browser UA kullanılır.
+        val isExternalSource = store.activeSourceKind() in setOf("m3u", "xtream")
+        val userAgent = if (isExternalSource)
+            "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+        else
+            "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
+
         val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(30_000)
-            .setUserAgent("Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3")
+            .setUserAgent(userAgent)
 
         val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpDataSourceFactory)
 

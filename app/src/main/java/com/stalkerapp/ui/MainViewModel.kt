@@ -414,15 +414,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** Xtream kaynağının film + dizi kataloğunu yükler. */
     suspend fun loadXtreamVod(source: XtreamSource): Pair<List<Genre>, List<VodItem>> {
         xtreamVodCache[source.id]?.let { return it }
-        val client = XtreamClient()
-        val vcats = client.vodCategories(source)
-        val scats = client.seriesCategories(source)
-        val vods = client.vodStreams(source)
-        val series = client.seriesStreams(source)
-        val genres = listOf(Genre(0, "Tümü")) +
-            vcats +
-            scats.map { it.copy(id = ExternalVod.seriesCatId(it.id)) }
-        val result = genres to (vods + series)
+        // fetchVodCatalog ağ/HTTP hatasında XtreamApiException fırlatır;
+        // ensureExternalVodCatalog bunu yakalayıp Error durumuna düşürür.
+        val result = XtreamClient().fetchVodCatalog(source)
         xtreamVodCache[source.id] = result
         return result
     }
@@ -554,8 +548,16 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         }
 
     fun syncVodCatalog(profile: Profile, force: Boolean = false) {
-        StalkerApp.instance.vodSyncManager.ensureSynced(profile, force)
-        VodSyncService.start(app)
+        // M3U/Xtream aktifken katalog burada kurulur; Stalker portal için
+        // ayrı arka plan yöneticisi kullanılır. "Şimdi Senkronize Et" butonu
+        // aktif kaynağın kataloğunu tazelemelidir.
+        when (enabledSourceKind()) {
+            "m3u", "xtream" -> viewModelScope.launch { ensureExternalVodCatalog(force = true) }
+            else -> {
+                StalkerApp.instance.vodSyncManager.ensureSynced(profile, force)
+                VodSyncService.start(app)
+            }
+        }
     }
 
     /**
