@@ -128,6 +128,7 @@ private fun AppNav() {
     // Uygulama içi güncelleme: açılışta bir kez kontrol edilir. Yeni sürüm
     // varsa pop-up gösterilir — "Şimdi Güncelle" / "Sonra Hatırlat" / "Bir Daha Sorma".
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    val updateContext = LocalContext.current
     LaunchedEffect(Unit) {
         val store = app.store
         val info = runCatching { UpdateChecker().latest() }.getOrNull() ?: return@LaunchedEffect
@@ -146,8 +147,7 @@ private fun AppNav() {
             onUpdateNow = {
                 updateInfo = null
                 runCatching {
-                    val ctx = LocalContext.current
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.url)))
+                    updateContext.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.url)))
                 }
             },
             onRemindLater = {
