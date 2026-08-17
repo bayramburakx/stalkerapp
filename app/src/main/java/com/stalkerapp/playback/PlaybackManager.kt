@@ -630,7 +630,10 @@ object PlaybackManager {
                 val tmp = activePlayer
                 activePlayer = standby
                 standbyPlayer = null
-                tmp?.stop()
+                // Eski oynatıcıyı release() ile serbest bırak (stop() yerine):
+                // stop() dinleyicide STATE_IDLE tetikler ve eski akışın kaynakları
+                // (decoder/bağlantı) takas sonrası boşta kalır.
+                tmp?.release()
                 // Standby sessiz (playWhenReady=false) kuruldu; takas edilince çalsın.
                 activePlayer!!.playWhenReady = true
                 attachListener(activePlayer!!)
@@ -666,12 +669,13 @@ object PlaybackManager {
                 if (url.isBlank()) return@launch
                 if (standbyPlayer != null) return@launch
                 val p = buildPlayer()
+                // Ön-tampon yalnızca: playWhenReady=false olduğu için ses çıkmaz ve
+                // audio-focus alınmaz. buildPlayer() playWhenReady=true kurar; bu
+                // yüzden değer prepare() ÖNCESİNDE kapatılmalı — aksi halde hazırlık
+                // sırasında sıradaki kanal bir anlığına çalmaya başlayabilir.
+                p.playWhenReady = false
                 p.setMediaItem(mediaItem(url, next.name, next.logo))
                 p.prepare()
-                // Ön-tampon yalnızca: playWhenReady=false olduğu için ses çıkmaz ve
-                // audio-focus alınmaz. Yoksa sıradaki kanal aktif kanalla aynı anda
-                // çalmaya başlar (arka planda başka ses).
-                p.playWhenReady = false
                 // Bu sırada kuyruk değiştiyse (yeni kanal seçildi) standby artık
                 // geçersizdir; boşa kurulan player'ı serbest bırak.
                 if (ChannelQueue.channels !== queue) {
@@ -1032,18 +1036,25 @@ object PlaybackManager {
                             markCurrentEpisodeWatched()
                             if (sleepUntilEpisodeEnd) {
                                 finishSleepTimer()
-                                service?.stopSelf()
+                                stopService()
                             } else if (store.settings().bingeMode && VodQueue.hasNext) {
                                 playNextEpisode(auto = false)
                             } else {
-                                service?.stopSelf()
+                                stopService()
                             }
                         } else {
-                            service?.stopSelf()
+                            // Canlı akış sağlayıcı tarafından kapatıldı (bağlantı bitti):
+                            // hata yoluyla aynı otomatik yeniden bağlanma akışını tetikle.
+                            // Token bazlı linkler (Stalker) veya CDN kesintileri bu şekilde
+                            // kendiliğinden düzelir; servis durdurulmaz, oynatma öldürülmez.
+                            maybeAutoRetryLive()
                         }
                     }
                     Player.STATE_IDLE -> {
-                        service?.stopSelf()
+                        // Geçici IDLE geçişlerinde (akış hatası sonrası oynatıcının
+                        // kendini sıfırlaması vb.) servisi DURDURMA — aksi halde servis
+                        // yok olup oynatma komple ölür (siyah ekran). Servis yalnızca
+                        // açık durdurma yollarıyla kapatılır.
                     }
                 }
             }
@@ -1053,11 +1064,21 @@ object PlaybackManager {
                 if (isPlaying && p.playbackState == Player.STATE_READY) {
                     liveRetryCount = 0
                 }
+                // Canlı TV'de oynatma durakladığında/takıldığında ön yüklü sonraki
+                // kanal player'ını serbest bırak: iki oynatıcının aynı anda video
+                // decoder tutması bazı cihazlarda aktif görüntünün kararmasına yol
+                // açar. Akış toparlanınca zapping için yeniden hazırlanır.
+                if (!isPlaying && !vodPlayback) {
+                    releaseStandby()
+                }
                 notifyStateChanged()
                 updateNotification()
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                // Yeniden deneme sırasında ön yüklü sonraki kanal player'ı kaynak
+                // tutmasın (decoder çekişmesi yeniden bağlantıyı bozabilir).
+                releaseStandby()
                 // Yalnızca bağlantı/timeout tipi hatalarda (veya IOException nedeniyle)
                 // otomatik yeniden dene; diğer fatal hatalarda doğrudan hata göster.
                 val isConnectionOrTimeout = error.errorCodeName.contains("CONNECTION", ignoreCase = true) ||
@@ -1066,15 +1087,7 @@ object PlaybackManager {
                 // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener.
                 // Yeni bir create_link çağrısı taze play_token üretir; en fazla 3
                 // deneme, ardından hata kullanıcıya gösterilir. Ayarlardan kapatılabilir.
-                if (!vodPlayback && liveRetryCount < 3 && isConnectionOrTimeout &&
-                    store.settings().autoRetryLive && ChannelQueue.channels.isNotEmpty()
-                ) {
-                    liveRetryCount++
-                    setError(null)
-                    notifyStateChanged()
-                    retryLiveChannel()
-                    return
-                }
+                if (!vodPlayback && isConnectionOrTimeout && maybeAutoRetryLive()) return
                 liveRetryCount = 0
                 setError(error.message ?: l10n("Oynatma hatası"))
                 notifyStateChanged()
@@ -1114,11 +1127,31 @@ object PlaybackManager {
         stateListeners.forEach { it(isPlaying, buffering) }
     }
 
+    /**
+     * Canlı TV akışı kesildiğinde (hata veya sağlayıcının bağlantıyı kapatması)
+     * taze URL ile otomatik yeniden bağlanmayı dener. En fazla 3 deneme; her
+     * başarılı oynatma [liveRetryCount]'u sıfırlar (uzun süreli stabil akışta
+     * sayaç birikmez). Dönen değer: yeniden deneme başlatıldı mı?
+     */
+    private fun maybeAutoRetryLive(): Boolean {
+        if (vodPlayback || stopping) return false
+        if (!store.settings().autoRetryLive || ChannelQueue.channels.isEmpty()) return false
+        if (liveRetryCount >= 3) return false
+        liveRetryCount++
+        setError(null)
+        notifyStateChanged()
+        retryLiveChannel()
+        return true
+    }
+
     /** Canlı TV kanalını yeni akış URL'siyle (taze play_token) yeniden oynatmayı dener. */
     private fun retryLiveChannel() {
         val ch = ChannelQueue.current ?: return
         scope.launch {
             delay(2000)
+            // Bu sırada kullanıcı oynatmayı durdurduysa (stop() çağrıldıysa)
+            // yeniden başlatma — oynatma öldürülmüş olabilir.
+            if (stopping) return@launch
             val url = try {
                 repository.channelStreamUrl(ch, ChannelQueue.profile)
             } catch (e: Exception) {

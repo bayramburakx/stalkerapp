@@ -30,8 +30,12 @@ class PlaybackService : Service() {
         if (PlaybackManager.service === this) {
             PlaybackManager.service = null
         }
-        // Servis yok edilirken oynatıcıyı durdur ve kaynakları serbest bırak.
-        PlaybackManager.stop()
+        // DİKKAT: Burada PlaybackManager.stop() ÇAĞRILMAZ. Servis yalnızca açık
+        // durdurma yollarıyla (kullanıcı çıkışı / ACTION_STOP) oynatmayı durdurur.
+        // Geçici olaylar (ör. canlı akış hatası sonrası STATE_IDLE geçişi) servisi
+        // stopSelf ile yok edebilir; burada oynatıcıyı durdurmak "önce 5-10 sn oynayıp
+        // sonra siyah ekran" sorununa yol açıyordu (retry akışı da ölüyordu).
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 }
