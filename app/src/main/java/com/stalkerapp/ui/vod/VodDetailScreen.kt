@@ -180,7 +180,7 @@ fun VodDetailScreen(
     // fragmanlar böyle çalışır). Çözülen kimlik diğer zenginleştirme
     // LaunchedEffect'lerinin anahtarına eklenir (öğe değişince yeniden çözülür).
     var resolvedTmdbId by remember { mutableStateOf(0L) }
-    LaunchedEffect(item?.id, item?.name, item?.year, item?.isSeries, isSeriesHint) {
+    LaunchedEffect(item?.id, item?.name, item?.year, item?.isSeries, item?.tmdbId, isSeriesHint) {
         val i = item ?: return@LaunchedEffect
         val key = app.store.settings().tmdbApiKey
         if (key.isBlank()) {
@@ -311,6 +311,10 @@ fun VodDetailScreen(
             // Enrich with detailed info (actors, full director, etc.) when available.
             val info = if (p != null) {
                 runCatching { vm.repository.vodInfo(p, vodId) }.getOrNull()
+            } else if (externalSource) {
+                // Xtream: liste (get_vod_streams) yalın kalır; zengin bilgi ve gerçek
+                // tmdb_id tek tek get_vod_info çağrısında gelir — boş alanları doldur.
+                runCatching { vm.repository.externalVodInfo(vodId) }.getOrNull()
             } else null
             item = if (info != null) {
                 base.copy(
@@ -322,7 +326,11 @@ fun VodDetailScreen(
                     genres = info.genres.ifBlank { base.genres },
                     description = info.description.ifBlank { base.description },
                     duration = info.duration.ifBlank { base.duration },
-                    writers = info.writers.ifBlank { base.writers }
+                    writers = info.writers.ifBlank { base.writers },
+                    poster = info.poster.ifBlank { base.poster },
+                    // Xtream paneli tmdb_id verdiğinde ad/yıl aramasından çok daha
+                    // güvenilirdir — TMDB zinciri bunu doğrudan kullanır.
+                    tmdbId = info.tmdbId.takeIf { it > 0 } ?: base.tmdbId
                 )
             } else base
             val merged = item

@@ -133,6 +133,20 @@ class PortalRepository(
             store.xtreamSources().firstOrNull { it.id == store.activeSourceId() }
         else null
 
+    /**
+     * Harici (Xtream/M3U) kaynağı için filmin zengin bilgisini döner. Xtream'de
+     * `get_vod_info` liste verisinde olmayan plot/cast/director/genre ve gerçek
+     * `tmdb_id`'yi sağlar (TMDB eşleştirmesinin en güvenilir anahtarı).
+     */
+    suspend fun externalVodInfo(vodId: Long): VodItem? {
+        activeXtreamSource()?.let { src ->
+            if (ExternalVod.isXtreamVod(vodId)) {
+                return XtreamClient().vodInfo(src, ExternalVod.realId(vodId))
+            }
+        }
+        return null
+    }
+
     private suspend fun xtreamSeasons(src: XtreamSource, seriesId: Long): List<XtreamSeasonInfo> {
         val key = "${src.id}:$seriesId"
         xtreamSeriesInfoCache[key]?.let { return it }

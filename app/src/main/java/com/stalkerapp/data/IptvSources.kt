@@ -760,6 +760,46 @@ class XtreamClient {
         }.sortedBy { it.number }
     }
 
+    /**
+     * Bir filmin zengin bilgisini `get_vod_info`'dan döner. Liste (get_vod_streams)
+     * yalnız temel alanlar taşır; asıl plot/cast/director/genre ve — önemlisi —
+     * `tmdb_id` tek tek get_vod_info çağrısında gelir. Kaynak doldurmadıysa alanlar
+     * boş kalır (TMDB fallback'ini çağıran taraf tamamlar). Başarısızlıkta null.
+     */
+    suspend fun vodInfo(source: XtreamSource, vodId: Long): VodItem? {
+        if (vodId <= 0) return null
+        val el = getJson("${playerApi(source)}&action=get_vod_info&vod_id=$vodId") ?: return null
+        val obj = el as? JsonObject ?: return null
+        val info = obj["info"] as? JsonObject ?: return null
+        val movie = obj["movie_data"] as? JsonObject
+        val streamId = (movie?.get("stream_id") as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+            ?: vodId
+        val name = (info["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        if (isSeparatorRow(name)) return null
+        val ext = (movie?.get("container_extension") as? JsonPrimitive)?.contentOrNull.orEmpty()
+        val backdrop = (info["backdrop_path"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        val coverBig = (info["cover_big"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        val movieImage = (info["movie_image"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        return VodItem(
+            id = ExternalVod.XTREAM_VOD_BASE + streamId,
+            categoryId = (info["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0,
+            name = name,
+            originalName = (info["o_name"] as? JsonPrimitive)?.contentOrNull.ifBlank { name },
+            poster = coverBig.ifBlank { movieImage }.ifBlank { backdrop },
+            description = (info["plot"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            year = (info["releasedate"] as? JsonPrimitive)?.contentOrNull.orEmpty().take(4),
+            director = (info["director"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            country = (info["country"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            rating = (info["rating"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            genres = (info["genre"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            actors = (info["cast"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            duration = (info["duration"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            tmdbId = (info["tmdb_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0,
+            isSeries = false,
+            cmd = vodPlayUrl(source, streamId, ext)
+        )
+    }
+
     /** Film için doğrudan oynatılabilir URL. */
     fun vodPlayUrl(source: XtreamSource, streamId: Long, container: String = ""): String {
         val e = container.ifBlank { "mkv" }.removePrefix(".")
