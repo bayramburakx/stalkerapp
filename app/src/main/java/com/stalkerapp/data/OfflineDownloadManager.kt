@@ -98,6 +98,7 @@ object OfflineDownloadManager {
         downloadManager.addListener(object : DownloadManager.Listener {
             override fun onDownloadChanged(manager: DownloadManager, download: Download, finalException: Exception?) {
                 refreshState()
+                startProgressTracker()
             }
             override fun onDownloadRemoved(manager: DownloadManager, download: Download) {
                 refreshState()
@@ -105,6 +106,30 @@ object OfflineDownloadManager {
         })
 
         loadMeta()
+        startProgressTracker()
+    }
+
+    private var trackerJob: kotlinx.coroutines.Job? = null
+
+    private fun startProgressTracker() {
+        trackerJob?.cancel()
+        trackerJob = kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            while (true) {
+                if (!::downloadManager.isInitialized) break
+                val current = downloadManager.currentDownloads
+                refreshState()
+                val active = current.any {
+                    it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED || it.state == Download.STATE_RESTARTING
+                }
+                if (!active && current.isNotEmpty()) {
+                    kotlinx.coroutines.delay(1500)
+                    refreshState()
+                    break
+                }
+                if (current.isEmpty()) break
+                kotlinx.coroutines.delay(500)
+            }
+        }
     }
 
     /** İndirme kuyruğuna ekler. */
@@ -119,6 +144,7 @@ object OfflineDownloadManager {
         if (::downloadManager.isInitialized) {
             downloadManager.addDownload(request)
             downloadManager.resumeDownloads()
+            startProgressTracker()
         }
         runCatching {
             DownloadService.sendAddDownload(

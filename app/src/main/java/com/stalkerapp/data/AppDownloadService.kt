@@ -29,6 +29,19 @@ class AppDownloadService : DownloadService(
         const val DOWNLOAD_NOTIFICATION_CHANNEL_ID = "download_channel"
     }
 
+    override fun onCreate() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            val channel = NotificationChannel(
+                DOWNLOAD_NOTIFICATION_CHANNEL_ID,
+                "İndirmeler",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            nm?.createNotificationChannel(channel)
+        }
+        super.onCreate()
+    }
+
     override fun getDownloadManager(): DownloadManager {
         val context = applicationContext
         OfflineDownloadManager.init(context)
@@ -41,18 +54,10 @@ class AppDownloadService : DownloadService(
         downloads: MutableList<androidx.media3.exoplayer.offline.Download>,
         notMetRequirements: Int
     ): Notification {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    DOWNLOAD_NOTIFICATION_CHANNEL_ID,
-                    "İndirmeler",
-                    NotificationManager.IMPORTANCE_LOW
-                )
-            )
-        }
         val inProgress = downloads.count { it.state == androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING }
         val completed = downloads.count { it.state == androidx.media3.exoplayer.offline.Download.STATE_COMPLETED }
+        val active = downloads.firstOrNull { it.state == androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING }
+        val pct = active?.percentDownloaded?.toInt()?.coerceIn(0, 100) ?: 0
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, DOWNLOAD_NOTIFICATION_CHANNEL_ID)
@@ -60,9 +65,10 @@ class AppDownloadService : DownloadService(
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
+        val subtext = if (active != null && pct > 0) "%$pct indiriliyor ($inProgress/$completed)" else "$inProgress indiriliyor, $completed tamamlandı"
         return builder
             .setContentTitle("Portio İndirme")
-            .setContentText("$inProgress indiriliyor, $completed tamamlandı")
+            .setContentText(subtext)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .build()
     }

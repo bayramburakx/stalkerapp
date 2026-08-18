@@ -49,7 +49,9 @@ class VodSyncManager(
             listOf("ç", "ğ", "ı", "ö", "ş", "ü")
 
     fun isSeriesItem(item: VodItem): Boolean {
-        if (item.isSeries || item.seriesRef.isNotBlank()) return true
+        if (item.id >= PortalRepository.SERIES_ID_BASE || ExternalVod.isXtreamSeries(item.id)) return true
+        if (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank())) return true
+        if (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") return true
         val title = _progress.value.categories.find { it.id == item.categoryId }?.title
         val t = title ?: item.categoryId.toString()
         return seriesKeywords.any { t.contains(it, ignoreCase = true) }
@@ -84,7 +86,9 @@ class VodSyncManager(
     }
 
     private fun stamp(item: VodItem, seriesCatIds: Set<Long>): VodItem {
-        val isSeries = item.isSeries || item.seriesRef.isNotBlank() || seriesCatIds.contains(item.categoryId)
+        val isSeries = (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank())) ||
+            (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
+            seriesCatIds.contains(item.categoryId)
         return if (isSeries == item.isSeries) item else item.copy(isSeries = isSeries)
     }
 

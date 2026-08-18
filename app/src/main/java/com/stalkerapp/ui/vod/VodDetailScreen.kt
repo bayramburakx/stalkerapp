@@ -1,9 +1,15 @@
 package com.stalkerapp.ui.vod
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -383,6 +389,27 @@ fun VodDetailScreen(
     val isFavorite = remember(favVods, it) { favVods.any { f -> f.id == it.id } }
     val watchLater by vm.watchLater.collectAsStateWithLifecycle()
     val allDownloads by com.stalkerapp.data.OfflineDownloadManager.downloads.collectAsStateWithLifecycle()
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> }
+
+    val requestDownloadPermission: () -> Unit = {
+        val perms = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+        if (perms.isNotEmpty()) {
+            permissionLauncher.launch(perms.toTypedArray())
+        }
+    }
     // Yıl: panel yılı önce; boşsa (Xtream dizileri) TMDB yayın yılı kullanılır.
     val yearText = (it.year.take(4).ifBlank { tmdbYear })
         .takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
@@ -770,6 +797,7 @@ fun VodDetailScreen(
                                                 vm.showMessage(str(lang, "İndirme devam ediyor..."))
                                                 return@clickable
                                             }
+                                            requestDownloadPermission()
                                             scope.launch {
                                                 try {
                                                     val url = vm.repository.vodStreamUrl(it, profile, null)
@@ -789,12 +817,22 @@ fun VodDetailScreen(
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = if (isCompleted) Icons.Default.Check else Icons.Default.Download,
-                                        contentDescription = str(lang, "İndir"),
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    if (isDownloading) {
+                                        val pct = movieDl?.progressPct?.toInt()?.coerceIn(0, 100) ?: 0
+                                        Text(
+                                            text = "%$pct",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = if (isCompleted) Icons.Default.Check else Icons.Default.Download,
+                                            contentDescription = str(lang, "İndir"),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                 }
                             }
                             // Fragman butonu kaldırıldı: sinopsisin altındaki gömülü
@@ -1144,6 +1182,7 @@ fun VodDetailScreen(
                                                                 vm.showMessage(str(lang, "Bölüm indiriliyor..."))
                                                                 return@clickable
                                                             }
+                                                            requestDownloadPermission()
                                                             scope.launch {
                                                                 try {
                                                                     val eps = episodes.orEmpty()
@@ -1167,12 +1206,22 @@ fun VodDetailScreen(
                                                         },
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(
-                                                        imageVector = if (isEpCompleted) Icons.Default.Check else Icons.Default.Download,
-                                                        contentDescription = str(lang, "İndir"),
-                                                        tint = Color.White,
-                                                        modifier = Modifier.size(15.dp)
-                                                    )
+                                                    if (isEpDownloading) {
+                                                        val pct = epDl?.progressPct?.toInt()?.coerceIn(0, 100) ?: 0
+                                                        Text(
+                                                            text = "%$pct",
+                                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = if (isEpCompleted) Icons.Default.Check else Icons.Default.Download,
+                                                            contentDescription = str(lang, "İndir"),
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(15.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                             // Bölüm adı kartın İÇİNDE (küçük resmin altında).

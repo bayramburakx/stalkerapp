@@ -877,7 +877,12 @@ data class VodCatalogState(
     val seriesCategoryIds: Set<Long> = emptySet()
 ) {
     val isSeriesItem: (VodItem) -> Boolean = { item ->
-        item.isSeries || item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() ||
+        item.id >= com.stalkerapp.data.PortalRepository.SERIES_ID_BASE ||
+            com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id) ||
+            (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() || item.categoryId in seriesCategoryIds)) ||
+            (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
+            (item.seriesData.isNotBlank() && item.seriesData != "[]" && item.seriesData != "0" && item.seriesData != "null") ||
+            (item.selectedSeason.isNotBlank() && item.selectedSeason != "0" && item.selectedSeason != "null") ||
             item.categoryId in seriesCategoryIds
     }
 

@@ -326,24 +326,74 @@ object M3uParser {
         return out
     }
 
+    private val m3uSeriesSeasons = ConcurrentHashMap<Long, List<Season>>()
+    private val m3uSeriesEpisodes = ConcurrentHashMap<Long, Map<Long, List<Episode>>>()
+
+    fun getSeasons(vodId: Long): List<Season>? = m3uSeriesSeasons[vodId]
+    fun getEpisodes(vodId: Long, seasonId: Long): List<Episode>? = m3uSeriesEpisodes[vodId]?.get(seasonId)
+    fun clearCache() {
+        m3uSeriesSeasons.clear()
+        m3uSeriesEpisodes.clear()
+    }
+
+    private data class ParsedM3uEpisode(
+        val seriesTitle: String,
+        val seasonNum: Int,
+        val epNum: Int,
+        val epTitle: String
+    )
+
+    private val S_E_REGEX_1 = Regex("""^(.*?)\s*[-–._/]?\s*S(\d{1,2})\s*[.x_–-]?\s*E(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_2 = Regex("""^(.*?)\s*[-–._/]?\s*(\d{1,2})\.?\s*Sezon\s*[-–._/]?\s*(\d{1,3})\.?\s*Bölüm\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_3 = Regex("""^(.*?)\s*[-–._/]?\s*Season\s*(\d{1,2})\s*[-–._/]?\s*Episode\s*(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_4 = Regex("""^(.*?)\s*[-–._/]?\s*(\d{1,2})x(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+
+    private fun parseM3uEpisodeName(rawName: String): ParsedM3uEpisode {
+        val trimmed = rawName.trim()
+        for (rgx in listOf(S_E_REGEX_1, S_E_REGEX_2, S_E_REGEX_3, S_E_REGEX_4)) {
+            val m = rgx.matchEntire(trimmed)
+            if (m != null) {
+                val rawSeries = m.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+                val s = m.groupValues[2].toIntOrNull() ?: 1
+                val e = m.groupValues[3].toIntOrNull() ?: 1
+                val title = m.groupValues[4].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+                val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+                val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+                return ParsedM3uEpisode(finalSeries, s, e, finalTitle)
+            }
+        }
+        return ParsedM3uEpisode(trimmed, 1, 1, trimmed)
+    }
+
     /**
      * M3U içeriğinden film/dizi kataloğu üretir (canlı kanallar dahil edilmez).
-     * group-title'lar kategori olur; dizi olarak sınıflananlar dizi, diğerleri
-     * film sayılır. Tek geçişte ve akış kapatma hatası olmadan güvenle çalışır.
+     * Dizi bölümleri dizi adı altında sezon ve bölüm olarak gruplanır (tek kart).
      */
     fun parseVodFile(file: File, sourceId: String): Pair<List<Genre>, List<VodItem>> {
         val groupIds = LinkedHashMap<String, Long>()
         var nextGroupId = 1L
-        val items = ArrayList<VodItem>()
+        val movies = ArrayList<VodItem>()
+
+        data class EpAcc(
+            val originalSeriesTitle: String,
+            val gid: Long,
+            val logo: String,
+            val seasonNum: Int,
+            val epNum: Int,
+            val epTitle: String,
+            val url: String
+        )
+        val seriesMap = LinkedHashMap<String, MutableList<EpAcc>>()
+
         file.bufferedReader(Charsets.UTF_8).use { reader ->
             forEachEntry(reader.lineSequence()) { e ->
-                if (e.type != M3uEntryType.LIVE) {
-                    val groupName = e.group.ifBlank { if (e.type == M3uEntryType.SERIES) "Diziler" else "Filmler" }
+                if (e.type == M3uEntryType.MOVIE) {
+                    val groupName = e.group.ifBlank { "Filmler" }
                     val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
                     val yearFound = YEAR_IN_NAME.find(e.name)?.groupValues?.getOrNull(1) ?: ""
-                    items.add(
+                    movies.add(
                         VodItem(
-                            id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                            id = (sourceId + "|movie|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
                             categoryId = gid,
                             name = e.name,
                             originalName = e.name,
@@ -351,30 +401,105 @@ object M3uParser {
                             description = "",
                             year = yearFound,
                             cmd = e.url,
-                            isSeries = e.type == M3uEntryType.SERIES
+                            isSeries = false
+                        )
+                    )
+                } else if (e.type == M3uEntryType.SERIES) {
+                    val groupName = e.group.ifBlank { "Diziler" }
+                    val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                    val epInfo = parseM3uEpisodeName(e.name)
+                    val key = "$gid|${epInfo.seriesTitle.lowercase()}"
+                    seriesMap.getOrPut(key) { mutableListOf() }.add(
+                        EpAcc(
+                            originalSeriesTitle = epInfo.seriesTitle,
+                            gid = gid,
+                            logo = e.logo,
+                            seasonNum = epInfo.seasonNum,
+                            epNum = epInfo.epNum,
+                            epTitle = epInfo.epTitle,
+                            url = e.url
                         )
                     )
                 }
             }
         }
+
+        val seriesVodItems = ArrayList<VodItem>()
+        for ((_, epList) in seriesMap) {
+            val first = epList.first()
+            val seriesId = (sourceId + "|series|" + first.originalSeriesTitle.lowercase()).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it }
+            val logo = epList.firstOrNull { it.logo.isNotBlank() }?.logo.orEmpty()
+            val yearFound = YEAR_IN_NAME.find(first.originalSeriesTitle)?.groupValues?.getOrNull(1) ?: ""
+
+            val seasonsGrouped = epList.groupBy { it.seasonNum }
+            val seasons = seasonsGrouped.keys.sorted().map { sNum ->
+                Season(
+                    id = sNum.toLong(),
+                    name = "$sNum. Sezon",
+                    poster = logo
+                )
+            }
+            val seasonEpisodes = seasonsGrouped.mapValues { (sNum, eps) ->
+                eps.sortedBy { it.epNum }.map { ep ->
+                    Episode(
+                        id = (sourceId + "|ep|" + ep.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                        name = ep.epTitle,
+                        episodeNumber = ep.epNum,
+                        cmd = ep.url,
+                        thumb = ep.logo.ifBlank { logo }
+                    )
+                }
+            }.mapKeys { it.key.toLong() }
+
+            m3uSeriesSeasons[seriesId] = seasons
+            m3uSeriesEpisodes[seriesId] = seasonEpisodes
+
+            seriesVodItems.add(
+                VodItem(
+                    id = seriesId,
+                    categoryId = first.gid,
+                    name = first.originalSeriesTitle,
+                    originalName = first.originalSeriesTitle,
+                    poster = logo,
+                    description = "",
+                    year = yearFound,
+                    cmd = epList.firstOrNull()?.url.orEmpty(),
+                    isSeries = true
+                )
+            )
+        }
+
+        val allVod = movies + seriesVodItems
         val genres = listOf(Genre(0, "Tümü")) +
             groupIds.entries.map { Genre(it.value, it.key) }
-        return genres to items
+        return genres to allVod
     }
 
     /** String tabanlı VOD kataloğu (küçük listeler / geriye dönük). */
     fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> {
         val groupIds = LinkedHashMap<String, Long>()
         var nextGroupId = 1L
-        val items = ArrayList<VodItem>()
+        val movies = ArrayList<VodItem>()
+
+        data class EpAcc(
+            val originalSeriesTitle: String,
+            val gid: Long,
+            val logo: String,
+            val seasonNum: Int,
+            val epNum: Int,
+            val epTitle: String,
+            val url: String
+        )
+        val seriesMap = LinkedHashMap<String, MutableList<EpAcc>>()
+
         forEachEntry(text.lineSequence()) { e ->
-            if (e.type != M3uEntryType.LIVE) {
-                val groupName = e.group.ifBlank { if (e.type == M3uEntryType.SERIES) "Diziler" else "Filmler" }
+            if (e.type == M3uEntryType.MOVIE) {
+                val groupName = e.group.ifBlank { "Filmler" }
                 val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
                 val yearFound = YEAR_IN_NAME.find(e.name)?.groupValues?.getOrNull(1) ?: ""
-                items.add(
+                movies.add(
                     VodItem(
-                        id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                        id = (sourceId + "|movie|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
                         categoryId = gid,
                         name = e.name,
                         originalName = e.name,
@@ -382,14 +507,77 @@ object M3uParser {
                         description = "",
                         year = yearFound,
                         cmd = e.url,
-                        isSeries = e.type == M3uEntryType.SERIES
+                        isSeries = false
+                    )
+                )
+            } else if (e.type == M3uEntryType.SERIES) {
+                val groupName = e.group.ifBlank { "Diziler" }
+                val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                val epInfo = parseM3uEpisodeName(e.name)
+                val key = "$gid|${epInfo.seriesTitle.lowercase()}"
+                seriesMap.getOrPut(key) { mutableListOf() }.add(
+                    EpAcc(
+                        originalSeriesTitle = epInfo.seriesTitle,
+                        gid = gid,
+                        logo = e.logo,
+                        seasonNum = epInfo.seasonNum,
+                        epNum = epInfo.epNum,
+                        epTitle = epInfo.epTitle,
+                        url = e.url
                     )
                 )
             }
         }
+
+        val seriesVodItems = ArrayList<VodItem>()
+        for ((_, epList) in seriesMap) {
+            val first = epList.first()
+            val seriesId = (sourceId + "|series|" + first.originalSeriesTitle.lowercase()).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it }
+            val logo = epList.firstOrNull { it.logo.isNotBlank() }?.logo.orEmpty()
+            val yearFound = YEAR_IN_NAME.find(first.originalSeriesTitle)?.groupValues?.getOrNull(1) ?: ""
+
+            val seasonsGrouped = epList.groupBy { it.seasonNum }
+            val seasons = seasonsGrouped.keys.sorted().map { sNum ->
+                Season(
+                    id = sNum.toLong(),
+                    name = "$sNum. Sezon",
+                    poster = logo
+                )
+            }
+            val seasonEpisodes = seasonsGrouped.mapValues { (sNum, eps) ->
+                eps.sortedBy { it.epNum }.map { ep ->
+                    Episode(
+                        id = (sourceId + "|ep|" + ep.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                        name = ep.epTitle,
+                        episodeNumber = ep.epNum,
+                        cmd = ep.url,
+                        thumb = ep.logo.ifBlank { logo }
+                    )
+                }
+            }.mapKeys { it.key.toLong() }
+
+            m3uSeriesSeasons[seriesId] = seasons
+            m3uSeriesEpisodes[seriesId] = seasonEpisodes
+
+            seriesVodItems.add(
+                VodItem(
+                    id = seriesId,
+                    categoryId = first.gid,
+                    name = first.originalSeriesTitle,
+                    originalName = first.originalSeriesTitle,
+                    poster = logo,
+                    description = "",
+                    year = yearFound,
+                    cmd = epList.firstOrNull()?.url.orEmpty(),
+                    isSeries = true
+                )
+            )
+        }
+
+        val allVod = movies + seriesVodItems
         val genres = listOf(Genre(0, "Tümü")) +
             groupIds.entries.map { Genre(it.value, it.key) }
-        return genres to items
+        return genres to allVod
     }
 
     /** Tek geçişte canlı/film/dizi sayılarını döndürür (kaynak istatistikleri). */

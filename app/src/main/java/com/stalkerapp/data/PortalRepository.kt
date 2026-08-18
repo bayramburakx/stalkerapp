@@ -901,9 +901,16 @@ class PortalRepository(
         var dupStreak = 0
         var pageSize = 0
         var maxPages = 2000
+        val catParam = probeVodCategoryParam(profile)
+        val queryParams = mapOf(
+            catParam to catId.toString(),
+            "category" to catId.toString(),
+            "genre" to catId.toString(),
+            "category_id" to catId.toString()
+        )
         while (guard < maxPages) {
             guard++
-            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(probeVodCategoryParam(profile) to catId.toString()))
+            val (list, total) = fetchVodPage(profile, page, perPage, queryParams)
             if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
@@ -1535,6 +1542,8 @@ class PortalRepository(
      * the `series` array). Tries the standard call first, then the fallback.
      */
     suspend fun loadSeasons(profile: Profile?, vodId: Long): List<Season> {
+        // M3U dizisi:
+        M3uParser.getSeasons(vodId)?.let { return it }
         // Xtream dizisi: get_series_info'dan sezonlar (profil gerekmez).
         activeXtreamSource()?.let { src ->
             if (ExternalVod.isXtreamSeries(vodId)) {
@@ -1599,6 +1608,8 @@ class PortalRepository(
      * from `{"series_id":..,"season_num":..,"episode_num":..,"type":"series"}`.
      */
     suspend fun loadEpisodes(profile: Profile?, vodId: Long, seasonId: Long): List<Episode> {
+        // M3U dizisi:
+        M3uParser.getEpisodes(vodId, seasonId)?.let { return it }
         // Xtream dizisi: bölümler get_series_info'dan; her bölümün cmd'i doğrudan
         // oynatılabilir URL taşır (create_link gerekmez).
         activeXtreamSource()?.let { src ->
@@ -1694,7 +1705,10 @@ class PortalRepository(
         episode: Episode? = null
     ): String {
         return when (store.activeSourceKind()) {
-            "m3u" -> item.cmd.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
+            "m3u" -> {
+                episode?.cmd?.takeIf { it.isNotBlank() }?.let { return it }
+                item.cmd.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
+            }
             "xtream" -> {
                 // Dizi bölümü: URL bölüm üzerinde taşınır (get_series_info'dan).
                 episode?.cmd?.takeIf { it.isNotBlank() }?.let { return it }
@@ -1887,7 +1901,13 @@ class PortalRepository(
 
     private fun parseVodList(el: JsonElement): List<VodItem> {
         return parseDataArray(el).mapNotNull { o ->
-            val seriesRef = o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty()
+            val rawSeries = o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty().trim()
+            val isSeriesValid = rawSeries.isNotBlank() && rawSeries != "[]" && rawSeries != "0" && rawSeries != "null" && rawSeries != "{}"
+            val seriesRef = if (isSeriesValid) rawSeries else ""
+            val selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty().trim()
+                .takeIf { it.isNotBlank() && it != "0" && it != "null" }.orEmpty()
+            val seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty().trim()
+                .takeIf { it.isNotBlank() && it != "[]" && it != "0" && it != "null" && it != "{}" }.orEmpty()
             VodItem(
                 id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
                 categoryId = o["cat_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
@@ -1911,10 +1931,10 @@ class PortalRepository(
                 writers = o["writers"]?.asJsonPrimitiveOrNull()?.contentOrNull
                     ?: o["writer"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 seriesRef = seriesRef,
-                isSeries = seriesRef.isNotBlank(),
+                isSeries = seriesRef.isNotBlank() || selectedSeason.isNotBlank() || seriesData.isNotBlank(),
                 cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
+                selectedSeason = selectedSeason,
+                seriesData = seriesData,
                 tmdbId = o["tmdb_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0
             )
         }.filter { it.id > 0 }
@@ -1924,7 +1944,9 @@ class PortalRepository(
         val root = el as? JsonObject ?: return null
         val obj = (root["data"] as? JsonObject) ?: root
         val str = { key: String -> obj[key]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty() }
-        val seriesRef = str("series")
+        val rawSeries = str("series").trim()
+        val isSeriesValid = rawSeries.isNotBlank() && rawSeries != "[]" && rawSeries != "0" && rawSeries != "null" && rawSeries != "{}"
+        val seriesRef = if (isSeriesValid) rawSeries else ""
         return VodItem(
             id = str("id").toLongOrNull() ?: 0,
             name = str("name"),
