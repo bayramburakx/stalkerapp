@@ -510,19 +510,22 @@ fun PlayerScreen(navController: NavHostController) {
             if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
                 val pos = p.currentPosition
                 val dur = p.duration
-                if (dur > 0 && pos > 0) {
+                // Süre bilinmiyorsa (C.TIME_UNSET) bile ilerleme kaydedilir:
+                // aksi halde süresi çözülemeyen akışlarda (ör. .ts) "kaldığı
+                // yerden devam" için hiç veri kaydedilmezdi.
+                if (pos > 0) {
                     val cur = VodQueue.current
                     if (cur != null) {
                         // Bölüm bazlı ilerleme (devam et / binge için).
                         app.store.saveEpisodeProgress(
                             "${PlaybackManager.currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
-                            pos, dur,
+                            pos, if (dur > 0) dur else 0L,
                             PlaybackManager.currentVodItem,
                             "S${VodQueue.season}E${cur.episodeNumber}"
                         )
-                    } else if (pos < dur * 0.95) {
+                    } else if (dur <= 0 || pos < dur * 0.95) {
                         app.store.saveVodProgress(
-                            PlaybackManager.currentVodId, pos, dur, PlaybackManager.currentVodItem
+                            PlaybackManager.currentVodId, pos, if (dur > 0) dur else 0L, PlaybackManager.currentVodItem
                         )
                     }
                 }
@@ -536,18 +539,18 @@ fun PlayerScreen(navController: NavHostController) {
             if (p != null && PlaybackManager.isVod() && PlaybackManager.currentVodId != 0L) {
                 val pos = p.currentPosition
                 val dur = p.duration
-                if (dur > 0 && pos > 0) {
+                if (pos > 0) {
                     val cur = VodQueue.current
                     if (cur != null) {
                         app.store.saveEpisodeProgress(
                             "${PlaybackManager.currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
-                            pos, dur,
+                            pos, if (dur > 0) dur else 0L,
                             PlaybackManager.currentVodItem,
                             "S${VodQueue.season}E${cur.episodeNumber}"
                         )
                     } else {
                         app.store.saveVodProgress(
-                            PlaybackManager.currentVodId, pos, dur, PlaybackManager.currentVodItem
+                            PlaybackManager.currentVodId, pos, if (dur > 0) dur else 0L, PlaybackManager.currentVodItem
                         )
                     }
                     // Ana sayfa/Kütüphane "İzlemeye Devam" & "Son İzlenenler"

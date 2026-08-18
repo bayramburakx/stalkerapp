@@ -474,15 +474,24 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         // akışla, dev String kurulmadan çalışır.
         val result = withContext(Dispatchers.IO) {
             val ok = ensureM3uContentFile(source)
-            if (ok) {
+            val r = if (ok) {
                 runCatching { M3uParser.parseVodFile(store.m3uContentFileFor(source.id), source.id) }
                     .getOrDefault(listOf(Genre(0, "Tümü")) to emptyList())
             } else {
                 M3uParser.parseVod(source.content, source.id)
             }
+            // Boş katalog disk önbelleğine YALNIZCA içerik gerçekten çözülmüşse
+            // yazılır. İçerik indirilemediğinde (indirme hatası + source.content
+            // boş) boş katalog önbelleğe yazılırsa "VOD bulunamadı" kalıcı olur:
+            // kaynak düzelse bile bir sonraki açılışta boş disk önbelleği döner ve
+            // katalog asla yüklenmez. Hata durumunda önbelleğe yazılmaz; böylece
+            // sonraki açılışta yeniden deneme yapılır.
+            if (ok || r.second.isNotEmpty() || source.content.isNotBlank()) {
+                store.saveExternalVodCache(source.id, r.first, r.second)
+            }
+            r
         }
         m3uVodCache[source.id] = result
-        withContext(Dispatchers.IO) { store.saveExternalVodCache(source.id, result.first, result.second) }
         return result
     }
 

@@ -511,10 +511,9 @@ object PlaybackManager {
         if (isCasting()) {
             val cp = castPlayer
             if (cp != null) {
-                cp.setMediaItem(item)
+                cp.setMediaItem(item, startPositionMs.coerceAtLeast(0))
                 cp.prepare()
                 cp.playWhenReady = true
-                cp.seekTo(startPositionMs.coerceAtLeast(0))
                 cp.setPlaybackSpeed(store.settings().playbackSpeed.coerceIn(0.5f, 2f))
                 activePlayer?.pause()
                 startService()
@@ -523,10 +522,9 @@ object PlaybackManager {
             }
         }
         val p = ensureActivePlayer()
-        p.setMediaItem(item)
+        p.setMediaItem(item, startPositionMs.coerceAtLeast(0))
         p.prepare()
         p.playWhenReady = true
-        p.seekTo(startPositionMs.coerceAtLeast(0))
         // Varsayılan oynatma hızı (Ayarlar → Oynatıcı).
         p.setPlaybackSpeed(store.settings().playbackSpeed.coerceIn(0.5f, 2f))
         startService()
@@ -869,17 +867,20 @@ object PlaybackManager {
         if (!vodPlayback || currentVodId == 0L) return
         val pos = p.currentPosition
         val dur = p.duration
-        if (dur <= 0 || pos <= 0) return
+        // Süre bilinmiyorsa (C.TIME_UNSET/0) bile konum kaydedilir; "kaldığı
+        // yerden devam" yalnızca pozisyona bağlı çalışır.
+        if (pos <= 0) return
+        val durSafe = if (dur > 0) dur else 0L
         val cur = VodQueue.current
         if (cur != null) {
             store.saveEpisodeProgress(
                 "${currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
-                pos, dur,
+                pos, durSafe,
                 currentVodItem,
                 "S${VodQueue.season}E${cur.episodeNumber}"
             )
         } else {
-            store.saveVodProgress(currentVodId, pos, dur, currentVodItem)
+            store.saveVodProgress(currentVodId, pos, durSafe, currentVodItem)
         }
     }
 
