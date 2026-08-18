@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.stalkerapp.data.matches
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -169,7 +170,7 @@ fun VodScreen(
 
     val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, settings.hiddenCategories, adultUnlocked) {
         var list = when {
-            selectedCategory != 0L -> catalog.itemsByCategory(selectedCategory)
+            selectedCategory != 0L -> catalog.allItems.filter { it.categoryId == selectedCategory }
             filterIsSeries == true -> catalog.allItems.filter { catalog.isSeriesItem(it) }
             filterIsSeries == false -> catalog.allItems.filter { !catalog.isSeriesItem(it) }
             else -> catalog.allItems
