@@ -870,16 +870,21 @@ class Store(private val context: Context) {
         return Triple(items, meta.categories, meta.ts)
     }
 
+    // Tamamlanan kategoriler portala (ve profile) göre ayrı tutulur — aksi halde
+    // ikinci bir portala geçilince ilk portalın "tamam" listesi kendi kategorileriyle
+    // karışır ve bazı kategoriler hiç çekilmeden katalog eksik kalırdı.
+    private fun doneCatsKey(portalId: String): String = "${scoped(KEY_VOD_DONE_CATS)}:$portalId"
+
     fun saveVodCatalogDoneCats(portalId: String, doneCatIds: List<Long>) {
-        prefs.edit().putString(KEY_VOD_DONE_CATS, json.encodeToString(ListSerializer(Long.serializer()), doneCatIds)).apply()
+        prefs.edit().putString(doneCatsKey(portalId), json.encodeToString(ListSerializer(Long.serializer()), doneCatIds)).apply()
     }
 
     fun loadVodCatalogDoneCats(portalId: String): Set<Long> = runCatching {
-        json.decodeFromString(ListSerializer(Long.serializer()), prefs.getString(KEY_VOD_DONE_CATS, "[]").orEmpty()).toSet()
+        json.decodeFromString(ListSerializer(Long.serializer()), prefs.getString(doneCatsKey(portalId), "[]").orEmpty()).toSet()
     }.getOrDefault(emptySet())
 
     fun clearVodCatalogDoneCats(portalId: String) {
-        prefs.edit().remove(KEY_VOD_DONE_CATS).apply()
+        prefs.edit().remove(doneCatsKey(portalId)).apply()
     }
 
     // ---------- İzlenme işaretleri ----------
