@@ -3,9 +3,10 @@ package com.stalkerapp.ui
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.util.TypedValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -420,7 +421,7 @@ fun PlayerScreen(navController: NavHostController) {
             val p = PlaybackManager.player
             val fps = p?.videoFormat?.frameRate ?: 0f
             // API 30+: Surface.setFrameRate ile de sinyalle (120/144 Hz dahil).
-            val surface = playerView.videoSurface ?: p?.videoSurface
+            val surface = playerView.getVideoSurface() ?: p?.videoSurface
             Afr.apply(activity, settings.afrMode, fps, surface)
             delay(2000)
         }
@@ -475,7 +476,12 @@ fun PlayerScreen(navController: NavHostController) {
         val channelNum = numpadBuffer.toIntOrNull()
         if (channelNum != null) {
             val idx = ChannelQueue.channels.indexOfFirst { it.number == channelNum }
-            if (idx >= 0) switchTo(idx)
+            if (idx >= 0) {
+                val ch = ChannelQueue.channels.getOrNull(idx) ?: return@LaunchedEffect
+                PlaybackManager.playChannel(ChannelQueue.channels, idx, ChannelQueue.profile)
+                currentChannel = ch
+                error = PlaybackManager.errorMessage
+            }
         }
         numpadBuffer = ""
         numpadVisible = false
@@ -1561,7 +1567,7 @@ fun PlayerScreen(navController: NavHostController) {
             languages = settings.openSubtitlesLanguages,
             title = PlaybackManager.currentTitle,
             tmdbId = PlaybackManager.currentVodItem?.tmdbId ?: 0L,
-            season = VodQueue.item?.let { it.season.toInt().takeIf { s -> s > 0 } },
+            season = VodQueue.season.toInt().takeIf { s -> s > 0 },
             episode = VodQueue.current?.episodeNumber?.toInt(),
             onDismiss = { showSubtitleSearch = false },
             onApply = { srt ->

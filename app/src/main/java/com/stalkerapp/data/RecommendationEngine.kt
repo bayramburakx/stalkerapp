@@ -159,7 +159,7 @@ class RecommendationEngine(
  * ağırlıklarını çıkarıp TMDB discover'dan öneriler üretir ve sonuçları
  * katalogdaki gerçek VodItem'lara eşler (Anasayfa → "Senin İçin" satırı).
  */
-suspend fun RecommendationEngine.Companion.generate(
+suspend fun generateRecommendations(
     catalogItems: List<VodItem>,
     watchedIds: Set<Long>,
     apiKey: String,

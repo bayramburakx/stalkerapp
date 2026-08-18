@@ -118,7 +118,7 @@ object OfflineDownloadManager {
                     .apply { prepare() }
                     .let { helper -> helper.getDownloadRequest(entry.id).also { helper.release() } }
             }.getOrElse {
-                DownloadRequest.Builder(entry.id, Uri.parse(entry.url)).build()
+                DownloadRequest.Builder(entry.id, entry.url).build()
             }
         }
         downloadManager.addDownload(request)

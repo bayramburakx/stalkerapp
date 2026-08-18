@@ -70,12 +70,12 @@ object NetworkConfig {
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .followRedirects(true)
-            .addNetworkInterceptor(chain -> {
+            .addNetworkInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("User-Agent", userAgent)
                     .build()
                 chain.proceed(request)
-            })
+            }
 
         // SOCKS5 Proxy
         if (socksProxy.isNotBlank() && socksPort > 0) {

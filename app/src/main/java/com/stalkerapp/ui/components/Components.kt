@@ -56,12 +56,41 @@ fun LoadingBox() {
 }
 
 @Composable
-fun EmptyState(text: String) {
+@Composable
+fun EmptyState(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    title: String? = null,
+    subtitle: String? = null
+) {
     Box(
         modifier = Modifier.fillMaxWidth().padding(48.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            icon?.let {
+                androidx.compose.material3.Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+            title?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                subtitle ?: text,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

@@ -101,7 +101,7 @@ fun FavoritesScreen(
                             vm.refreshFlows()
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)
-                    ) { ch ->
+                    ) { ch, isDragging ->
                         ChannelRow(
                             channel = ch,
                             baseUrl = profile.baseUrl,

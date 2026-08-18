@@ -240,7 +240,7 @@ fun HomeDashboardScreen(
     LaunchedEffect(catalog.allItems, watchedVersion, settings.tmdbApiKey) {
         val storeWatchHistory = app.store.loadVodProgress().map { it.key } +
             app.store.episodeProgress().mapNotNull { it.key.substringBefore(':').toLongOrNull() }
-        val recommendationsList = com.stalkerapp.data.RecommendationEngine.generate(
+        val recommendationsList = com.stalkerapp.data.generateRecommendations(
             catalog.allItems,
             storeWatchHistory.distinct().toSet(),
             settings.tmdbApiKey,

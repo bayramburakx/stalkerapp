@@ -98,7 +98,7 @@ fun <T : Any> DragDropList(
                         absY < listTop + 60f -> {
                             autoScrollJob = scope.launch {
                                 while (true) {
-                                    listState.scrollBy(-10f)
+                                    listState.animateScrollBy(-10f)
                                     delay(16)
                                 }
                             }
@@ -106,7 +106,7 @@ fun <T : Any> DragDropList(
                         absY > listBottom - 60f -> {
                             autoScrollJob = scope.launch {
                                 while (true) {
-                                    listState.scrollBy(10f)
+                                    listState.animateScrollBy(10f)
                                     delay(16)
                                 }
                             }
