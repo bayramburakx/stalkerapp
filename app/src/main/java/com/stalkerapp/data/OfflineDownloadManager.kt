@@ -116,9 +116,9 @@ object OfflineDownloadManager {
             runCatching {
                 DownloadHelper.forMediaItem(context, MediaItem.fromUri(entry.url))
                     .apply { prepare() }
-                    .let { helper -> helper.getDownloadRequest(entry.id).also { helper.release() } }
+                    .let { helper -> helper.getDownloadRequest(entry.id.toByteArray()).also { helper.release() } }
             }.getOrElse {
-                DownloadRequest.Builder(entry.id, entry.url).build()
+                DownloadRequest.Builder(entry.id, Uri.parse(entry.url)).build()
             }
         }
         downloadManager.addDownload(request)
