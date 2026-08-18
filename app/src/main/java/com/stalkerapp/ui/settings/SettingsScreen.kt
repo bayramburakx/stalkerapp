@@ -111,6 +111,7 @@ import com.stalkerapp.data.M3uParser
 import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
 import com.stalkerapp.data.Profile
+import com.stalkerapp.data.UserProfile
 import com.stalkerapp.data.Settings
 import com.stalkerapp.data.UpdateChecker
 import com.stalkerapp.data.UpdateInfo
@@ -3432,8 +3433,8 @@ private fun CacheSettingsSection(
 @Composable
 private fun AccountSettingsSection(
     lang: String,
-    profile: Profile,
-    profiles: List<Profile>,
+    profile: UserProfile,
+    profiles: List<UserProfile>,
     appProfile: Profile?,
     settings: Settings,
     vm: MainViewModel,
