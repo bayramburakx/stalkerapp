@@ -44,7 +44,8 @@ object NetworkConfig {
                 dohEnabled = settings.dohEnabled,
                 dohUrl = settings.dohUrl,
                 socksProxy = settings.socksProxy,
-                socksPort = settings.socksPort
+                socksPort = settings.socksPort,
+                userAgent = "StalkerPlayer/1.0"
             )
         }
     }
@@ -62,12 +63,19 @@ object NetworkConfig {
         dohUrl: String = "https://cloudflare-dns.com/dns-query",
         socksProxy: String = "",
         socksPort: Int = 0,
-        customDns: List<String> = emptyList()
+        customDns: List<String> = emptyList(),
+        userAgent: String = "StalkerPlayer/1.0"
     ): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .followRedirects(true)
+            .addNetworkInterceptor(chain -> {
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", userAgent)
+                    .build()
+                chain.proceed(request)
+            })
 
         // SOCKS5 Proxy
         if (socksProxy.isNotBlank() && socksPort > 0) {

@@ -349,17 +349,8 @@ object PlaybackManager {
         val netCfgOn = stNet.dohEnabled || stNet.socksProxy.isNotBlank()
         val httpDataSourceFactory = if (netCfgOn) {
             androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(
-                com.stalkerapp.util.NetworkConfig.buildClient(
-                    dohEnabled = stNet.dohEnabled,
-                    dohUrl = stNet.dohUrl,
-                    socksProxy = stNet.socksProxy,
-                    socksPort = stNet.socksPort
-                )
+                com.stalkerapp.util.NetworkConfig.buildClientFor(stNet)
             )
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15_000)
-                .setReadTimeoutMs(30_000)
-                .setUserAgent(userAgent)
         } else {
             androidx.media3.datasource.DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
