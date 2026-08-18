@@ -465,8 +465,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     suspend fun loadM3uVod(source: M3uSource): Pair<List<Genre>, List<VodItem>> {
         m3uVodCache[source.id]?.let { return it }
         // Makul boyutlu M3U katalogları disk önbelleğinden okunur (devasa
-        // 120k+ listeler önbelleklenmez, her açılışta parse edilir).
-        store.loadExternalVodCache(source.id)?.let {
+        // 120k+ listeler önbelleklenmez, her açılışta parse edilir). Okuma
+        // diskten + JSON/TSV çözme ana iş parçacığını kilitlemesin (ANR).
+        withContext(Dispatchers.IO) { store.loadExternalVodCache(source.id) }?.let {
             m3uVodCache[source.id] = it
             return it
         }
@@ -474,19 +475,25 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         // akışla, dev String kurulmadan çalışır.
         val result = withContext(Dispatchers.IO) {
             val ok = ensureM3uContentFile(source)
+            val parsedOk: Boolean
             val r = if (ok) {
-                runCatching { M3uParser.parseVodFile(store.m3uContentFileFor(source.id), source.id) }
-                    .getOrDefault(listOf(Genre(0, "Tümü")) to emptyList())
+                val attempt = runCatching {
+                    M3uParser.parseVodFile(store.m3uContentFileFor(source.id), source.id)
+                }
+                parsedOk = attempt.isSuccess
+                attempt.getOrDefault(listOf(Genre(0, "Tümü")) to emptyList())
             } else {
+                // İçerik dosyaya inemedi; source.content varsa ondan parse edilir.
+                parsedOk = source.content.isNotBlank()
                 M3uParser.parseVod(source.content, source.id)
             }
-            // Boş katalog disk önbelleğine YALNIZCA içerik gerçekten çözülmüşse
-            // yazılır. İçerik indirilemediğinde (indirme hatası + source.content
-            // boş) boş katalog önbelleğe yazılırsa "VOD bulunamadı" kalıcı olur:
-            // kaynak düzelse bile bir sonraki açılışta boş disk önbelleği döner ve
-            // katalog asla yüklenmez. Hata durumunda önbelleğe yazılmaz; böylece
+            // Boş katalog disk önbelleğine YALNIZCA ayrıştırma GERÇEKTEN başarılıysa
+            // yazılır. Ayrıştırma hatası (ör. 400k+ öğelik listede bellek/okuma
+            // sorunu) runCatching tarafından boş sonuca dönüştürülür; bu boş sonuç
+            // önbelleğe yazılırsa "VOD bulunamadı" kalıcı olur ve kaynak düzelse
+            // bile asla yüklenmez. Hata durumunda önbelleğe yazılmaz; böylece
             // sonraki açılışta yeniden deneme yapılır.
-            if (ok || r.second.isNotEmpty() || source.content.isNotBlank()) {
+            if (parsedOk || r.second.isNotEmpty()) {
                 store.saveExternalVodCache(source.id, r.first, r.second)
             }
             r
@@ -499,7 +506,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     suspend fun loadXtreamVod(source: XtreamSource): Pair<List<Genre>, List<VodItem>> {
         xtreamVodCache[source.id]?.let { return it }
         // Katalog her açılışta yeniden çekilmesin (68k öğe ≈ 30MB) — disk önbelleği.
-        store.loadExternalVodCache(source.id)?.let {
+        // Okuma diskten + JSON çözme ana iş parçacığını kilitlemesin (ANR).
+        withContext(Dispatchers.IO) { store.loadExternalVodCache(source.id) }?.let {
             xtreamVodCache[source.id] = it
             return it
         }
