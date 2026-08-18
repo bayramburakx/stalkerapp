@@ -24,17 +24,35 @@ enum class SortMode {
     DEFAULT, A_Z, Z_A, NEWEST, HIGHEST_RATED
 }
 
+private val YEAR_REGEX = Regex("""(19\d\d|20\d\d)""")
+
 /** Filtre geçerli mi kontrol eder. */
 fun VodFilterState.matches(
+    name: String = "",
     year: String,
     rating: String,
     language: String = ""
 ): Boolean {
-    val yearInt = year.trim().take(4).toIntOrNull()
-    if (yearRange != null && yearInt != null && yearInt !in yearRange) return false
-    val ratingFloat = rating.toFloatOrNull()
-    if (minRating > 0f && ratingFloat != null && ratingFloat < minRating) return false
-    if (this.language.isNotBlank() && language.isNotBlank() &&
-        !language.contains(this.language, ignoreCase = true)) return false
+    if (yearRange != null) {
+        val yInt = year.trim().take(4).toIntOrNull()
+            ?: YEAR_REGEX.find(name)?.value?.toIntOrNull()
+        if (yInt == null || yInt !in yearRange) return false
+    }
+
+    if (minRating > 0f) {
+        val cleanRating = rating.replace(',', '.').substringBefore('/').trim()
+        val rFloat = cleanRating.toFloatOrNull()
+        if (rFloat == null || rFloat < minRating) return false
+    }
+
+    if (this.language.isNotBlank()) {
+        val l = this.language.trim().lowercase()
+        val langOk = language.lowercase().contains(l) ||
+            name.lowercase().contains("($l)") ||
+            name.lowercase().contains("[$l]") ||
+            (l == "tr" && (name.contains("türkçe", ignoreCase = true) || name.contains("dublaj", ignoreCase = true)))
+        if (!langOk) return false
+    }
+
     return true
 }

@@ -382,6 +382,7 @@ fun VodDetailScreen(
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val isFavorite = remember(favVods, it) { favVods.any { f -> f.id == it.id } }
     val watchLater by vm.watchLater.collectAsStateWithLifecycle()
+    var downloadingEpIds by remember { mutableStateOf(setOf<Long>()) }
     // Yıl: panel yılı önce; boşsa (Xtream dizileri) TMDB yayın yılı kullanılır.
     val yearText = (it.year.take(4).ifBlank { tmdbYear })
         .takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
@@ -498,23 +499,17 @@ fun VodDetailScreen(
                     // Film: kayıtlı konumdan devam et (Ayarlar'dan kapatılabilir).
                     val resume = app.store.settings().resumePlayback
                     val prog = app.store.loadVodProgress()[it.id]
-                    // Süre bilinmiyorsa (0/unknown) konum varsa devam edilir;
-                    // biliniyorsa %2..%95 aralığında olmalı.
-                    val startMs = if (resume && prog != null && prog.positionMs > 0 &&
-                        (prog.durationMs <= 0 || prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95))
+                    val startMs = if (resume && prog != null && prog.positionMs >= 3000L &&
+                        (prog.durationMs <= 0 || prog.positionMs < prog.durationMs * 0.95)
                     ) prog.positionMs else 0L
                     val url = vm.repository.vodStreamUrl(it, p, null)
                     PlaybackManager.currentVodId = it.id
                     PlaybackManager.currentVodItem = it
                     PlaybackManager.play(url, it.name, it.poster, startPositionMs = startMs)
                 } else {
-                    // Dizi: bölüm HER ZAMAN playEpisode ile oynatılır. Kuyruk
-                    // (VodQueue) doldurulur ki "Sonraki Bölüm" butonu, binge modu
-                    // ve %85 otomatik "izlendi" işareti çalışsın.
-                    var seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
+                    // Dizi: bölüm HER ZAMAN playEpisode ile oynatılır.
+                    var seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 1
                     var allEps = episodes.orEmpty()
-                    // Bölümler henüz yüklenmediyse (kullanıcı hızlıca Oynat'a bastı)
-                    // sezon listesini şimdi çek — aksi halde devam noktası bulunamaz.
                     if (allEps.isEmpty() && seasonNum > 0) {
                         allEps = runCatching {
                             vm.repository.loadEpisodes(p, it.id, seasonNum)
@@ -524,20 +519,24 @@ fun VodDetailScreen(
                     val progMap = app.store.episodeProgress()
                     val resume = app.store.settings().resumePlayback
                     val inRange = { prog: com.stalkerapp.data.VodProgress ->
-                        prog.positionMs > 0 &&
-                            (prog.durationMs <= 0 || prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95))
+                        prog.positionMs >= 3000L &&
+                            (prog.durationMs <= 0 || prog.positionMs < prog.durationMs * 0.95)
+                    }
+                    fun getEpProg(ep: Episode, sNum: Long): com.stalkerapp.data.VodProgress? {
+                        return progMap[episodeKey(ep, sNum)]
+                            ?: progMap["${it.id}:$sNum:${ep.episodeNumber}"]
+                            ?: progMap["${ep.id}"]
                     }
                     val target: Episode
                     val startMs: Long
                     if (episode != null) {
                         target = episode
-                        val pr = progMap[episodeKey(target, seasonNum)]
+                        val pr = getEpProg(target, seasonNum)
                         startMs = if (resume && pr != null && inRange(pr)) pr.positionMs else 0L
                     } else {
-                        // Önce en güncel ilerleme kaydına bak (sezon/bölüm numarası
-                        // panelden farklı gelse bile doğru bölüm bulunur).
+                        // Önce en güncel ilerleme kaydına bak
                         val latest = progMap.entries
-                            .filter { k -> k.key.startsWith("${it.id}:") }
+                            .filter { k -> k.key.startsWith("${it.id}:") || allEps.any { e -> e.id.toString() == k.key } }
                             .maxByOrNull { e -> e.value.lastUpdated }
                         val latestSeason = latest?.key?.split(':')?.getOrNull(1)?.toLongOrNull()
                         val latestEpNum = latest?.key?.substringAfterLast(':')?.toIntOrNull()
@@ -562,12 +561,12 @@ fun VodDetailScreen(
                             }
                         } else {
                             val withProgress = allEps.firstOrNull { ep ->
-                                val pr = progMap[episodeKey(ep, seasonNum)]
+                                val pr = getEpProg(ep, seasonNum)
                                 pr != null && inRange(pr)
                             }
                             if (withProgress != null) {
                                 target = withProgress
-                                startMs = progMap[episodeKey(target, seasonNum)]!!.positionMs
+                                startMs = getEpProg(target, seasonNum)?.positionMs ?: 0L
                             } else {
                                 target = firstEpisodeToPlay(allEps, seasonNum)
                                 startMs = 0L
@@ -746,13 +745,15 @@ fun VodDetailScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
+                            var isMovieDownloading by remember { mutableStateOf(false) }
                             if (!isSeries) {
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.20f))
+                                        .background(if (isMovieDownloading) Color(0xFF2E7D32).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.20f))
                                         .clickable {
+                                            isMovieDownloading = true
                                             scope.launch {
                                                 try {
                                                     val url = vm.repository.vodStreamUrl(it, profile, null)
@@ -764,8 +765,9 @@ fun VodDetailScreen(
                                                             url = url
                                                         )
                                                     )
-                                                    vm.showMessage(str(lang, "İndirme sıraya eklendi"))
+                                                    vm.showMessage("✓ " + str(lang, "İndirme sıraya eklendi: ") + it.name)
                                                 } catch (e: Exception) {
+                                                    isMovieDownloading = false
                                                     vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
                                                 }
                                             }
@@ -773,7 +775,7 @@ fun VodDetailScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Download,
+                                        imageVector = if (isMovieDownloading) Icons.Default.Check else Icons.Default.Download,
                                         contentDescription = str(lang, "İndir"),
                                         tint = Color.White,
                                         modifier = Modifier.size(24.dp)
@@ -1101,14 +1103,16 @@ fun VodDetailScreen(
                                                     )
                                                 }
                                                 // İndirme rozeti (sağ alt).
+                                                val isEpDownloading = ep.id in downloadingEpIds
                                                 Box(
                                                     modifier = Modifier
                                                         .align(Alignment.BottomEnd)
                                                         .padding(6.dp)
                                                         .size(24.dp)
                                                         .clip(CircleShape)
-                                                        .background(Color.Black.copy(alpha = 0.55f))
+                                                        .background(if (isEpDownloading) Color(0xFF2E7D32) else Color.Black.copy(alpha = 0.65f))
                                                         .clickable {
+                                                            downloadingEpIds = downloadingEpIds + ep.id
                                                             scope.launch {
                                                                 try {
                                                                     val eps = episodes.orEmpty()
@@ -1124,8 +1128,9 @@ fun VodDetailScreen(
                                                                             episodeLabel = "S${seasonNum}B${ep.episodeNumber}"
                                                                         )
                                                                     )
-                                                                    vm.showMessage(str(lang, "Bölüm indirme sırasına eklendi"))
+                                                                    vm.showMessage("✓ " + str(lang, "Bölüm indirme sırasına eklendi"))
                                                                 } catch (e: Exception) {
+                                                                    downloadingEpIds = downloadingEpIds - ep.id
                                                                     vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
                                                                 }
                                                             }
@@ -1133,7 +1138,7 @@ fun VodDetailScreen(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Icon(
-                                                        Icons.Default.Download,
+                                                        imageVector = if (isEpDownloading) Icons.Default.Check else Icons.Default.Download,
                                                         contentDescription = str(lang, "İndir"),
                                                         tint = Color.White,
                                                         modifier = Modifier.size(15.dp)

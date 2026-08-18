@@ -31,6 +31,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import com.google.android.gms.cast.framework.CastContext
 import com.stalkerapp.R
@@ -321,6 +322,7 @@ object PlaybackManager {
 
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
             .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
 
@@ -568,6 +570,9 @@ object PlaybackManager {
         val p = ensureActivePlayer()
         p.setMediaItem(item, startPositionMs.coerceAtLeast(0))
         p.prepare()
+        if (startPositionMs > 0) {
+            p.seekTo(startPositionMs)
+        }
         p.playWhenReady = true
         // Android TV: HDMI-CEC One Touch Play — TV açılıp bu cihaza geçer.
         if (store.settings().hdmiCecOneTouchPlay) {

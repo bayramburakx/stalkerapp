@@ -10,23 +10,16 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 /**
- * Intro/Outro tespiti: TMDB episode detail endpoint üzerinden bölüm süresini
- * çekip portal'dan gelen bölüm süresiyle karşılaştırarak intro aralığını tahmin eder.
- *
- * TMDB v4 "episode groups" veya "content_ratings" endpointlerinde intro timestamp
- * bulunmadığından pratik yaklaşım: bölüm süresinin ilk %25'i ve son %10'u intro/outro
- * olarak işaretlenir (özelleştirilebilir), kullanıcı "Atla" butonuyla bu bölümü geçer.
- *
- * Gelişmiş (isteğe bağlı): Bazı kaynaklar [tvdb-api] veya
- * prelude.xyz gibi hizmetlerden intro timestamp çekebilir.
+ * Intro/Outro tespiti: TMDB ve akıllı varsayılan aralıklar ile dizi bölümlerinde
+ * intro ve outro aralıklarını tespit eder. Stalker, Xtream ve M3U tüm dizi kaynaklarında çalışır.
  */
 object IntroDetector {
 
     data class IntroRange(
-        /** Intro başlangıcı (ms). */
-        val startMs: Long,
+        /** Intro başlangıcı (ms) — varsayılan 0. */
+        val startMs: Long = 0L,
         /** Intro bitişi (ms) — "Atla" buraya seek eder. */
-        val endMs: Long,
+        val endMs: Long = 85_000L,
         /** Outro başlangıcı (ms). -1 = outro tespiti yok. */
         val outroStartMs: Long = -1L
     )
@@ -44,10 +37,10 @@ object IntroDetector {
     /**
      * Belirli bir bölüm için intro aralığını döner.
      *
-     * @param tmdbId TMDB dizi ID'si
+     * @param tmdbId TMDB dizi ID'si (0 ise akıllı varsayılan kullanılır)
      * @param season Sezon numarası
      * @param episode Bölüm numarası
-     * @param apiKey TMDB API anahtarı (boşsa null döner)
+     * @param apiKey TMDB API anahtarı (isteğe bağlı)
      * @param durationMs Oynatıcıdan alınan bölüm süresi (ms)
      */
     suspend fun detect(
@@ -56,14 +49,28 @@ object IntroDetector {
         episode: Int,
         apiKey: String,
         durationMs: Long
-    ): IntroRange? {
-        if (apiKey.isBlank() || tmdbId <= 0L || season <= 0 || episode <= 0) return null
+    ): IntroRange {
+        val effectiveDuration = if (durationMs > 0) durationMs else 25 * 60_000L
+        val defaultIntroEnd = minOf((effectiveDuration * 0.15).toLong(), 90_000L).coerceAtLeast(60_000L)
+        val defaultOutroStart = if (effectiveDuration > 120_000L) (effectiveDuration * 0.94).toLong() else -1L
+
+        val fallback = IntroRange(
+            startMs = 0L,
+            endMs = defaultIntroEnd,
+            outroStartMs = defaultOutroStart
+        )
+
+        if (apiKey.isBlank() || tmdbId <= 0L || season <= 0 || episode <= 0) {
+            return fallback
+        }
+
         val cacheKey = "$tmdbId:$season:$episode"
-        cache[cacheKey]?.let { return it }
+        cache[cacheKey]?.let { return it ?: fallback }
 
         val result = runCatching {
-            fetchIntroRange(tmdbId, season, episode, apiKey, durationMs)
-        }.getOrNull()
+            fetchIntroRange(tmdbId, season, episode, apiKey, effectiveDuration)
+        }.getOrNull() ?: fallback
+
         cache[cacheKey] = result
         return result
     }
@@ -75,7 +82,6 @@ object IntroDetector {
         apiKey: String,
         durationMs: Long
     ): IntroRange? = withContext(Dispatchers.IO) {
-        // TMDB'den bölüm detayını al (runtime alanı dakika cinsinden)
         val url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$season/episode/$episode" +
             "?api_key=$apiKey&language=en-US"
         val req = Request.Builder().url(url).build()
@@ -87,21 +93,18 @@ object IntroDetector {
         val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
             ?: return@withContext null
 
-        // TMDB runtime alanı (dakika). Yoksa oynatıcı süresini kullan.
         val runtimeMin = obj["runtime"]?.jsonPrimitive?.content?.toLongOrNull()
         val effectiveDuration = if (runtimeMin != null && runtimeMin > 0) {
             runtimeMin * 60_000L
         } else {
-            durationMs.takeIf { it > 0 } ?: return@withContext null
+            durationMs.takeIf { it > 0 } ?: (25 * 60_000L)
         }
 
-        // Intro tahmini: bölümün 0:30 → %18 arası (tipik dizi introsu 20-90 sn)
-        val introStart = 15_000L // 15 sn
-        val introEnd = minOf((effectiveDuration * 0.18).toLong(), 120_000L)
-            .coerceAtLeast(30_000L)
+        val introStart = 0L
+        val introEnd = minOf((effectiveDuration * 0.16).toLong(), 110_000L)
+            .coerceAtLeast(60_000L)
 
-        // Outro: son %8
-        val outroStart = (effectiveDuration * 0.92).toLong()
+        val outroStart = (effectiveDuration * 0.93).toLong()
 
         IntroRange(
             startMs = introStart,

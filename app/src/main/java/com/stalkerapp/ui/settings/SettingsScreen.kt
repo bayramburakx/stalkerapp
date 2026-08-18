@@ -2510,6 +2510,78 @@ fun SettingsScreen(
                         com.stalkerapp.data.OfflineDownloadManager.init(context, it.toLong())
                     }
                 )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                var showClearCacheConfirm by remember { mutableStateOf(false) }
+                var showClearDownloadsConfirm by remember { mutableStateOf(false) }
+
+                SectionHeader(Icons.Default.Delete, str(lang, "Depolama Temizliği"))
+
+                OutlinedButton(
+                    onClick = { showClearCacheConfirm = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(str(lang, "Önbelleği Temizle"))
+                }
+
+                OutlinedButton(
+                    onClick = { showClearDownloadsConfirm = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(str(lang, "İndirilenleri Sıfırla"))
+                }
+
+                if (showClearCacheConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showClearCacheConfirm = false },
+                        title = { Text(str(lang, "Önbelleği Temizle")) },
+                        text = {
+                            Text(str(lang, "Uygulama resim önbelleği, geçici dosyalar ve bellek verileri silinecek. İçerikleriniz veya hesaplarınız silinmez."))
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showClearCacheConfirm = false
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching {
+                                        context.cacheDir.deleteRecursively()
+                                        context.codeCacheDir.deleteRecursively()
+                                    }
+                                    com.stalkerapp.playback.IntroDetector.clearCache()
+                                }
+                                vm.showMessage(str(lang, "Önbellek başarıyla temizlendi ✓"))
+                            }) { Text(str(lang, "Temizle")) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearCacheConfirm = false }) { Text(str(lang, "İptal")) }
+                        }
+                    )
+                }
+
+                if (showClearDownloadsConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showClearDownloadsConfirm = false },
+                        title = { Text(str(lang, "İndirilenleri Sıfırla")) },
+                        text = {
+                            Text(str(lang, "Cihaza indirilmiş tüm çevrimdışı film ve diziler tamamen silinecek. Emin misiniz?"))
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showClearDownloadsConfirm = false
+                                com.stalkerapp.data.OfflineDownloadManager.clearAllDownloads()
+                                vm.showMessage(str(lang, "İndirilenler temizlendi ✓"))
+                            }) { Text(str(lang, "Tümünü Sil"), color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearDownloadsConfirm = false }) { Text(str(lang, "İptal")) }
+                        }
+                    )
+                }
             }
             "account" -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {

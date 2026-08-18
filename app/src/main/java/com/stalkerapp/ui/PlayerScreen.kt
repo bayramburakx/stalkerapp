@@ -432,18 +432,16 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     // -------- Intro atlama tespiti --------
-    // VOD bölümü oynatılırken TMDB'den intro aralığını çek.
+    // VOD bölümü oynatılırken TMDB ve akıllı tahminle intro aralığını çek.
     LaunchedEffect(PlaybackManager.currentVodId, VodQueue.season, VodQueue.current?.episodeNumber) {
         introRange = null
         showSkipIntro = false
         showSkipOutro = false
         if (!PlaybackManager.isVod()) return@LaunchedEffect
         val cur = VodQueue.current ?: return@LaunchedEffect
-        if (!settings.skipIntroEnabled) return@LaunchedEffect
+        if (!settings.skipIntroEnabled && !settings.skipOutroEnabled) return@LaunchedEffect
         val tmdbId = PlaybackManager.currentVodItem?.tmdbId ?: 0L
-        if (tmdbId <= 0L) return@LaunchedEffect
         val key = app.store.settings().tmdbApiKey
-        if (key.isBlank()) return@LaunchedEffect
         val dur = runCatching {
             var waited = 0
             while (PlaybackManager.player?.duration?.let { it <= 0 } != false && waited < 5000) {
@@ -451,10 +449,12 @@ fun PlayerScreen(navController: NavHostController) {
             }
             PlaybackManager.player?.duration ?: 0L
         }.getOrDefault(0L)
+        val sNum = VodQueue.season.toInt().coerceAtLeast(1)
+        val epNum = cur.episodeNumber.coerceAtLeast(1)
         introRange = com.stalkerapp.playback.IntroDetector.detect(
             tmdbId = tmdbId,
-            season = VodQueue.season.toInt(),
-            episode = cur.episodeNumber,
+            season = sNum,
+            episode = epNum,
             apiKey = key,
             durationMs = dur
         )
@@ -864,18 +864,20 @@ fun PlayerScreen(navController: NavHostController) {
         if (showSkipIntro && !isLive) {
             androidx.compose.material3.Button(
                 onClick = {
-                    introRange?.endMs?.let { PlaybackManager.seekTo(it) }
+                    val target = introRange?.endMs ?: 85_000L
+                    PlaybackManager.seekTo(target)
                     showSkipIntro = false
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 24.dp, bottom = 80.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = Color.White.copy(alpha = 0.85f),
+                    containerColor = Color.White.copy(alpha = 0.9f),
                     contentColor = Color.Black
                 )
             ) {
-                Text("⏭ İntroya Atla", style = MaterialTheme.typography.labelLarge)
+                Text("⏭ " + str(lang, "İntroyu Atla"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -1597,44 +1599,128 @@ private fun SleepTimerDialog(
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val presets = listOf(15, 30, 45, 60, 90, 120)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(str(lang, "Uyku Zamanlayıcısı")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (current != 0L) {
-                    Text(
-                        "${str(lang, "Aktif: ")}${if (current < 0) str(lang, "Bölüm sonunda dur") else "${sleepLabel(current, lang)} ${str(lang, "kaldı")}"}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                listOf(15 to str(lang, "15 dk"), 30 to str(lang, "30 dk"), 60 to str(lang, "1 saat"), 90 to str(lang, "1.5 saat")).forEach { (m, label) ->
-                    ListItem(
-                        headlineContent = { Text(label) },
-                        trailingContent = if (current == m * 60L) {
-                            { Text("✓", color = MaterialTheme.colorScheme.primary) }
-                        } else null,
-                        modifier = Modifier.clickable { onMinutes(m) }
-                    )
-                }
-                ListItem(
-                    headlineContent = { Text(str(lang, "Bölüm sonunda dur")) },
-                    supportingContent = { Text(str(lang, "Geçerli bölüm/medya bitince kapanır")) },
-                    trailingContent = if (current < 0) {
-                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
-                    } else null,
-                    modifier = Modifier.clickable(onClick = onUntilEnd)
+        containerColor = Color(0xFF18181B),
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("⏰", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    str(lang, "Uyku Zamanlayıcısı"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (current != 0L) {
-                    ListItem(
-                        headlineContent = { Text(str(lang, "Kapat")) },
-                        modifier = Modifier.clickable(onClick = onCancel)
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "${str(lang, "Aktif: ")}${if (current < 0) str(lang, "Bölüm sonunda dur") else "${sleepLabel(current, lang)} ${str(lang, "kaldı")}"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = onCancel,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(str(lang, "İptal Et"), color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    str(lang, "Süre Seç"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+
+                // 3 sütunlu süre chip'leri
+                val rows = presets.chunked(3)
+                rows.forEach { rowList ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        rowList.forEach { m ->
+                            val active = current == m * 60L
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (active) MaterialTheme.colorScheme.primary else Color(0xFF27272A),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onMinutes(m) }
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        if (m >= 60) "${m / 60} ${str(lang, "saat")}" else "$m ${str(lang, "dk")}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (active) Color.White else Color.White.copy(alpha = 0.9f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Bölüm sonunda dur
+                val untilEndActive = current < 0
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (untilEndActive) MaterialTheme.colorScheme.primary else Color(0xFF27272A),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onUntilEnd)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                str(lang, "Bölüm sonunda dur"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (untilEndActive) Color.White else Color.White.copy(alpha = 0.9f)
+                            )
+                            Text(
+                                str(lang, "Geçerli bölüm/medya bitince kapanır"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (untilEndActive) Color.White.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                        if (untilEndActive) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
+                        }
+                    }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(str(lang, "Kapat")) } }
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(str(lang, "Kapat"), color = Color.White.copy(alpha = 0.8f))
+            }
+        }
     )
 }
 
@@ -1645,31 +1731,109 @@ fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) ->
     LaunchedEffect(Unit) {
         tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_AUDIO)
     }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141416),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+        }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 520.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(str(lang, "Ses Dili"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-            ListItem(
-                headlineContent = { Text(str(lang, "Varsayılan (Otomatik)")) },
-                modifier = Modifier.clickable { onSelect(null) }
-            )
-            tracks.forEach { (lang, label) ->
-                ListItem(
-                    headlineContent = { Text(label) },
-                    supportingContent = { Text(lang) },
-                    modifier = Modifier.clickable { onSelect(lang) }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+            ) {
+                Text(
+                    str(lang, "Ses Parçaları"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "${tracks.size + 1} " + str(lang, "seçenek"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.5f)
                 )
             }
+
+            // Varsayılan
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF222226),
+                modifier = Modifier.fillMaxWidth().clickable { onSelect(null) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🌐", modifier = Modifier.padding(end = 12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            str(lang, "Varsayılan (Otomatik)"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Text(
+                            str(lang, "Sistem / akış varsayılan dili"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+
+            tracks.forEach { (tLang, label) ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF222226),
+                    modifier = Modifier.fillMaxWidth().clickable { onSelect(tLang) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔊", modifier = Modifier.padding(end = 12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            if (tLang.isNotBlank()) {
+                                Text(
+                                    tLang.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (tracks.isEmpty()) {
                 Text(
-                    str(lang, "Ses izi bulunamadı"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
+                    str(lang, "Ek ses parçası bulunamadı"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 12.dp)
                 )
             }
         }
@@ -1690,37 +1854,158 @@ fun SubtitleSheet(
     LaunchedEffect(Unit) {
         tracks = PlaybackManager.availableTracks(C.TRACK_TYPE_TEXT)
     }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141416),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+        }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 520.dp)
+                .heightIn(max = 540.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(str(lang, "Altyazı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-            ListItem(
-                headlineContent = { Text(str(lang, "Altyazılar")) },
-                trailingContent = {
+            Text(
+                str(lang, "Altyazı Ayarları"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            // Aç / Kapat Kartı
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF222226),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            str(lang, "Altyazılar"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Text(
+                            if (enabled) str(lang, "Açık") else str(lang, "Kapalı"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (enabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f)
+                        )
+                    }
                     Switch(checked = enabled, onCheckedChange = { onToggle(it) })
                 }
-            )
-            ListItem(
-                headlineContent = { Text(str(lang, "Dosyadan Ekle (.srt/.vtt)")) },
-                modifier = Modifier.clickable {
-                    onDismiss()
-                    onPickFile()
+            }
+
+            // Hızlı Butonlar: Dosyadan Seç
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF27272A),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            onDismiss()
+                            onPickFile()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("📁 ", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            str(lang, "Dosyadan Ekle"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
                 }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF27272A),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onSelect(null) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("🚫 ", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            str(lang, "Altyazıyı Kapat"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                str(lang, "Mevcut Altyazı Parçaları"),
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 6.dp)
             )
-            ListItem(
-                headlineContent = { Text(str(lang, "Altyazı yok (Kapat)")) },
-                modifier = Modifier.clickable { onSelect(null) }
-            )
-            tracks.forEach { (lang, label) ->
-                ListItem(
-                    headlineContent = { Text(label) },
-                    supportingContent = { Text(lang) },
-                    modifier = Modifier.clickable { onSelect(lang) }
+
+            tracks.forEach { (tLang, label) ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF222226),
+                    modifier = Modifier.fillMaxWidth().clickable { onSelect(tLang) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("💬", modifier = Modifier.padding(end = 12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            if (tLang.isNotBlank()) {
+                                Text(
+                                    tLang.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (tracks.isEmpty()) {
+                Text(
+                    str(lang, "Gömülü altyazı bulunamadı. Yukarıdaki butondan altyazı dosyası (.srt/.vtt) seçebilirsin."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 6.dp)
                 )
             }
         }
@@ -1742,11 +2027,9 @@ fun EpgSheet(
     }
     var programs by remember { mutableStateOf<List<com.stalkerapp.data.EpgProgram>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    // Hatırlatıcı ekle/kaldır sonrası listeyi tazele.
     var remindersVersion by remember { mutableStateOf(0) }
     val reminders = remember(remindersVersion) { vm.store.epgReminders() }
     val nowTs = System.currentTimeMillis() / 1000
-    // Catch-up URL çözmek için (onClick içinde @Composable çağrısı yapılamaz).
     val epgScope = rememberCoroutineScope()
 
     LaunchedEffect(channel.id) {
@@ -1757,18 +2040,39 @@ fun EpgSheet(
         }
     }
 
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141416),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+        }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp)
+                .padding(vertical = 12.dp)
         ) {
-            Text(
-                "EPG — ${channel.name}",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "EPG — ${channel.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
             when {
                 programs == null && error == null -> CircularProgressIndicator(
                     modifier = Modifier.padding(24.dp).align(Alignment.CenterHorizontally)
@@ -1780,120 +2084,115 @@ fun EpgSheet(
                 )
                 programs.orEmpty().isEmpty() -> Text(
                     str(lang, "EPG verisi yok"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.5f),
                     modifier = Modifier.padding(16.dp)
                 )
                 else -> androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.height(400.dp)
+                    modifier = Modifier.height(420.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(programs.orEmpty()) { p ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (p.isCurrent) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (p.isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else Color(0xFF222226),
+                            border = if (p.isCurrent) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    "${vm.repository.formatEpoch(p.startTs)} — ${vm.repository.formatEpoch(p.stopTs)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (p.isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (p.isCurrent) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        str(lang, "● ŞİMDİ"),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary
+                                        "${vm.repository.formatEpoch(p.startTs)} — ${vm.repository.formatEpoch(p.stopTs)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (p.isCurrent) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
                                     )
-                                }
-                            }
-                            Text(
-                                p.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (p.isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                            )
-                            if (p.desc.isNotBlank()) {
-                                Text(
-                                    p.desc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            // Program hatırlatıcısı: gelecekteki programlara "başlayınca bildir".
-                            if (!p.isDefault && p.startTs > nowTs) {
-                                val reminded = reminders.any { it.channelId == channel.id && it.startTs == p.startTs }
-                                TextButton(
-                                    onClick = {
-                                        if (reminded) {
-                                            vm.store.removeEpgReminder(channel.id, p.startTs)
-                                        } else {
-                                            vm.store.addEpgReminder(
-                                                EpgReminder(
-                                                    id = "r_${channel.id}_${p.startTs}",
-                                                    channelId = channel.id,
-                                                    channelName = channel.name,
-                                                    programName = p.name,
-                                                    startTs = p.startTs
-                                                )
+                                    if (p.isCurrent) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.primary
+                                        ) {
+                                            Text(
+                                                " ● " + str(lang, "CANLI") + " ",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
                                             )
                                         }
-                                        remindersVersion++
-                                    },
-                                    contentPadding = PaddingValues(0.dp)
-                                ) {
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    p.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                if (p.desc.isNotBlank()) {
+                                    Spacer(Modifier.height(2.dp))
                                     Text(
-                                        if (reminded) str(lang, "🔔 Hatırlatma ayarlandı (dokun: kaldır)") else str(lang, "🔔 Başlayınca Bildir"),
-                                        color = if (reminded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.labelMedium
+                                        p.desc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                            }
-                            // Catch-up: geçmişteki programı şimdi izle (sunucu destekliyorsa).
-                            if (!p.isDefault && p.stopTs <= nowTs) {
-                                TextButton(
-                                    onClick = {
-                                        epgScope.launch {
-                                            val url = vm.repository.catchupUrl(channel, profile, p.startTs)
-                                            if (!url.isNullOrBlank()) {
-                                                PlaybackManager.play(url, "${channel.name} — ${p.name}", subtitle = vm.repository.formatEpoch(p.startTs))
+                                if (!p.isDefault && p.startTs > nowTs) {
+                                    val reminded = reminders.any { it.channelId == channel.id && it.startTs == p.startTs }
+                                    TextButton(
+                                        onClick = {
+                                            if (reminded) {
+                                                vm.store.removeEpgReminder(channel.id, p.startTs)
+                                            } else {
+                                                vm.store.addEpgReminder(
+                                                    EpgReminder(
+                                                        id = "r_${channel.id}_${p.startTs}",
+                                                        channelId = channel.id,
+                                                        channelName = channel.name,
+                                                        programName = p.name,
+                                                        startTs = p.startTs
+                                                    )
+                                                )
                                             }
-                                        }
-                                    },
-                                    contentPadding = PaddingValues(0.dp)
-                                ) {
-                                    Text(
-                                        str(lang, "▶ Geçmiş Yayını İzle (catch-up)"),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
+                                            remindersVersion++
+                                        },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text(
+                                            if (reminded) str(lang, "🔔 Hatırlatma ayarlandı (kaldır)") else str(lang, "🔔 Başlayınca Bildir"),
+                                            color = if (reminded) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                                if (!p.isDefault && p.stopTs <= nowTs) {
+                                    TextButton(
+                                        onClick = {
+                                            epgScope.launch {
+                                                val url = vm.repository.catchupUrl(channel, profile, p.startTs)
+                                                if (!url.isNullOrBlank()) {
+                                                    PlaybackManager.play(url, "${channel.name} — ${p.name}", subtitle = vm.repository.formatEpoch(p.startTs))
+                                                }
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text(
+                                            str(lang, "▶ Geçmiş Yayını İzle (catch-up)"),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
                                 }
                             }
                         }
-                        HorizontalDivider()
                     }
                 }
             }
         }
     }
-}
-
-private fun nowTime(): String {
-    return runCatching {
-        java.time.LocalTime.now()
-            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
-    }.getOrDefault("")
-}
-
-private fun formatMs(ms: Long): String {
-    if (ms < 0) return "0:00"
-    val totalSec = ms / 1000
-    val h = totalSec / 3600
-    val m = (totalSec % 3600) / 60
-    val s = totalSec % 60
-    return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
-    else String.format("%d:%02d", m, s)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1904,36 +2203,24 @@ fun PlayerInfoSheet(
     profile: Profile?,
     onDismiss: () -> Unit
 ) {
-    if (channel == null) {
-        onDismiss()
-        return
-    }
-
     val rows = remember { mutableStateListOf<Pair<String, String>>() }
+    val p = PlaybackManager.player
+    val v = p?.videoFormat
+    val a = p?.audioFormat
+    val url = PlaybackManager.currentStreamUrl
 
     fun rebuild() {
-        // Yayın (cast) sırasında bu panel yerel ExoPlayer bilgisini gösterir
-        // (videoFormat/audioFormat yalnızca ExoPlayer'da vardır).
-        val p = PlaybackManager.player
-        val v = p?.videoFormat
-        val a = p?.audioFormat
-        val url = PlaybackManager.currentStreamUrl
-        val bufSec = (p?.totalBufferedDuration ?: 0) / 1000f
+        val play = PlaybackManager.player
+        val vid = play?.videoFormat
+        val aud = play?.audioFormat
+        val bufSec = (play?.totalBufferedDuration ?: 0) / 1000f
         rows.clear()
-        rows.add("source" to "tv")
-        rows.add(
-            "video" to buildString {
-                append(if (v?.height != null && v.height > 0) "${v.height}p" else "—")
-                append(" | ")
-                append(mimeLabel(v?.sampleMimeType))
-                append(" | ")
-                append(if (v != null) "hw" else "—")
-            }
-        )
-        rows.add("Engine" to "exo player")
-        rows.add("audio" to mimeLabel(a?.sampleMimeType))
-        rows.add("BUFFER" to str(lang, "%.1f sn").format(bufSec))
-        rows.add("DECODER" to (v?.codecs ?: "MediaCodec"))
+        rows.add(str(lang, "Çözünürlük") to if (vid?.height != null && vid.height > 0) "${vid.width}x${vid.height}" else "—")
+        rows.add(str(lang, "Video Codec") to mimeLabel(vid?.sampleMimeType))
+        rows.add(str(lang, "Ses Codec") to mimeLabel(aud?.sampleMimeType))
+        rows.add(str(lang, "Önbellek (Buffer)") to "%.1f sn".format(bufSec))
+        rows.add(str(lang, "Dekoder") to (vid?.codecs ?: "MediaCodec (HW)"))
+        rows.add(str(lang, "Kanal Sayısı") to "${aud?.channelCount ?: 2} Kanal")
         if (url.isNotBlank()) rows.add("URL" to url)
     }
 
@@ -1945,40 +2232,93 @@ fun PlayerInfoSheet(
         }
     }
 
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp).fillMaxWidth()) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141416),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelLogo(logo = resolveUrl(channel.logo, profile?.baseUrl.orEmpty()), modifier = Modifier.size(56.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(channel.name, style = MaterialTheme.typography.titleLarge)
-                    if (channel.tvGenreTitle.isNotBlank()) {
-                        Text(
-                            channel.tvGenreTitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                if (channel != null) {
+                    ChannelLogo(logo = resolveUrl(channel.logo, profile?.baseUrl.orEmpty()), modifier = Modifier.size(52.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(channel.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                        if (channel.tvGenreTitle.isNotBlank()) {
+                            Text(channel.tvGenreTitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        }
+                    }
+                } else {
+                    Text(
+                        PlaybackManager.currentTitle.ifBlank { "Medya Bilgileri" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+
+            // Tech specs grid (2 sütunlu kartlar)
+            val nonUrlRows = rows.filter { it.first != "URL" }
+            val pairs = nonUrlRows.chunked(2)
+            pairs.forEach { pairList ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    pairList.forEach { (label, value) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF222226),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.height(4.dp))
+                                Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            }
+                        }
+                    }
+                    if (pairList.size == 1) {
+                        Spacer(Modifier.weight(1f))
                     }
                 }
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-            rows.forEach { (k, v) ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+
+            if (url.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF222226),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        k,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(90.dp)
-                    )
-                    Text(
-                        v,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Stream URL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            url,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.8f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -1987,16 +2327,16 @@ fun PlayerInfoSheet(
 
 private fun mimeLabel(mime: String?): String {
     return when (mime) {
-        "video/avc" -> "h.264"
-        "video/hevc" -> "hevc"
-        "video/av01" -> "av1"
-        "video/vp9" -> "vp9"
-        "video/mp4v-es" -> "mpeg-4"
-        "video/mpeg", "video/mpeg2" -> "mpeg-2"
-        "audio/mp4a-latm", "audio/aac" -> "aac-lc"
-        "audio/mpeg" -> "mp3"
-        "audio/ac3" -> "ac3"
-        "audio/eac3" -> "eac3"
+        "video/avc" -> "H.264 (AVC)"
+        "video/hevc" -> "H.265 (HEVC)"
+        "video/av01" -> "AV1"
+        "video/vp9" -> "VP9"
+        "video/mp4v-es" -> "MPEG-4"
+        "video/mpeg", "video/mpeg2" -> "MPEG-2"
+        "audio/mp4a-latm", "audio/aac" -> "AAC-LC"
+        "audio/mpeg" -> "MP3"
+        "audio/ac3" -> "Dolby Digital (AC3)"
+        "audio/eac3" -> "Dolby Digital Plus (E-AC3)"
         else -> mime ?: "—"
     }
 }
@@ -2021,76 +2361,169 @@ fun PlayerSettingsSheet(
         str(lang, "Doldur") to AspectRatioFrameLayout.RESIZE_MODE_FILL,
         str(lang, "Yakınlaştır") to AspectRatioFrameLayout.RESIZE_MODE_ZOOM
     )
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141416),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+        }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 520.dp)
+                .heightIn(max = 560.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(str(lang, "Oynatma Hızı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-            speeds.forEach { s ->
-                ListItem(
-                    headlineContent = { Text("${if (s == 1f) str(lang, "Normal") else s}⨉") },
-                    trailingContent = if (s == currentSpeed) {
-                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
-                    } else null,
-                    modifier = Modifier.clickable { onSpeed(s) }
-                )
-            }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text(str(lang, "Görüntü Oranı"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-            aspects.forEach { (label, mode) ->
-                ListItem(
-                    headlineContent = { Text(label) },
-                    trailingContent = if (mode == currentAspect) {
-                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
-                    } else null,
-                    modifier = Modifier.clickable { onAspect(mode) }
-                )
-            }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Text(
-                str(lang, "A/V Senkron (Ses Gecikmesi)"),
+                str(lang, "Oynatıcı Ayarları"),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(16.dp)
+                fontWeight = FontWeight.Bold,
+                color = Color.White
             )
-            Text(
-                str(lang, "Pozitif = ses gecikir, negatif = ses öne alınır."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                OutlinedButton(onClick = { onDelay((audioDelayMs - 50).coerceIn(-500, 500)) }) {
-                    Text("−50 ms")
-                }
-                Text(
-                    "${if (audioDelayMs > 0) "+" else ""}$audioDelayMs ms",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                OutlinedButton(onClick = { onDelay((audioDelayMs + 50).coerceIn(-500, 500)) }) {
-                    Text("+50 ms")
+
+            // Oynatma Hızı
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(str(lang, "Oynatma Hızı"), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    speeds.forEach { s ->
+                        val selected = s == currentSpeed
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSpeed(s) }
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    if (s == 1f) "1.0x" else "${s}x",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selected) Color.White else Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            TextButton(
-                onClick = { onDelay(0) },
-                enabled = audioDelayMs != 0,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) { Text(str(lang, "Sıfırla (0 ms)")) }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            ListItem(
-                headlineContent = { Text(str(lang, "Binge Modu")) },
-                supportingContent = { Text(str(lang, "Bölüm bitince sıradaki bölüm otomatik oynatılır")) },
-                trailingContent = { Switch(checked = binge, onCheckedChange = onBinge) }
-            )
+
+            // Görüntü Oranı
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(str(lang, "Görüntü Oranı"), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    aspects.forEach { (label, mode) ->
+                        val selected = mode == currentAspect
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onAspect(mode) }
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selected) Color.White else Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // A/V Senkron
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFF222226),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        str(lang, "Ses Senkronu (A/V Gecikmesi)"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF2E2E34),
+                            modifier = Modifier.clickable { onDelay((audioDelayMs - 50).coerceIn(-500, 500)) }
+                        ) {
+                            Text("−50 ms", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = Color.White)
+                        }
+                        Text(
+                            "${if (audioDelayMs > 0) "+" else ""}$audioDelayMs ms",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF2E2E34),
+                            modifier = Modifier.clickable { onDelay((audioDelayMs + 50).coerceIn(-500, 500)) }
+                        ) {
+                            Text("+50 ms", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = Color.White)
+                        }
+                    }
+                    if (audioDelayMs != 0) {
+                        TextButton(
+                            onClick = { onDelay(0) },
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Text(str(lang, "Sıfırla (0 ms)"), color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+
+            // Binge Modu
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFF222226),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            str(lang, "Binge Modu"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Text(
+                            str(lang, "Bölüm bitince sıradaki bölüm otomatik başlar"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    }
+                    Switch(checked = binge, onCheckedChange = onBinge)
+                }
+            }
         }
     }
 }

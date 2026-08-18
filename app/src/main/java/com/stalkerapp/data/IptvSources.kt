@@ -319,31 +319,58 @@ object M3uParser {
     /**
      * M3U içeriğinden film/dizi kataloğu üretir (canlı kanallar dahil edilmez).
      * group-title'lar kategori olur; dizi olarak sınıflananlar dizi, diğerleri
-     * film sayılır (her öğe tek dosyalıdır — bölüm bilgisi standart M3U'da yoktur).
-     * İki geçişli çalışır: önce grup adları, sonra öğeler. Dönüş: (kategoriler, öğeler).
+     * film sayılır. Tek geçişte ve akış kapatma hatası olmadan güvenle çalışır.
      */
-    private fun vodItemsFrom(
-        linesProvider: () -> Sequence<String>,
-        sourceId: String
-    ): Pair<List<Genre>, List<VodItem>> {
-        val groups = LinkedHashSet<String>()
-        forEachEntry(linesProvider()) { e ->
-            if (e.type != M3uEntryType.LIVE && e.group.isNotBlank()) groups.add(e.group)
-        }
-        val sorted = groups.sorted()
-        val groupIds = sorted.mapIndexed { i, g -> g to (i + 1).toLong() }.toMap()
+    fun parseVodFile(file: File, sourceId: String): Pair<List<Genre>, List<VodItem>> {
+        val groupIds = LinkedHashMap<String, Long>()
+        var nextGroupId = 1L
         val items = ArrayList<VodItem>()
-        forEachEntry(linesProvider()) { e ->
+        file.bufferedReader(Charsets.UTF_8).use { reader ->
+            forEachEntry(reader.lineSequence()) { e ->
+                if (e.type != M3uEntryType.LIVE) {
+                    val groupName = e.group.ifBlank { if (e.type == M3uEntryType.SERIES) "Diziler" else "Filmler" }
+                    val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                    val yearFound = YEAR_IN_NAME.find(e.name)?.groupValues?.getOrNull(1) ?: ""
+                    items.add(
+                        VodItem(
+                            id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
+                            categoryId = gid,
+                            name = e.name,
+                            originalName = e.name,
+                            poster = e.logo,
+                            description = "",
+                            year = yearFound,
+                            cmd = e.url,
+                            isSeries = e.type == M3uEntryType.SERIES
+                        )
+                    )
+                }
+            }
+        }
+        val genres = listOf(Genre(0, "Tümü")) +
+            groupIds.entries.map { Genre(it.value, it.key) }
+        return genres to items
+    }
+
+    /** String tabanlı VOD kataloğu (küçük listeler / geriye dönük). */
+    fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> {
+        val groupIds = LinkedHashMap<String, Long>()
+        var nextGroupId = 1L
+        val items = ArrayList<VodItem>()
+        forEachEntry(text.lineSequence()) { e ->
             if (e.type != M3uEntryType.LIVE) {
+                val groupName = e.group.ifBlank { if (e.type == M3uEntryType.SERIES) "Diziler" else "Filmler" }
+                val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                val yearFound = YEAR_IN_NAME.find(e.name)?.groupValues?.getOrNull(1) ?: ""
                 items.add(
                     VodItem(
                         id = (sourceId + "|" + e.url).hashCode().toLong().and(0xFFFFFFFFL).let { if (it == 0L) 1L else it },
-                        categoryId = groupIds[e.group] ?: 0L,
+                        categoryId = gid,
                         name = e.name,
                         originalName = e.name,
                         poster = e.logo,
                         description = "",
-                        year = "",
+                        year = yearFound,
                         cmd = e.url,
                         isSeries = e.type == M3uEntryType.SERIES
                     )
@@ -351,17 +378,9 @@ object M3uParser {
             }
         }
         val genres = listOf(Genre(0, "Tümü")) +
-            sorted.map { g -> Genre(groupIds.getValue(g), g) }
+            groupIds.entries.map { Genre(it.value, it.key) }
         return genres to items
     }
-
-    /** String tabanlı VOD kataloğu (küçük listeler / geriye dönük). */
-    fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> =
-        vodItemsFrom({ text.lineSequence() }, sourceId)
-
-    /** Dosyadan VOD kataloğu (büyük listeler — dev String kurulmaz). */
-    fun parseVodFile(file: File, sourceId: String): Pair<List<Genre>, List<VodItem>> =
-        vodItemsFrom({ file.bufferedReader(Charsets.UTF_8).use { it.lineSequence() } }, sourceId)
 
     /** Tek geçişte canlı/film/dizi sayılarını döndürür (kaynak istatistikleri). */
     fun countTypes(file: File): Triple<Int, Int, Int> {

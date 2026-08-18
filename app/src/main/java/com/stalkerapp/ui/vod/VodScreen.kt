@@ -168,7 +168,8 @@ fun VodScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
 
-    val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, settings.hiddenCategories, adultUnlocked) {
+    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, filterState, settings.hiddenCategories, adultUnlocked) {
+        val q = query.trim()
         var list = when {
             selectedCategory != 0L -> catalog.allItems.filter { it.categoryId == selectedCategory }
             filterIsSeries == true -> catalog.allItems.filter { catalog.isSeriesItem(it) }
@@ -176,23 +177,32 @@ fun VodScreen(
             else -> catalog.allItems
         }.filter { keepItem(it) }
 
-        if (query.isNotBlank()) {
-            list = list.filter { it.name.contains(query, ignoreCase = true) }
+        if (q.isNotBlank()) {
+            list = list.filter {
+                it.name.contains(q, ignoreCase = true) ||
+                it.originalName.contains(q, ignoreCase = true)
+            }
         }
 
         if (filterState.isActive) {
             list = list.filter { item ->
                 filterState.matches(
+                    name = item.name,
                     year = item.year,
-                    rating = item.rating
+                    rating = item.rating,
+                    language = item.country
                 )
             }
             list = when (filterState.sortMode) {
                 com.stalkerapp.data.SortMode.DEFAULT -> list
                 com.stalkerapp.data.SortMode.A_Z -> list.sortedBy { it.name.lowercase() }
                 com.stalkerapp.data.SortMode.Z_A -> list.sortedByDescending { it.name.lowercase() }
-                com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending { it.year.toIntOrNull() ?: 0 }
-                com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending { it.rating.toFloatOrNull() ?: 0f }
+                com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending {
+                    it.year.take(4).toIntOrNull() ?: it.addedTimestamp.toInt()
+                }
+                com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending {
+                    it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+                }
             }
         }
         list
@@ -278,50 +288,6 @@ fun VodScreen(
                     }
                 )
             }
-        }
-
-        // Filtre/Sıralama durumunu VodFilterState'de tutalım
-        var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
-        var showFilterDialog by remember { mutableStateOf(false) }
-
-        // filtered update: filtre state'ine göre
-        val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, settings.adultContentEnabled, settings.lockAdultWithPin, adultUnlocked, settings.hiddenCategories, filterState) {
-            val q = query.trim()
-            catalog.allItems
-                .filter { keepItem(it) }
-                .let { list ->
-                    when (filterIsSeries) {
-                        true -> list.filter { catalog.isSeriesItem(it) }
-                        false -> list.filter { !catalog.isSeriesItem(it) }
-                        else -> list
-                    }
-                }
-                .let { list -> if (selectedCategory > 0L) list.filter { it.categoryId == selectedCategory } else list }
-                .let { list ->
-                    if (q.isBlank()) list
-                    else list.filter {
-                        it.name.contains(q, ignoreCase = true) ||
-                            it.originalName.contains(q, ignoreCase = true)
-                    }
-                }
-                .let { list ->
-                    list.filter { item ->
-                        val yearOk = filterState.yearRange == null || item.year.take(4).toIntOrNull()?.let { it in filterState.yearRange!! } != false
-                        val ratingOk = item.rating.toFloatOrNull()?.let { it >= filterState.minRating } != false
-                        val langOk = filterState.language.isBlank() ||
-                            item.country.contains(filterState.language, ignoreCase = true)
-                        yearOk && ratingOk && langOk
-                    }
-                }
-                .let { list ->
-                    when (filterState.sortMode) {
-                        com.stalkerapp.data.SortMode.A_Z -> list.sortedBy { it.name }
-                        com.stalkerapp.data.SortMode.Z_A -> list.sortedByDescending { it.name }
-                        com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending { it.addedTimestamp }
-                        com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending { it.rating.toFloatOrNull() ?: 0f }
-                        com.stalkerapp.data.SortMode.DEFAULT -> list
-                    }
-                }
         }
 
         if (shownCats.isNotEmpty()) {
@@ -581,10 +547,15 @@ fun VodFilterDialog(
                         language = langFilter
                     )
                 )
-            }) { Text(str(lang, "Uygula")) }
+            }) { Text(str(lang, "Uygula"), fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) }
+            Row {
+                TextButton(onClick = {
+                    onApply(com.stalkerapp.data.VodFilterState())
+                }) { Text(str(lang, "Sıfırla"), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) }
+            }
         },
         title = { Text(str(lang, "Filtrele & Sırala")) },
         text = {

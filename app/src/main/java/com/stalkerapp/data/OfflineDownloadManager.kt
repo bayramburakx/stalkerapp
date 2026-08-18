@@ -72,7 +72,12 @@ object OfflineDownloadManager {
         val maxBytes = maxCacheMb * 1024L * 1024L
         downloadCache = SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(maxBytes), databaseProvider)
 
-        val dataSourceFactory = DefaultDataSource.Factory(context)
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(30_000)
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val cacheDataSourceFactory = CacheDataSource.Factory()
             .setCache(downloadCache)
             .setUpstreamDataSourceFactory(dataSourceFactory)
@@ -109,11 +114,16 @@ object OfflineDownloadManager {
         _downloads.value = list
         saveMeta(list)
 
-        // DownloadHelper ile request üret (HLS/DASH/TS için stream keys + mime
-        // tespiti); hazırlanamazsa düz dosya isteğine düş (progressive indirme).
-        // prepare() Looper gerektirdiğinden ana iş parçacığında koşulur.
         val request = DownloadRequest.Builder(entry.id, Uri.parse(entry.url)).build()
         downloadManager.addDownload(request)
+        runCatching {
+            DownloadService.sendAddDownload(
+                context,
+                AppDownloadService::class.java,
+                request,
+                false
+            )
+        }
     }
 
     /** İndirmeyi iptal et / sil. */
@@ -122,6 +132,20 @@ object OfflineDownloadManager {
         val list = _downloads.value.filter { it.id != id }
         _downloads.value = list
         saveMeta(list)
+    }
+
+    /** Tüm indirmeleri temizler. */
+    fun clearAllDownloads() {
+        if (::downloadManager.isInitialized) {
+            downloadManager.removeAllDownloads()
+        }
+        _downloads.value = emptyList()
+        saveMeta(emptyList())
+        runCatching {
+            val cacheDir = File(context.filesDir, "offline_cache")
+            cacheDir.deleteRecursively()
+            cacheDir.mkdirs()
+        }
     }
 
     /** ExoPlayer download cache referansı (PlayerScreen'de offline oynatma için). */
