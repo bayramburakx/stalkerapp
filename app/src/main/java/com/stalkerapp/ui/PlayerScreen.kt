@@ -2,6 +2,9 @@ package com.stalkerapp.ui
 
 import android.app.Activity
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.util.TypedValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -245,6 +248,17 @@ fun PlayerScreen(navController: NavHostController) {
     var showSleepDialog by remember { mutableStateOf(false) }
     // Canlı yayında timeshift: akış geri sarılabilir mi?
     var liveSeekable by remember { mutableStateOf(false) }
+
+    val subtitleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: Exception) {
+                // Ignore if provider doesn't support persistable permission
+            }
+            PlaybackManager.setExternalSubtitle(uri)
+        }
+    }
     var showInfo by remember { mutableStateOf(false) }
     var showPlayerSettings by remember { mutableStateOf(false) }
     var showChannels by remember { mutableStateOf(false) }
@@ -1293,7 +1307,8 @@ fun PlayerScreen(navController: NavHostController) {
                 showSubs = false
             },
             enabled = PlaybackManager.subtitlesEnabled(),
-            onToggle = { PlaybackManager.setSubtitlesEnabled(it) }
+            onToggle = { PlaybackManager.setSubtitlesEnabled(it) },
+            onPickFile = { subtitleLauncher.launch(arrayOf("*/*")) }
         )
     }
 
@@ -1462,7 +1477,8 @@ fun SubtitleSheet(
     onDismiss: () -> Unit,
     onSelect: (String?) -> Unit,
     enabled: Boolean,
-    onToggle: (Boolean) -> Unit
+    onToggle: (Boolean) -> Unit,
+    onPickFile: () -> Unit
 ) {
     var tracks by remember { mutableStateOf(PlaybackManager.availableTracks(C.TRACK_TYPE_TEXT)) }
     LaunchedEffect(Unit) {
@@ -1481,6 +1497,13 @@ fun SubtitleSheet(
                 headlineContent = { Text(str(lang, "Altyazılar")) },
                 trailingContent = {
                     Switch(checked = enabled, onCheckedChange = { onToggle(it) })
+                }
+            )
+            ListItem(
+                headlineContent = { Text(str(lang, "Dosyadan Ekle (.srt/.vtt)")) },
+                modifier = Modifier.clickable {
+                    onDismiss()
+                    onPickFile()
                 }
             )
             ListItem(

@@ -216,6 +216,9 @@ object PlaybackManager {
 
     var currentVodId: Long = 0
 
+    var externalSubtitleUri: Uri? = null
+        private set
+
     // Oynatılan VOD öğesinin anlık görüntüsü: katalog senkronu tamamlanmasa da
     // ilerleme kaydına öğe bilgisi (ad/afiş/tür) yazılabilsin — ana sayfa
     // "İzlemeye Devam / Son İzlenenler" listeleri katalog byId'sine bağımlı kalmaz.
@@ -502,6 +505,7 @@ object PlaybackManager {
         }
         stopping = false
         vodPlayback = isVod
+        externalSubtitleUri = null
         currentStreamUrl = url
         currentTitle = title
         currentSubtitle = subtitle
@@ -608,6 +612,16 @@ object PlaybackManager {
         if (item.seriesId > 0 || item.isSeries) {
             store.markEpisodeWatched("${item.id}:${VodQueue.season}:${cur.episodeNumber}")
         }
+    }
+
+    fun setExternalSubtitle(uri: Uri) {
+        externalSubtitleUri = uri
+        val p = activePlayer ?: return
+        val pos = p.currentPosition.coerceAtLeast(0)
+        val item = mediaItem(currentStreamUrl, currentTitle, currentArtwork)
+        p.setMediaItem(item, pos)
+        p.prepare()
+        p.playWhenReady = true
     }
 
     fun seekTo(positionMs: Long) {
@@ -1294,6 +1308,23 @@ object PlaybackManager {
         if (mimeType != null) {
             builder.setMimeType(mimeType)
         }
+
+        val subUri = externalSubtitleUri
+        if (subUri != null) {
+            val subMimeType = if (subUri.toString().lowercase().endsWith(".vtt")) {
+                MimeTypes.TEXT_VTT
+            } else {
+                MimeTypes.APPLICATION_SUBRIP
+            }
+            val subConfig = MediaItem.SubtitleConfiguration.Builder(subUri)
+                .setMimeType(subMimeType)
+                .setLanguage("tr")
+                .setLabel(l10n("Harici Altyazı"))
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build()
+            builder.setSubtitleConfigurations(listOf(subConfig))
+        }
+
         val metaBuilder = MediaMetadata.Builder().setTitle(title)
         val resolvedArtwork = resolveUrl(artwork)
         if (!resolvedArtwork.isNullOrBlank()) {
