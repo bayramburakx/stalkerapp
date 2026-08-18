@@ -539,8 +539,8 @@ fun VodDetailScreen(
                             startMs = progMap[episodeKey(target, seasonNum)]!!.positionMs
                         } else {
                             val latest = progMap.entries
-                                .filter { it.key.startsWith("${it.id}:") }
-                                .maxByOrNull { it.value.lastUpdated }
+                                .filter { k -> k.key.startsWith("${it.id}:") }
+                                .maxByOrNull { e -> e.value.lastUpdated }
                             val latestEp = latest?.let { (key, p) ->
                                 val num = key.substringAfterLast(':').toIntOrNull()
                                 if (resume && inRange(p)) allEps.firstOrNull { ep -> ep.episodeNumber == num } else null
