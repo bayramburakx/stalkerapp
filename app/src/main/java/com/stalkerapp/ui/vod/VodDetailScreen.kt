@@ -156,9 +156,12 @@ fun VodDetailScreen(
     var episodeProg by remember { mutableStateOf(app.store.episodeProgress()) }
     // Tüm bölümleri izlenen sezonlar (sezon rozeti için).
     var fullyWatchedSeasons by remember { mutableStateOf<Set<Long>>(emptySet()) }
-    // TMDB zenginleştirme (oyuncu fotoğrafları + fragman). Anahtar yoksa boş kalır.
+    // TMDB zenginleştirme (oyuncu fotoğrafları + fragman + özet). Anahtar yoksa boş kalır.
     var tmdbCast by remember { mutableStateOf<List<TmdbPerson>>(emptyList()) }
     var trailerKey by remember { mutableStateOf("") }
+    // Panelin plot/cast'i boşsa (Xtream filmleri) TMDB özeti ve oyuncu adları kullanılır.
+    var tmdbOverview by remember { mutableStateOf("") }
+    var tmdbActorNames by remember { mutableStateOf<List<String>>(emptyList()) }
     // Sezon posterleri + bölüm küçük resimleri (portal önce, yoksa TMDB).
     var seasonPosters by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var episodeThumbs by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
@@ -199,7 +202,12 @@ fun VodDetailScreen(
             // Zenginleştirme alt-anahtarları (Ayarlar → Entegrasyonlar).
             if (settings.tmdbPeople || settings.tmdbTrailers) {
                 val enr = app.tmdb.enrich(resolvedTmdbId, i.isSeries || isSeriesHint, key)
-                if (settings.tmdbPeople) tmdbCast = enr.cast
+                if (settings.tmdbPeople) {
+                    tmdbCast = enr.cast
+                    // Panel metni boşsa TMDB'den tamamla (Xtream filmlerinde plot/cast boş).
+                    if (i.description.isBlank()) tmdbOverview = enr.overview
+                    if (i.actors.isBlank()) tmdbActorNames = enr.actorNames
+                }
                 if (settings.tmdbTrailers) trailerKey = enr.trailerKey
             }
         }
@@ -317,7 +325,13 @@ fun VodDetailScreen(
             val merged = item
             if ((merged?.isSeries == true || isSeriesHint) && (p != null || externalSource)) {
                 seasons = vm.repository.loadSeasons(p, vodId)
-                selectedSeason = seasons.firstOrNull()?.id
+                // Kaldığı yerden devam: ilerlemesi olan bölümün sezonu otomatik
+                // seçilir (yoksa ilk sezon). Aksi halde her açılışta 1. sezondan
+                // başlanır ve kayıtlı konum hiç bulunamazdı.
+                val prog = app.store.episodeProgress()
+                selectedSeason = seasons.firstOrNull { s ->
+                    prog.keys.any { it.startsWith("${vodId}:${s.id}:") }
+                }?.id ?: seasons.firstOrNull()?.id
             }
         } catch (e: Exception) {
             error = e.message
@@ -344,7 +358,11 @@ fun VodDetailScreen(
     val genre = it.genres.trim().ifBlank {
         catalog.categories.firstOrNull { c -> c.id == it.categoryId }?.title.orEmpty()
     }
-    val actors = it.actors.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    // Panel oyuncu listesi boşsa (Xtream filmleri) TMDB'den gelen adlar kullanılır.
+    val actors = remember(tmdbActorNames, it) {
+        val fromItem = it.actors.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        if (fromItem.isNotEmpty()) fromItem else tmdbActorNames
+    }
     val durationText = formatDuration(it.duration)
 
     // Benzer İçerikler: tür/kategori benzerliğinden istemci tarafı öneriler.
@@ -688,9 +706,10 @@ fun VodDetailScreen(
                         Text("${str(lang, "Yazar: ")}$w", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(4.dp))
                     }
-                    if (it.description.isNotBlank()) {
+                    val synopsis = it.description.ifBlank { tmdbOverview }
+                    if (synopsis.isNotBlank()) {
                         Text(
-                            it.description,
+                            synopsis,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

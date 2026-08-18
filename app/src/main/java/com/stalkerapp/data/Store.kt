@@ -137,6 +137,12 @@ class Store(private val context: Context) {
     private fun externalCacheTsvFile(kind: String, sourceId: String): File =
         File(context.filesDir, "ext_${kind}_$sourceId.tsv")
 
+    // Sınıflandırma/parse mantığı değişince eski önbellekler bayat kalır (ör:
+    // eski sürümlerde M3U film/dizileri canlı TV'ye atıyordu ve boş katalog
+    // önbelleğe yazılmıştı). Sürüm eşleşmezse önbellek yok sayılır, yeniden
+    // ayrıştırılır.
+    private const val EXTERNAL_CACHE_VERSION = 2
+
     fun saveExternalVodCache(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
         runCatching {
             // Devasa M3U katalogları (400k+ öğe): tek dev JSON'a dönüştürmek bellek
@@ -148,7 +154,10 @@ class Store(private val context: Context) {
                 return
             }
             val f = externalCacheFile("vod", sourceId)
-            f.writeText(json.encodeToString(ExternalVodCacheDto.serializer(), ExternalVodCacheDto(genres, items)))
+            f.writeText(json.encodeToString(
+                ExternalVodCacheDto.serializer(),
+                ExternalVodCacheDto(EXTERNAL_CACHE_VERSION, genres, items)
+            ))
         }
     }
 
@@ -156,6 +165,8 @@ class Store(private val context: Context) {
         val f = externalCacheFile("vod", sourceId)
         if (f.exists()) {
             val dto = json.decodeFromString(ExternalVodCacheDto.serializer(), f.readText())
+            // Bayat önbellek (eski sürüm formatı veya farklı sınıflandırma) yok sayılır.
+            if (dto.version != EXTERNAL_CACHE_VERSION) return null
             return dto.genres to dto.items
         }
         val tsv = externalCacheTsvFile("vod", sourceId)
@@ -193,8 +204,10 @@ class Store(private val context: Context) {
     private fun saveExternalVodCacheTsv(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
         val f = externalCacheTsvFile("vod", sourceId)
         f.bufferedWriter(Charsets.UTF_8).use { w ->
-            // İlk satır: kategori listesi (küçük — JSON).
-            w.write("G\t")
+            // İlk satır: sürüm + kategori listesi (küçük — JSON).
+            w.write("V\t")
+            w.write(EXTERNAL_CACHE_VERSION.toString())
+            w.write("\tG\t")
             w.write(json.encodeToString(ListSerializer(Genre.serializer()), genres))
             w.newLine()
             items.forEach { it ->
@@ -223,10 +236,20 @@ class Store(private val context: Context) {
                 if (line.isBlank()) continue
                 if (first) {
                     first = false
-                    if (line.startsWith("G\t")) {
-                        genres = runCatching {
-                            json.decodeFromString(ListSerializer(Genre.serializer()), line.substring(2))
-                        }.getOrDefault(emptyList())
+                    if (line.startsWith("V\t")) {
+                        val parts = line.split('\t', limit = 3)
+                        val v = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                        // Bayat sürüm (veya eski "G\t" formatı) → önbelleği yok say.
+                        if (v != EXTERNAL_CACHE_VERSION) return null
+                        val g = parts.getOrNull(2) ?: continue
+                        if (g.startsWith("G\t")) {
+                            genres = runCatching {
+                                json.decodeFromString(ListSerializer(Genre.serializer()), g.substring(2))
+                            }.getOrDefault(emptyList())
+                        }
+                    } else if (line.startsWith("G\t")) {
+                        // Sürümsüz eski format — bayat, yeniden ayrıştır.
+                        return null
                     }
                     continue
                 }
@@ -1103,7 +1126,11 @@ data class AppBackup(
 )
 
 @kotlinx.serialization.Serializable
-data class ExternalVodCacheDto(val genres: List<Genre>, val items: List<VodItem>)
+data class ExternalVodCacheDto(
+    val version: Int = 0,
+    val genres: List<Genre>,
+    val items: List<VodItem>
+)
 
 @kotlinx.serialization.Serializable
 data class ExternalChannelCacheDto(val genres: List<Genre>, val channels: List<Channel>)

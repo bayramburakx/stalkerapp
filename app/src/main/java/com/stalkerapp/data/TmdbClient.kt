@@ -34,7 +34,14 @@ data class TmdbEnrichment(
     val rating: Double = 0.0,
     /** YouTube video id'si; boşsa fragman yok demektir. */
     val trailerKey: String = "",
-    val cast: List<TmdbPerson> = emptyList()
+    val cast: List<TmdbPerson> = emptyList(),
+    /**
+     * TMDB özeti (synopsis). Xtream filmleri `plot`'u boş döndürür — bu durumda
+     * detay ekranı özeti buradan gösterir.
+     */
+    val overview: String = "",
+    /** TMDB oyuncu adları (panel `cast`'ı boşsa oyuncular bölümü buradan doldurulur). */
+    val actorNames: List<String> = emptyList()
 )
 
 /**
@@ -106,7 +113,9 @@ class TmdbClient(
         val rating = (obj["vote_average"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull() ?: 0.0
         val trailerKey = extractTrailer(obj["videos"])
         val cast = extractCast(obj["credits"])
-        return TmdbEnrichment(rating, trailerKey, cast).also { cache[cacheKey] = it }
+        val overview = (obj["overview"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        val actorNames = cast.map { it.name }.filter { it.isNotBlank() }.distinct().take(20)
+        return TmdbEnrichment(rating, trailerKey, cast, overview, actorNames).also { cache[cacheKey] = it }
     }
 
     /**
