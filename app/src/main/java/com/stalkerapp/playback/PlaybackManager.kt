@@ -459,6 +459,8 @@ object PlaybackManager {
         // Kanal ön-buffer'ı varsa serbest bırak: VOD başlarken arka planda
         // eski kanal sesi çalmamalı.
         releaseStandby()
+        // Yeni içerik: önceki akışın uzantı fallback sayacı sıfırlanır.
+        seriesExtFallbackIndex = 0
         // Film oynatımı: önceki bir diziden kalma bölüm kuyruğu temizlenir,
         // böylece oynatıcıda "Sonraki Bölüm" butonu yalnızca gerçek dizilerde görünür.
         // currentVodId SIFIRLANMAZ: çağıran (VodDetailScreen) film id'sini önceden
@@ -544,6 +546,8 @@ object PlaybackManager {
         startPositionMs: Long = 0
     ) {
         val ep = episodes.getOrNull(index) ?: return
+        // Yeni bölüm seçildi: önceki akışın uzantı fallback sayacı sıfırlanır.
+        seriesExtFallbackIndex = 0
         VodQueue.item = item
         VodQueue.profile = profile
         VodQueue.episodes = episodes
@@ -574,6 +578,7 @@ object PlaybackManager {
     fun playNextEpisode(auto: Boolean = false): Boolean {
         if (!vodPlayback || !VodQueue.hasNext) return false
         if (auto) markCurrentEpisodeWatched()
+        seriesExtFallbackIndex = 0
         VodQueue.index++
         val item = VodQueue.item ?: return false
         // Profil M3U/Xtream kaynaklarında null olabilir — URL'yi repository
@@ -1119,6 +1124,9 @@ object PlaybackManager {
                 val isConnectionOrTimeout = error.errorCodeName.contains("CONNECTION", ignoreCase = true) ||
                     error.errorCodeName.contains("TIMEOUT", ignoreCase = true) ||
                     error.cause is java.io.IOException
+                // Xtream dizi: panel uzantıya duyarlıysa .mkv ile başarısız olan
+                // akış .mp4/.ts/.m3u8 ile açılabilir — alternatif uzantılarla yeniden dener.
+                if (vodPlayback && maybeRetrySeriesWithAltExtension()) return
                 // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener.
                 // Yeni bir create_link çağrısı taze play_token üretir; en fazla 3
                 // deneme, ardından hata kullanıcıya gösterilir. Ayarlardan kapatılabilir.
@@ -1176,6 +1184,36 @@ object PlaybackManager {
         setError(null)
         notifyStateChanged()
         retryLiveChannel()
+        return true
+    }
+
+    // ---------- Xtream dizi uzantı fallback'i ----------
+    // Bazı paneller bölüm URL'sindeki dosya uzantısına duyarlıdır: panel
+    // `container_extension` döndürmezse uygulama .mkv varsayar ve panel akışı
+    // reddedebilir. Akış hatasında alternatif uzantılar sırayla denenir.
+    private var seriesExtFallbackIndex = 0
+
+    private val SERIES_EXT_FALLBACKS = listOf(".mp4", ".ts", ".mkv", ".m3u8")
+
+    /** URL bir Xtream dizi akışıysa uzantıyı değiştirip yeniden oynatmayı dener. */
+    private fun maybeRetrySeriesWithAltExtension(): Boolean {
+        val url = currentStreamUrl
+        if (stopping || url.isBlank() || !url.contains("/series/")) return false
+        if (seriesExtFallbackIndex >= SERIES_EXT_FALLBACKS.size) return false
+        val idx = url.lastIndexOf('.')
+        if (idx <= url.lastIndexOf('/') + 1) return false
+        val base = url.substring(0, idx)
+        val current = url.substring(idx).lowercase()
+        val candidates = SERIES_EXT_FALLBACKS.filter { it != current }
+        val alt = candidates.getOrNull(seriesExtFallbackIndex) ?: return false
+        seriesExtFallbackIndex++
+        setError(null)
+        notifyStateChanged()
+        scope.launch {
+            delay(800)
+            if (stopping) return@launch
+            playInternal(base + alt, currentTitle, currentArtwork, currentSubtitle, isVod = true)
+        }
         return true
     }
 

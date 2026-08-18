@@ -137,7 +137,9 @@ class PortalRepository(
         val key = "${src.id}:$seriesId"
         xtreamSeriesInfoCache[key]?.let { return it }
         val seasons = XtreamClient().seriesInfo(src, seriesId)
-        xtreamSeriesInfoCache[key] = seasons
+        // Geçici ağ hatasında boş sonuç önbelleğe alınmaz — bir sonraki denemede
+        // taze çekilir (aksi halde sezonlar oturum boyunca "boş" kalırdı).
+        if (seasons.isNotEmpty()) xtreamSeriesInfoCache[key] = seasons
         return seasons
     }
 
@@ -1573,12 +1575,15 @@ class PortalRepository(
                     ?: return emptyList()
                 val client = XtreamClient()
                 return season.episodes.map { ep ->
+                    // Panel doğrudan URL veriyorsa (direct_source) onu kullan;
+                    // yoksa standart /series/... URL'si kurulur.
+                    val direct = ep.directSource.trim().takeIf { it.startsWith("http") }
                     Episode(
                         id = ep.id,
                         name = ep.name,
                         episodeNumber = ep.number,
                         thumb = ep.thumb,
-                        cmd = client.episodePlayUrl(src, real, seasonId, ep.number, ep.container)
+                        cmd = direct ?: client.episodePlayUrl(src, real, seasonId, ep.number, ep.container)
                     )
                 }
             }

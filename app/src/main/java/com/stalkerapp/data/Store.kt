@@ -122,6 +122,8 @@ class Store(private val context: Context) {
     fun deleteExternalCaches(sourceId: String) {
         runCatching { externalCacheFile("ch", sourceId).delete() }
         runCatching { externalCacheFile("vod", sourceId).delete() }
+        runCatching { externalCacheTsvFile("ch", sourceId).delete() }
+        runCatching { externalCacheTsvFile("vod", sourceId).delete() }
     }
 
     // ---------- Harici (M3U/Xtream) katalog & kanal disk önbelleği ----------
@@ -132,12 +134,19 @@ class Store(private val context: Context) {
     private fun externalCacheFile(kind: String, sourceId: String): File =
         File(context.filesDir, "ext_${kind}_$sourceId.json")
 
+    private fun externalCacheTsvFile(kind: String, sourceId: String): File =
+        File(context.filesDir, "ext_${kind}_$sourceId.tsv")
+
     fun saveExternalVodCache(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
         runCatching {
-            // 120k+ öğe JSON'a dönüştürmek bellek ister — devasa M3U katalogları
-            // önbelleklenmez (parse her açılışta yapılır); Xtream gibi makul
-            // boyutlar önbelleklenir.
-            if (items.size > 120_000) return
+            // Devasa M3U katalogları (400k+ öğe): tek dev JSON'a dönüştürmek bellek
+            // taşırır — satır satır TSV önbelleğe yazılır (her satır bir öğe).
+            // Okuma da satır satırdır; böylece ikinci açılışta 134MB liste yeniden
+            // ayrıştırılmaz ve Filmler/Diziler anında dolu görünür.
+            if (items.size > 120_000) {
+                saveExternalVodCacheTsv(sourceId, genres, items)
+                return
+            }
             val f = externalCacheFile("vod", sourceId)
             f.writeText(json.encodeToString(ExternalVodCacheDto.serializer(), ExternalVodCacheDto(genres, items)))
         }
@@ -145,10 +154,101 @@ class Store(private val context: Context) {
 
     fun loadExternalVodCache(sourceId: String): Pair<List<Genre>, List<VodItem>>? = runCatching {
         val f = externalCacheFile("vod", sourceId)
-        if (!f.exists()) return null
-        val dto = json.decodeFromString(ExternalVodCacheDto.serializer(), f.readText())
-        dto.genres to dto.items
+        if (f.exists()) {
+            val dto = json.decodeFromString(ExternalVodCacheDto.serializer(), f.readText())
+            return dto.genres to dto.items
+        }
+        val tsv = externalCacheTsvFile("vod", sourceId)
+        if (tsv.exists()) return loadExternalVodCacheTsv(tsv)
+        null
     }.getOrNull()
+
+    // ---------- TSV (satır satır) VOD önbelleği — devasa M3U katalogları ----------
+    // Satır: id\tcategoryId\tisSeries(0/1)\tname\tposter\tcmd
+    // Metin alanları kaçar: \\ → \\, tab → \t, yeni satır → \n, satır başı → \r.
+
+    private fun tsvEscape(s: String): String =
+        s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
+
+    private fun tsvUnescape(s: String): String {
+        if ('\\' !in s) return s
+        val sb = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < s.length) {
+                when (s[i + 1]) {
+                    't' -> { sb.append('\t'); i += 2; continue }
+                    'n' -> { sb.append('\n'); i += 2; continue }
+                    'r' -> { sb.append('\r'); i += 2; continue }
+                    '\\' -> { sb.append('\\'); i += 2; continue }
+                }
+            }
+            sb.append(c)
+            i++
+        }
+        return sb.toString()
+    }
+
+    private fun saveExternalVodCacheTsv(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
+        val f = externalCacheTsvFile("vod", sourceId)
+        f.bufferedWriter(Charsets.UTF_8).use { w ->
+            // İlk satır: kategori listesi (küçük — JSON).
+            w.write("G\t")
+            w.write(json.encodeToString(ListSerializer(Genre.serializer()), genres))
+            w.newLine()
+            items.forEach { it ->
+                w.write(it.id.toString())
+                w.write("\t")
+                w.write(it.categoryId.toString())
+                w.write("\t")
+                w.write(if (it.isSeries) "1" else "0")
+                w.write("\t")
+                w.write(tsvEscape(it.name))
+                w.write("\t")
+                w.write(tsvEscape(it.poster))
+                w.write("\t")
+                w.write(tsvEscape(it.cmd))
+                w.newLine()
+            }
+        }
+    }
+
+    private fun loadExternalVodCacheTsv(f: File): Pair<List<Genre>, List<VodItem>>? {
+        var genres = emptyList<Genre>()
+        val items = ArrayList<VodItem>(200_000)
+        f.bufferedReader(Charsets.UTF_8).use { r ->
+            var first = true
+            for (line in r.lineSequence()) {
+                if (line.isBlank()) continue
+                if (first) {
+                    first = false
+                    if (line.startsWith("G\t")) {
+                        genres = runCatching {
+                            json.decodeFromString(ListSerializer(Genre.serializer()), line.substring(2))
+                        }.getOrDefault(emptyList())
+                    }
+                    continue
+                }
+                val p = line.split('\t')
+                if (p.size < 6) continue
+                val id = p[0].toLongOrNull() ?: continue
+                items.add(
+                    VodItem(
+                        id = id,
+                        categoryId = p[1].toLongOrNull() ?: 0L,
+                        name = tsvUnescape(p[3]),
+                        originalName = tsvUnescape(p[3]),
+                        poster = tsvUnescape(p[4]),
+                        cmd = tsvUnescape(p[5]),
+                        isSeries = p[2] == "1"
+                    )
+                )
+            }
+        }
+        if (items.isEmpty()) return null
+        return genres to items
+    }
 
     fun saveExternalChannelCache(sourceId: String, genres: List<Genre>, channels: List<Channel>) {
         runCatching {

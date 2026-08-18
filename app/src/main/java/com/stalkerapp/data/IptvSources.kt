@@ -714,7 +714,11 @@ class XtreamClient {
                     number = (e["episode_num"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0,
                     name = (e["title"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
                     thumb = info?.get("movie_image")?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
-                    container = (e["container_extension"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                    container = (e["container_extension"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    // Bazı paneller bölüm başına doğrudan oynatılabilir URL döner
+                    // ("direct_source") — varsa URL buradan alınır, panel URL
+                    // kurgusu devre dışı kalır.
+                    directSource = (e["direct_source"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                 )
             }
             XtreamSeasonInfo(
@@ -764,5 +768,6 @@ data class XtreamEpisodeInfo(
     val number: Int = 0,
     val name: String = "",
     val thumb: String = "",
-    val container: String = ""
+    val container: String = "",
+    val directSource: String = ""
 )
