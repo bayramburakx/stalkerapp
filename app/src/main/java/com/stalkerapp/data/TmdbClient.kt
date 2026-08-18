@@ -43,7 +43,11 @@ data class TmdbEnrichment(
     /** TMDB oyuncu adları (panel `cast`'ı boşsa oyuncular bölümü buradan doldurulur). */
     val actorNames: List<String> = emptyList(),
     /** Yönetmen(ler) — panel `director`'ı boşsa detay ekranı bunu kullanır. */
-    val director: String = ""
+    val director: String = "",
+    /** Çıkış yılı (YYY) — panel `year`/`first_air_date` boşsa arayüz burayı gösterir. */
+    val year: String = "",
+    /** TMDB poster yolu (ör. "/abc.jpg"); panel afişi boşsa buradan tam URL üretilir. */
+    val posterPath: String = ""
 )
 
 /**
@@ -118,7 +122,12 @@ class TmdbClient(
         val overview = (obj["overview"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val actorNames = cast.map { it.name }.filter { it.isNotBlank() }.distinct().take(20)
         val director = extractDirector(obj["credits"])
-        return TmdbEnrichment(rating, trailerKey, cast, overview, actorNames, director).also { cache[cacheKey] = it }
+        // Xtream panelleri yılı boş döndürebilir — TMDB'nin yayın tarihinden tamamlanır.
+        val dateKey = if (isSeries) "first_air_date" else "release_date"
+        val year = (obj[dateKey] as? JsonPrimitive)?.contentOrNull.orEmpty().take(4)
+        val posterPath = (obj["poster_path"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        return TmdbEnrichment(rating, trailerKey, cast, overview, actorNames, director, year, posterPath)
+            .also { cache[cacheKey] = it }
     }
 
     /**

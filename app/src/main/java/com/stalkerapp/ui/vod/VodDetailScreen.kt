@@ -164,6 +164,10 @@ fun VodDetailScreen(
     var tmdbActorNames by remember { mutableStateOf<List<String>>(emptyList()) }
     // Panel director boşsa TMDB yönetmen(leri) kullanılır.
     var tmdbDirector by remember { mutableStateOf("") }
+    // Panel yılı boşsa (Xtream dizileri) TMDB yayın yılı kullanılır.
+    var tmdbYear by remember { mutableStateOf("") }
+    // Panel afişi boşsa TMDB posteri kullanılır (hero + sezon kartları).
+    var tmdbPoster by remember { mutableStateOf("") }
     // Sezon posterleri + bölüm küçük resimleri (portal önce, yoksa TMDB).
     var seasonPosters by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var episodeThumbs by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
@@ -210,6 +214,11 @@ fun VodDetailScreen(
                     if (i.description.isBlank()) tmdbOverview = enr.overview
                     if (i.actors.isBlank()) tmdbActorNames = enr.actorNames
                     if (i.director.isBlank()) tmdbDirector = enr.director
+                    // Panel yılı/afişi boşsa TMDB'den tamamla (Xtream dizileri).
+                    if (i.year.take(4).isBlank()) tmdbYear = enr.year
+                    if (i.poster.isBlank() && enr.posterPath.isNotBlank()) {
+                        tmdbPoster = TmdbClient.photoUrl(enr.posterPath, large = true)
+                    }
                 }
                 if (settings.tmdbTrailers) trailerKey = enr.trailerKey
             }
@@ -365,7 +374,9 @@ fun VodDetailScreen(
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val isFavorite = remember(favVods, it) { favVods.any { f -> f.id == it.id } }
     val watchLater by vm.watchLater.collectAsStateWithLifecycle()
-    val yearText = it.year.take(4).takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
+    // Yıl: panel yılı önce; boşsa (Xtream dizileri) TMDB yayın yılı kullanılır.
+    val yearText = (it.year.take(4).ifBlank { tmdbYear })
+        .takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
     val genre = it.genres.trim().ifBlank {
         catalog.categories.firstOrNull { c -> c.id == it.categoryId }?.title.orEmpty()
     }
@@ -375,6 +386,9 @@ fun VodDetailScreen(
         if (fromItem.isNotEmpty()) fromItem else tmdbActorNames
     }
     val durationText = formatDuration(it.duration)
+    // Hero/afiş: panel afişi önce; boşsa (Xtream dizileri) TMDB posteri.
+    val posterUrl = resolveUrl(it.poster, profile?.baseUrl.orEmpty())
+        .ifBlank { tmdbPoster }
 
     // Benzer İçerikler: tür/kategori benzerliğinden istemci tarafı öneriler.
     // LazyColumn DSL'i composable olmadığı için burada (dışarıda) hesaplanır.
@@ -554,7 +568,7 @@ fun VodDetailScreen(
             item {
                 Box(modifier = Modifier.fillMaxWidth().height(heroHeight)) {
                     AsyncImage(
-                        model = resolveUrl(it.poster, profile?.baseUrl.orEmpty()),
+                        model = posterUrl,
                         contentDescription = it.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -832,7 +846,7 @@ fun VodDetailScreen(
                             items(seasons, key = { it.id }) { s ->
                                 val sel = selectedSeason == s.id
                                 val fullyWatched = s.id in fullyWatchedSeasons
-                                val poster = seasonPosters[s.id].orEmpty()
+                                val poster = seasonPosters[s.id].orEmpty().ifBlank { tmdbPoster }
                                 Column(
                                     modifier = Modifier
                                         .width(96.dp)
