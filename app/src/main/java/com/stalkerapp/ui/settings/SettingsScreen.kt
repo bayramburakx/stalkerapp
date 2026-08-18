@@ -103,12 +103,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Context
 import com.stalkerapp.BuildConfig
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Genre
 import com.stalkerapp.data.M3uParser
 import com.stalkerapp.data.M3uSource
 import com.stalkerapp.data.Portal
+import com.stalkerapp.data.Profile
+import com.stalkerapp.data.Settings
 import com.stalkerapp.data.UpdateChecker
 import com.stalkerapp.data.UpdateInfo
 import com.stalkerapp.data.VodItem
@@ -517,6 +520,8 @@ private val HOME_SECTIONS = listOf(
     "favvods" to "Favori Filmler & Diziler"
 )
 
+private data class SourceStats(val live: Int = 0, val movies: Int = 0, val series: Int = 0)
+
 @Composable
 fun SettingsScreen(
     vm: MainViewModel,
@@ -771,8 +776,6 @@ fun SettingsScreen(
     ) {
         when (currentSection) {
             "playlist" -> {
-                // Kaynak başına istatistik: canlı kanal / film / dizi sayısı.
-                data class SourceStats(val live: Int = 0, val movies: Int = 0, val series: Int = 0)
                 val sourceStats = remember(sourcesVersion) { mutableStateMapOf<String, SourceStats>() }
                 LaunchedEffect(sourcesVersion, m3uSources, xtreamSources) {
                     m3uSources.forEach { s ->
@@ -3429,9 +3432,9 @@ private fun CacheSettingsSection(
 @Composable
 private fun AccountSettingsSection(
     lang: String,
-    profile: UserProfile,
-    profiles: List<UserProfile>,
-    appProfile: AppProfile?,
+    profile: Profile,
+    profiles: List<Profile>,
+    appProfile: Profile?,
     settings: Settings,
     vm: MainViewModel,
     scope: kotlinx.coroutines.CoroutineScope,
