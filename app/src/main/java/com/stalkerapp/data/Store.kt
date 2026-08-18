@@ -141,10 +141,13 @@ class Store(private val context: Context) {
     // eski sürümlerde M3U film/dizileri canlı TV'ye atıyordu ve boş katalog
     // önbelleğe yazılmıştı). Sürüm eşleşmezse önbellek yok sayılır, yeniden
     // ayrıştırılır.
-    private val EXTERNAL_CACHE_VERSION = 4
+    private val EXTERNAL_CACHE_VERSION = 5
 
     fun saveExternalVodCache(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
         runCatching {
+            // Boş katalog önbelleğe yazılmaz — yanlış sınıflandırma sonrası
+            // "VOD yok" kalıcı hale gelmesin; bir sonraki açılışta yeniden parse edilsin.
+            if (items.isEmpty()) return
             // Devasa M3U katalogları (400k+ öğe): tek dev JSON'a dönüştürmek bellek
             // taşırır — satır satır TSV önbelleğe yazılır (her satır bir öğe).
             // Okuma da satır satırdır; böylece ikinci açılışta 134MB liste yeniden
@@ -167,6 +170,7 @@ class Store(private val context: Context) {
             val dto = json.decodeFromString(ExternalVodCacheDto.serializer(), f.readText())
             // Bayat önbellek (eski sürüm formatı veya farklı sınıflandırma) yok sayılır.
             if (dto.version != EXTERNAL_CACHE_VERSION) return null
+            if (dto.items.isEmpty()) return null
             return dto.genres to dto.items
         }
         val tsv = externalCacheTsvFile("vod", sourceId)

@@ -95,7 +95,7 @@ object M3uParser {
     /** Film/VOD grup anahtar kelimeleri: grup adı bunlardan birini içeriyorsa film sayılır. */
     private val MOVIE_KEYWORDS = listOf(
         "film", "filmler", "movie", "movies", "sinema", "cinema", "kino", "vod", "pelicula", "filme",
-        "video club", "filmizle", "filmler hd", "turk film", "türk film", "dizi", "diziler"
+        "video club", "filmizle", "filmler hd", "turk film", "türk film", "on demand", "video on demand"
     )
 
     /**
@@ -135,22 +135,37 @@ object M3uParser {
      * ayırt edilir — aksi halde hepsi canlı TV'ye düşerdi.
      */
     private fun classifyEntry(attrs: Map<String, String>, url: String, name: String = ""): M3uEntryType {
-        when (attrs["tvg-type"]?.lowercase()?.trim().orEmpty()) {
-            "vod", "movie", "film", "movies", "movie_live" -> return M3uEntryType.MOVIE
-            "series", "tvshow", "show", "dizi", "serial", "serie", "serien" -> return M3uEntryType.SERIES
-            "live", "radio", "tv", "channel", "iptv" -> return M3uEntryType.LIVE
-
+        val typeAttr = attrs["tvg-type"]?.lowercase()?.trim().orEmpty()
+            .ifBlank { attrs["type"]?.lowercase()?.trim().orEmpty() }
+        when (typeAttr) {
+            "vod", "movie", "film", "movies", "movie_live", "video" -> return M3uEntryType.MOVIE
+            "series", "tvshow", "show", "dizi", "serial", "serie", "serien", "tv series" -> return M3uEntryType.SERIES
+            "live", "radio", "tv", "channel", "iptv", "catchup", "timeshift" -> return M3uEntryType.LIVE
         }
         // Token tabanlı (dosya uzantısız) sağlayıcılar genelde içeriği yol ile ayırır:
         // /movie/..., /vod/..., /film/..., /series/... → kesin VOD sinyali.
         val u = url.lowercase()
-        if (u.contains("/series/") || u.contains("/serie/") || u.contains("/dizi/")) {
+        // Canlı akış yolları — VOD sinyallerinden önce ele alınır.
+        if (u.contains("/live/") || u.contains("/stream/live") || u.contains("type=live")) {
+            return M3uEntryType.LIVE
+        }
+        if (u.contains("type=series") || u.contains("action=series")) return M3uEntryType.SERIES
+        if (u.contains("type=movie") || u.contains("type=vod") || u.contains("action=vod")) {
+            return M3uEntryType.MOVIE
+        }
+        if (u.contains("/series/") || u.contains("/serie/") || u.contains("/dizi/") ||
+            u.contains("/serials/") || u.contains("/serial/")
+        ) {
             return M3uEntryType.SERIES
         }
-        if (u.contains("/movie/") || u.contains("/vod/") || u.contains("/film/") || u.contains("/filme/")) {
+        if (u.contains("/movie/") || u.contains("/movies/") || u.contains("/vod/") ||
+            u.contains("/film/") || u.contains("/filme/") || u.contains("/films/") ||
+            u.contains("/cinema/")
+        ) {
             return M3uEntryType.MOVIE
         }
         val group = attrs["group-title"].orEmpty().lowercase()
+            .ifBlank { attrs["group"]?.lowercase().orEmpty() }
         // Dizi bölümü deseni ("S01E05") → kesin dizi.
         if (EPISODE_IN_NAME.containsMatchIn(name)) return M3uEntryType.SERIES
         // URL bir VOD dosya uzantısıyla bitiyorsa kesin olarak canlı değildir.
@@ -191,19 +206,26 @@ object M3uParser {
      */
     private fun forEachEntry(lines: Sequence<String>, onEntry: (ParsedEntry) -> Unit) {
         var pending: ParsedEntry? = null
+        var currentExtGrp = ""
         for (line in lines) {
             val trimmed = line.trim()
-            if (pending != null) {
-                // #EXTINF'ten sonra gelen boş olmayan, # ile başlamayan satır URL'dir.
-                if (trimmed.isNotBlank() && !trimmed.startsWith("#")) {
-                    if (pending.url.isEmpty()) pending = pending.copy(url = trimmed)
-                } else if (trimmed.startsWith("#EXTINF")) {
-                    // Ardışık #EXTINF (URL'siz girdi): öncekini kapat, yenisini başlat.
-                    finishEntry(pending)?.let(onEntry)
-                    pending = parseExtinf(trimmed)
+            when {
+                trimmed.startsWith("#EXTGRP:") -> {
+                    currentExtGrp = trimmed.removePrefix("#EXTGRP:").trim()
                 }
-            } else if (trimmed.startsWith("#EXTINF")) {
-                pending = parseExtinf(trimmed)
+                pending != null -> {
+                    // #EXTINF'ten sonra gelen boş olmayan, # ile başlamayan satır URL'dir.
+                    if (trimmed.isNotBlank() && !trimmed.startsWith("#")) {
+                        if (pending.url.isEmpty()) pending = pending.copy(url = trimmed)
+                    } else if (trimmed.startsWith("#EXTINF")) {
+                        // Ardışık #EXTINF (URL'siz girdi): öncekini kapat, yenisini başlat.
+                        finishEntry(pending)?.let(onEntry)
+                        pending = parseExtinf(trimmed, currentExtGrp)
+                    }
+                }
+                trimmed.startsWith("#EXTINF") -> {
+                    pending = parseExtinf(trimmed, currentExtGrp)
+                }
             }
             // URL alındıysa girdiyi kapat (sonraki #EXTINF'te de kapatılır).
             if (pending != null && pending.url.isNotEmpty()) {
@@ -215,15 +237,16 @@ object M3uParser {
     }
 
     /** Bir #EXTINF satırını öznitelikler + başlık ile ayrıştırır. */
-    private fun parseExtinf(line: String): ParsedEntry {
+    private fun parseExtinf(line: String, extGrp: String = ""): ParsedEntry {
         val attrs = parseAttributes(line)
         val name = line.substringAfterLast(",", "").trim()
             .ifBlank { attrs["tvg-name"].orEmpty() }
+        val group = attrs["group-title"].orEmpty().ifBlank { extGrp }
         return ParsedEntry(
             name = name,
             url = "",
             logo = attrs["tvg-logo"].orEmpty(),
-            group = attrs["group-title"].orEmpty(),
+            group = group,
             xmltvId = attrs["tvg-id"].orEmpty(),
             type = classifyEntry(attrs, "", name),
             attrs = attrs
@@ -233,10 +256,15 @@ object M3uParser {
     /** Girdiyi kapatır; URL + isim doluysa sınıflandırılmış haliyle döner (yoksa null). */
     private fun finishEntry(e: ParsedEntry): ParsedEntry? {
         if (e.url.isNotBlank() && e.name.isNotBlank()) {
-            // URL + isim geldiğine göre sınıflandırmayı yeniden yap (dosya uzantısı
-            // ve isimdeki yıl/bölüm desenleri URL'ye bağlı olabilir). attrs artık
-            // gerekmiyor — 400k+ girdide bellekten düşür.
-            return e.copy(type = classifyEntry(e.attrs, e.url, e.name), attrs = emptyMap())
+            // #EXTGRP veya parseExtinf'ten gelen grup adı attrs'ta olmayabilir —
+            // sınıflandırmaya dahil et (aksi halde VOD grupları canlıya düşer).
+            val attrsWithGroup = if (e.group.isNotBlank() && e.attrs["group-title"].isNullOrBlank()) {
+                e.attrs + ("group-title" to e.group)
+            } else e.attrs
+            return e.copy(
+                type = classifyEntry(attrsWithGroup, e.url, e.name),
+                attrs = emptyMap()
+            )
         }
         return null
     }

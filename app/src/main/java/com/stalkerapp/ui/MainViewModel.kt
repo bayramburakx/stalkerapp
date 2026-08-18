@@ -387,7 +387,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         val count = withContext(Dispatchers.IO) {
             runCatching { M3uParser.parseFile(file, source.id).size }.getOrDefault(0)
         }
-        if (count == 0) return L10n.t(store.settings().language, "Kanal bulunamadı (geçerli M3U değil?)")
+        val vodCount = withContext(Dispatchers.IO) {
+            runCatching { M3uParser.parseVodFile(file, source.id).second.size }.getOrDefault(0)
+        }
+        if (count == 0 && vodCount == 0) {
+            return L10n.t(store.settings().language, "Kanal veya VOD bulunamadı (geçerli M3U değil?)")
+        }
         // İçerik dosyada; listedeki kayıt boş content ile güncellenir. Kaynak bu
         // sırada silindiyse saveM3uSource tombstone nedeniyle eklemez.
         saveM3uSource(source.copy(content = ""))
@@ -467,9 +472,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         // Makul boyutlu M3U katalogları disk önbelleğinden okunur (devasa
         // 120k+ listeler önbelleklenmez, her açılışta parse edilir). Okuma
         // diskten + JSON/TSV çözme ana iş parçacığını kilitlemesin (ANR).
-        withContext(Dispatchers.IO) { store.loadExternalVodCache(source.id) }?.let {
-            m3uVodCache[source.id] = it
-            return it
+        withContext(Dispatchers.IO) { store.loadExternalVodCache(source.id) }?.let { cached ->
+            if (cached.second.isNotEmpty()) {
+                m3uVodCache[source.id] = cached
+                return cached
+            }
         }
         // İndirme/okuma + ayrıştırma ana iş parçacığını kilitlemesin — dosyadan
         // akışla, dev String kurulmadan çalışır.
@@ -507,9 +514,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         xtreamVodCache[source.id]?.let { return it }
         // Katalog her açılışta yeniden çekilmesin (68k öğe ≈ 30MB) — disk önbelleği.
         // Okuma diskten + JSON çözme ana iş parçacığını kilitlemesin (ANR).
-        withContext(Dispatchers.IO) { store.loadExternalVodCache(source.id) }?.let {
-            xtreamVodCache[source.id] = it
-            return it
+        withContext(Dispatchers.IO) { store.loadExternalVodCache(source.id) }?.let { cached ->
+            if (cached.second.isNotEmpty()) {
+                xtreamVodCache[source.id] = cached
+                return cached
+            }
         }
         // fetchVodCatalog ağ/HTTP hatasında XtreamApiException fırlatır;
         // ensureExternalVodCatalog bunu yakalayıp Error durumuna düşürür.

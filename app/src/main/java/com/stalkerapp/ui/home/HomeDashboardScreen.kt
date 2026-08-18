@@ -206,7 +206,9 @@ fun HomeDashboardScreen(
         val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
             val id = key.substringBefore(':').toLongOrNull()
             if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
-            else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85)
+            else if (p.positionMs > 0 &&
+                (p.durationMs <= 0 || (p.durationMs > 0 && p.positionMs < p.durationMs * 0.85))
+            )
                 itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
             else null
         }

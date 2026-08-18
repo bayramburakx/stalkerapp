@@ -509,19 +509,22 @@ fun VodDetailScreen(
                 } else {
                     // Dizi: bölüm HER ZAMAN playEpisode ile oynatılır. Kuyruk
                     // (VodQueue) doldurulur ki "Sonraki Bölüm" butonu, binge modu
-                    // ve %85 otomatik "izlendi" işareti çalışsın. (Bölümü film
-                    // yoluyla oynatmak kuyruğu temizliyor ve bunların hepsini kırıyordu.)
-                    val seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
+                    // ve %85 otomatik "izlendi" işareti çalışsın.
+                    var seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 0
+                    var allEps = episodes.orEmpty()
+                    // Bölümler henüz yüklenmediyse (kullanıcı hızlıca Oynat'a bastı)
+                    // sezon listesini şimdi çek — aksi halde devam noktası bulunamaz.
+                    if (allEps.isEmpty() && seasonNum > 0) {
+                        allEps = runCatching {
+                            vm.repository.loadEpisodes(p, it.id, seasonNum)
+                        }.getOrDefault(emptyList())
+                        episodes = allEps
+                    }
                     val progMap = app.store.episodeProgress()
                     val resume = app.store.settings().resumePlayback
-                    // Kaldığı yerden devam:
-                    //  1) Tam bölüm anahtarı eşleşmesi (normal durum),
-                    //  2) eşleşme yoksa dizinin EN GÜNCEL ilerleme kaydı (bazı
-                    //     paneller bölüm numarasını/anahtarı farklı döndürür;
-                    //     "en baştan başlıyor" sorunu buradan kaynaklanıyordu).
-                    val inRange = { p: com.stalkerapp.data.VodProgress ->
-                        p.positionMs > 0 &&
-                            (p.durationMs <= 0 || p.positionMs.toDouble() in (p.durationMs * 0.02)..(p.durationMs * 0.95))
+                    val inRange = { prog: com.stalkerapp.data.VodProgress ->
+                        prog.positionMs > 0 &&
+                            (prog.durationMs <= 0 || prog.positionMs.toDouble() in (prog.durationMs * 0.02)..(prog.durationMs * 0.95))
                     }
                     val target: Episode
                     val startMs: Long
@@ -530,24 +533,40 @@ fun VodDetailScreen(
                         val pr = progMap[episodeKey(target, seasonNum)]
                         startMs = if (resume && pr != null && inRange(pr)) pr.positionMs else 0L
                     } else {
-                        val withProgress = allEps.firstOrNull { ep ->
-                            val pr = progMap[episodeKey(ep, seasonNum)]
-                            pr != null && inRange(pr)
-                        }
-                        if (withProgress != null) {
-                            target = withProgress
-                            startMs = progMap[episodeKey(target, seasonNum)]!!.positionMs
-                        } else {
-                            val latest = progMap.entries
-                                .filter { k -> k.key.startsWith("${it.id}:") }
-                                .maxByOrNull { e -> e.value.lastUpdated }
-                            val latestEp = latest?.let { (key, p) ->
-                                val num = key.substringAfterLast(':').toIntOrNull()
-                                if (resume && inRange(p)) allEps.firstOrNull { ep -> ep.episodeNumber == num } else null
+                        // Önce en güncel ilerleme kaydına bak (sezon/bölüm numarası
+                        // panelden farklı gelse bile doğru bölüm bulunur).
+                        val latest = progMap.entries
+                            .filter { k -> k.key.startsWith("${it.id}:") }
+                            .maxByOrNull { e -> e.value.lastUpdated }
+                        val latestSeason = latest?.key?.split(':')?.getOrNull(1)?.toLongOrNull()
+                        val latestEpNum = latest?.key?.substringAfterLast(':')?.toIntOrNull()
+                        if (latest != null && resume && inRange(latest.value) &&
+                            latestSeason != null && latestEpNum != null
+                        ) {
+                            if (latestSeason != seasonNum || allEps.none { ep -> ep.episodeNumber == latestEpNum }) {
+                                seasonNum = latestSeason
+                                selectedSeason = latestSeason
+                                allEps = runCatching {
+                                    vm.repository.loadEpisodes(p, it.id, latestSeason)
+                                }.getOrDefault(emptyList())
+                                episodes = allEps
                             }
-                            if (latestEp != null) {
-                                target = latestEp
-                                startMs = latest!!.value.positionMs
+                            val fromProgress = allEps.firstOrNull { ep -> ep.episodeNumber == latestEpNum }
+                            if (fromProgress != null) {
+                                target = fromProgress
+                                startMs = latest.value.positionMs
+                            } else {
+                                target = firstEpisodeToPlay(allEps, seasonNum)
+                                startMs = 0L
+                            }
+                        } else {
+                            val withProgress = allEps.firstOrNull { ep ->
+                                val pr = progMap[episodeKey(ep, seasonNum)]
+                                pr != null && inRange(pr)
+                            }
+                            if (withProgress != null) {
+                                target = withProgress
+                                startMs = progMap[episodeKey(target, seasonNum)]!!.positionMs
                             } else {
                                 target = firstEpisodeToPlay(allEps, seasonNum)
                                 startMs = 0L
