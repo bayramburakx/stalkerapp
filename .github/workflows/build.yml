@@ -49,12 +49,12 @@ jobs:
       - name: Build Release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew clean assembleRelease --no-daemon --stacktrace
 
       - name: Capture build logs on failure
         if: failure()
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace > build_error.log 2>&1 || true
+          ./gradlew clean assembleRelease --no-daemon --stacktrace > build_error.log 2>&1 || true
         continue-on-error: true
 
       - name: Upload build error logs
