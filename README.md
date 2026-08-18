@@ -72,3 +72,29 @@ Local builds need the release keystore at `keystore/release.p12` and `app/google
 ## Legal notice
 
 This app is intended for use only with IPTV providers you are subscribed to. Content ownership belongs to your provider.
+## Planned Features
+
+- **Harici altyazı (.srt/.vtt)** — Portal altyazısı yoksa kullanıcı dosya ekleyebilir.
+- **Intro atlama (skip intro)** — TMDB + bölüm süresi ile otomatik intro tespiti.
+- **AFR (Auto Frame Rate)** — TV’lerde judder azaltma tam entegre edilebilir (Afr.kt).
+- **Favori kanal sıralaması** — Sürükle-bırak ile özel kanal numaralandırma.
+- **Gelişmiş catch-up / timeshift** — Panel bazlı utc/lutc parametreleri, takvimden geçmiş gün seçimi.
+- **Offline indirme** — Film/bölümü Wi-Fi’de indirip uçakta izleme.
+- **Gelişmiş filtreler** — Yıl, IMDB puanı, dil, “yeni eklenenler”, “en çok izlenen”.
+- **İçerik öneri motoru** — TMDB + izleme geçmişine göre kişiselleştirilmiş öneriler.
+- **Android TV & uzaktan kumanda**
+  - 10-foot UI — büyük poster grid, focus navigation.
+  - TV ana ekran satırları (Android TV Home Channels).
+  - Kanal önizleme — odaklanınca mini canlı önizleme.
+  - Numara tuşu ile kanal — “101” yaz → kanal aç.
+  - HDMI-CEC — TV kumandası ile ses/kanal kontrolü.
+- **Çoklu cihaz “devam et”** — Telefonda bırak, TV’de devam et.
+- **Akıllı önbellek yönetimi** — VOD katalog boyutuna göre disk kotası.
+  - Delta senkron — tüm kataloğu değil, sadece değişenleri çek.
+  - Kaynak sağlık monitörü — “Bu kaynak 3 gündür yanıt vermiyor” uyarısı.
+  - Otomatik yedek kaynak — bir kanal düşerse alternatif URL dene.
+- **VPN uyumluluk modu** — DNS/redirect sorunları için gelişmiş ağ ayarları.
+  - Proxy / DNS override — Sağlayıcı engeli için DoH/DoT veya SOCKS ayarı.
+  - Stalker MAC yönetimi — Birden fazla MAC profili, hızlı geçiş.
+- **Sezon/bölüm indirme kuyruğu** — Tüm sezonu sırayla indir.
+  - Altyazı indirme — OpenSubtitles entegrasyonu.
