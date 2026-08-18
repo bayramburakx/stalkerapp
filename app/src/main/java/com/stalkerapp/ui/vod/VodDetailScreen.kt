@@ -382,7 +382,7 @@ fun VodDetailScreen(
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
     val isFavorite = remember(favVods, it) { favVods.any { f -> f.id == it.id } }
     val watchLater by vm.watchLater.collectAsStateWithLifecycle()
-    var downloadingEpIds by remember { mutableStateOf(setOf<Long>()) }
+    val allDownloads by com.stalkerapp.data.OfflineDownloadManager.downloads.collectAsStateWithLifecycle()
     // Yıl: panel yılı önce; boşsa (Xtream dizileri) TMDB yayın yılı kullanılır.
     val yearText = (it.year.take(4).ifBlank { tmdbYear })
         .takeIf { y -> y.isNotBlank() && y.all(Char::isDigit) }.orEmpty()
@@ -745,21 +745,37 @@ fun VodDetailScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                            var isMovieDownloading by remember { mutableStateOf(false) }
                             if (!isSeries) {
+                                val movieEntryId = "movie_${it.id}"
+                                val movieDl = allDownloads.find { d -> d.id == movieEntryId || d.title == it.name }
+                                val isCompleted = movieDl?.state == "completed"
+                                val isDownloading = movieDl?.state == "downloading" || movieDl?.state == "queued"
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
                                         .clip(CircleShape)
-                                        .background(if (isMovieDownloading) Color(0xFF2E7D32).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.20f))
+                                        .background(
+                                            when {
+                                                isCompleted -> Color(0xFF2E7D32).copy(alpha = 0.9f)
+                                                isDownloading -> Color(0xFF1565C0).copy(alpha = 0.9f)
+                                                else -> Color.White.copy(alpha = 0.20f)
+                                            }
+                                        )
                                         .clickable {
-                                            isMovieDownloading = true
+                                            if (isCompleted) {
+                                                vm.showMessage("✓ " + str(lang, "Bu film zaten indirildi"))
+                                                return@clickable
+                                            }
+                                            if (isDownloading) {
+                                                vm.showMessage(str(lang, "İndirme devam ediyor..."))
+                                                return@clickable
+                                            }
                                             scope.launch {
                                                 try {
                                                     val url = vm.repository.vodStreamUrl(it, profile, null)
                                                     com.stalkerapp.data.OfflineDownloadManager.enqueue(
                                                         com.stalkerapp.data.OfflineDownloadManager.DownloadEntry(
-                                                            id = url,
+                                                            id = movieEntryId,
                                                             title = it.name,
                                                             poster = it.poster,
                                                             url = url
@@ -767,7 +783,6 @@ fun VodDetailScreen(
                                                     )
                                                     vm.showMessage("✓ " + str(lang, "İndirme sıraya eklendi: ") + it.name)
                                                 } catch (e: Exception) {
-                                                    isMovieDownloading = false
                                                     vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
                                                 }
                                             }
@@ -775,7 +790,7 @@ fun VodDetailScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = if (isMovieDownloading) Icons.Default.Check else Icons.Default.Download,
+                                        imageVector = if (isCompleted) Icons.Default.Check else Icons.Default.Download,
                                         contentDescription = str(lang, "İndir"),
                                         tint = Color.White,
                                         modifier = Modifier.size(24.dp)
@@ -1103,16 +1118,32 @@ fun VodDetailScreen(
                                                     )
                                                 }
                                                 // İndirme rozeti (sağ alt).
-                                                val isEpDownloading = ep.id in downloadingEpIds
+                                                val epEntryId = "ep_${it.id}_${seasonNum}_${ep.episodeNumber}"
+                                                val epDl = allDownloads.find { d -> d.id == epEntryId }
+                                                val isEpCompleted = epDl?.state == "completed"
+                                                val isEpDownloading = epDl?.state == "downloading" || epDl?.state == "queued"
                                                 Box(
                                                     modifier = Modifier
                                                         .align(Alignment.BottomEnd)
                                                         .padding(6.dp)
                                                         .size(24.dp)
                                                         .clip(CircleShape)
-                                                        .background(if (isEpDownloading) Color(0xFF2E7D32) else Color.Black.copy(alpha = 0.65f))
+                                                        .background(
+                                                            when {
+                                                                isEpCompleted -> Color(0xFF2E7D32)
+                                                                isEpDownloading -> Color(0xFF1565C0)
+                                                                else -> Color.Black.copy(alpha = 0.65f)
+                                                            }
+                                                        )
                                                         .clickable {
-                                                            downloadingEpIds = downloadingEpIds + ep.id
+                                                            if (isEpCompleted) {
+                                                                vm.showMessage("✓ " + str(lang, "Bu bölüm zaten indirildi"))
+                                                                return@clickable
+                                                            }
+                                                            if (isEpDownloading) {
+                                                                vm.showMessage(str(lang, "Bölüm indiriliyor..."))
+                                                                return@clickable
+                                                            }
                                                             scope.launch {
                                                                 try {
                                                                     val eps = episodes.orEmpty()
@@ -1120,8 +1151,8 @@ fun VodDetailScreen(
                                                                     val url = vm.repository.vodStreamUrl(it, profile, ep)
                                                                     com.stalkerapp.data.OfflineDownloadManager.enqueue(
                                                                         com.stalkerapp.data.OfflineDownloadManager.DownloadEntry(
-                                                                            id = url,
-                                                                            title = it.name,
+                                                                            id = epEntryId,
+                                                                            title = "${it.name} - S${seasonNum}B${ep.episodeNumber}",
                                                                             poster = it.poster,
                                                                             url = url,
                                                                             isSeries = true,
@@ -1130,7 +1161,6 @@ fun VodDetailScreen(
                                                                     )
                                                                     vm.showMessage("✓ " + str(lang, "Bölüm indirme sırasına eklendi"))
                                                                 } catch (e: Exception) {
-                                                                    downloadingEpIds = downloadingEpIds - ep.id
                                                                     vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
                                                                 }
                                                             }
@@ -1138,7 +1168,7 @@ fun VodDetailScreen(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Icon(
-                                                        imageVector = if (isEpDownloading) Icons.Default.Check else Icons.Default.Download,
+                                                        imageVector = if (isEpCompleted) Icons.Default.Check else Icons.Default.Download,
                                                         contentDescription = str(lang, "İndir"),
                                                         tint = Color.White,
                                                         modifier = Modifier.size(15.dp)

@@ -516,6 +516,8 @@ object PlaybackManager {
         playInternal(url, title, artwork, episodeLabel, isVod = true)
     }
 
+    @Volatile private var pendingStartPositionMs: Long = 0L
+
     private fun playInternal(
         url: String,
         title: String,
@@ -524,6 +526,7 @@ object PlaybackManager {
         isVod: Boolean,
         startPositionMs: Long = 0
     ) {
+        pendingStartPositionMs = startPositionMs
         setError(null)
         // Varsayılan oynatıcı "Harici" ise içerik sistem oynatıcısında açılır
         // (Ayarlar → Oynatıcı → Varsayılan Oynatıcı). PlayerScreen bu bayrağı
@@ -1135,6 +1138,13 @@ object PlaybackManager {
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 notifyStateChanged()
+                if (playbackState == Player.STATE_READY && pendingStartPositionMs > 0) {
+                    val target = pendingStartPositionMs
+                    pendingStartPositionMs = 0L
+                    if (target > 1000L && kotlin.math.abs(p.currentPosition - target) > 1500L) {
+                        p.seekTo(target)
+                    }
+                }
                 when (playbackState) {
                     Player.STATE_ENDED -> {
                         if (vodPlayback) {
@@ -1310,12 +1320,13 @@ object PlaybackManager {
 
     /** Yedek URL'yi kısa bir bekleyişten sonra yeniden oynatmayı dener. */
     private fun retrySeriesWith(url: String) {
+        val resumePos = if (pendingStartPositionMs > 0) pendingStartPositionMs else (activePlayer?.currentPosition ?: 0L)
         setError(null)
         notifyStateChanged()
         scope.launch {
             delay(800)
             if (stopping) return@launch
-            playInternal(url, currentTitle, currentArtwork, currentSubtitle, isVod = true)
+            playInternal(url, currentTitle, currentArtwork, currentSubtitle, isVod = true, startPositionMs = resumePos)
         }
     }
 

@@ -44,7 +44,8 @@ object ExternalVod {
 
     /** Dizi olarak sayılacak grup/kategori başlığı anahtar kelimeleri. */
     val SERIES_KEYWORDS = listOf(
-        "dizi", "diziler", "series", "serien", "seriale", "serial", "tv show", "tv shows", "tv series"
+        "dizi", "diziler", "series", "serien", "seriale", "serial", "serials", "tv show", "tv shows", "tv series",
+        "sezon", "season", "netflix", "exxen", "blutv", "gain", "disney", "prime video", "apple tv", "hbo", "tod", "tabii", "anime"
     )
 }
 
@@ -95,7 +96,10 @@ object M3uParser {
     /** Bir M3U girdisinin türü: canlı kanal, film veya dizi. */
     private enum class M3uEntryType { LIVE, MOVIE, SERIES }
 
-    /** Film/VOD dosya uzantıları: böyle bir URL'ye sahip girdi canlı kanal değildir. */
+    /**
+     * VOD dosya uzantıları: URL bu uzantılardan biriyle bitiyorsa içerik
+     * kesin olarak canlı yayın değildir (film/dizi).
+     */
     private val VOD_FILE_EXTENSIONS = listOf(
         ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm",
         ".m4v", ".mpg", ".mpeg", ".3gp", ".vob", ".divx", ".ogv"
@@ -104,7 +108,10 @@ object M3uParser {
     /** Film/VOD grup anahtar kelimeleri: grup adı bunlardan birini içeriyorsa film sayılır. */
     private val MOVIE_KEYWORDS = listOf(
         "film", "filmler", "movie", "movies", "sinema", "cinema", "kino", "vod", "pelicula", "filme",
-        "video club", "filmizle", "filmler hd", "turk film", "türk film", "on demand", "video on demand"
+        "video club", "filmizle", "filmler hd", "turk film", "türk film", "on demand", "video on demand",
+        "action", "aksiyon", "comedy", "komedi", "horror", "korku", "drama", "gerilim", "thriller",
+        "bilim kurgu", "sci-fi", "romantik", "animasyon", "belgesel", "documentary", "box office", "vizyon",
+        "4k", "uhd", "1080p", "hevc"
     )
 
     /**
@@ -133,15 +140,11 @@ object M3uParser {
     /** VOD grubunun dizi mi film mi olduğunu belirleyen anahtarlar. */
     private val VOD_SERIES_GROUP_KEYWORDS = listOf(
         "serie", "dizi", "anime", "netflix", "disney", "hbo", "amazon", "cartoon",
-        "animation", "animasyon"
+        "animation", "animasyon", "exxen", "blutv", "gain", "tod", "tabii"
     )
 
     /**
-     * Girdiyi canlı/film/dizi olarak sınıflandırır. Öncelik: açık `tvg-type`
-     * özniteliği, ardından isimdeki dizi bölümü/yıl desenleri, sonra URL dosya
-     * uzantısı ve grup anahtar kelimeleri. İsim sinyalleri önemlidir: token bazlı
-     * URL kullanan sağlayıcılarda (dosya uzantısı yok) film/dizi girdileri isimden
-     * ayırt edilir — aksi halde hepsi canlı TV'ye düşerdi.
+     * Girdiyi canlı/film/dizi olarak sınıflandırır.
      */
     private fun classifyEntry(attrs: Map<String, String>, url: String, name: String = ""): M3uEntryType {
         val typeAttr = attrs["tvg-type"]?.lowercase()?.trim().orEmpty()
@@ -209,9 +212,6 @@ object M3uParser {
 
     /**
      * #EXTINF bloklarını tür etiketiyle birlikte satır satır (lazy) çözer.
-     * Yüzlerce MB'lık listelerde `split("\n")` 400k+ String üretip bellek
-     * taşmasına yol açabiliyordu; bu sürüm her girdiyi [onEntry] ile anında
-     * iletir ve tüm girdileri bellekte tutmaz.
      */
     private fun forEachEntry(lines: Sequence<String>, onEntry: (ParsedEntry) -> Unit) {
         var pending: ParsedEntry? = null
@@ -249,8 +249,9 @@ object M3uParser {
     private fun parseExtinf(line: String, extGrp: String = ""): ParsedEntry {
         val attrs = parseAttributes(line)
         val name = line.substringAfterLast(",", "").trim()
-            .ifBlank { attrs["tvg-name"].orEmpty() }
-        val group = attrs["group-title"].orEmpty().ifBlank { extGrp }
+            .ifBlank { attrs["tvg-name"]?.trim().orEmpty() }
+            .ifBlank { attrs["name"]?.trim().orEmpty() }
+        val group = attrs["group-title"]?.trim().orEmpty().ifBlank { extGrp }
         return ParsedEntry(
             name = name,
             url = "",
@@ -264,14 +265,23 @@ object M3uParser {
 
     /** Girdiyi kapatır; URL + isim doluysa sınıflandırılmış haliyle döner (yoksa null). */
     private fun finishEntry(e: ParsedEntry): ParsedEntry? {
-        if (e.url.isNotBlank() && e.name.isNotBlank()) {
+        if (e.url.isNotBlank()) {
+            val validName = e.name.ifBlank {
+                e.attrs["tvg-name"]?.trim().orEmpty()
+                    .ifBlank { e.attrs["name"]?.trim().orEmpty() }
+                    .ifBlank {
+                        val fn = e.url.substringAfterLast('/').substringBefore('?')
+                        if (fn.isNotBlank()) fn.substringBeforeLast('.') else "Video"
+                    }
+            }
             // #EXTGRP veya parseExtinf'ten gelen grup adı attrs'ta olmayabilir —
             // sınıflandırmaya dahil et (aksi halde VOD grupları canlıya düşer).
             val attrsWithGroup = if (e.group.isNotBlank() && e.attrs["group-title"].isNullOrBlank()) {
                 e.attrs + ("group-title" to e.group)
             } else e.attrs
             return e.copy(
-                type = classifyEntry(attrsWithGroup, e.url, e.name),
+                name = validName,
+                type = classifyEntry(attrsWithGroup, e.url, validName),
                 attrs = emptyMap()
             )
         }

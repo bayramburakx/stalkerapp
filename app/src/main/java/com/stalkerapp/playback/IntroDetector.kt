@@ -36,11 +36,12 @@ object IntroDetector {
 
     /**
      * Belirli bir bölüm için intro aralığını döner.
+     * TMDB bağlı değilse veya dizi için intro verisi yoksa null döner (intro butonu gösterilmez).
      *
-     * @param tmdbId TMDB dizi ID'si (0 ise akıllı varsayılan kullanılır)
+     * @param tmdbId TMDB dizi ID'si
      * @param season Sezon numarası
      * @param episode Bölüm numarası
-     * @param apiKey TMDB API anahtarı (isteğe bağlı)
+     * @param apiKey TMDB API anahtarı
      * @param durationMs Oynatıcıdan alınan bölüm süresi (ms)
      */
     suspend fun detect(
@@ -49,27 +50,19 @@ object IntroDetector {
         episode: Int,
         apiKey: String,
         durationMs: Long
-    ): IntroRange {
-        val effectiveDuration = if (durationMs > 0) durationMs else 25 * 60_000L
-        val defaultIntroEnd = minOf((effectiveDuration * 0.15).toLong(), 90_000L).coerceAtLeast(60_000L)
-        val defaultOutroStart = if (effectiveDuration > 120_000L) (effectiveDuration * 0.94).toLong() else -1L
-
-        val fallback = IntroRange(
-            startMs = 0L,
-            endMs = defaultIntroEnd,
-            outroStartMs = defaultOutroStart
-        )
-
+    ): IntroRange? {
         if (apiKey.isBlank() || tmdbId <= 0L || season <= 0 || episode <= 0) {
-            return fallback
+            return null
         }
 
         val cacheKey = "$tmdbId:$season:$episode"
-        cache[cacheKey]?.let { return it ?: fallback }
+        if (cache.containsKey(cacheKey)) {
+            return cache[cacheKey]
+        }
 
         val result = runCatching {
-            fetchIntroRange(tmdbId, season, episode, apiKey, effectiveDuration)
-        }.getOrNull() ?: fallback
+            fetchIntroRange(tmdbId, season, episode, apiKey, durationMs)
+        }.getOrNull()
 
         cache[cacheKey] = result
         return result

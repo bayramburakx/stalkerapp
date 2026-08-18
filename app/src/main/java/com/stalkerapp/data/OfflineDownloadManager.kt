@@ -91,7 +91,7 @@ object OfflineDownloadManager {
             dataSourceFactory,
             Executor(Runnable::run)
         ).apply {
-            requirements = Requirements(Requirements.NETWORK)
+            requirements = Requirements(0)
             resumeDownloads()
         }
 
@@ -116,12 +116,20 @@ object OfflineDownloadManager {
         saveMeta(list)
 
         val request = DownloadRequest.Builder(entry.id, Uri.parse(entry.url)).build()
-        downloadManager.addDownload(request)
+        if (::downloadManager.isInitialized) {
+            downloadManager.addDownload(request)
+            downloadManager.resumeDownloads()
+        }
         runCatching {
             DownloadService.sendAddDownload(
                 context,
                 AppDownloadService::class.java,
                 request,
+                false
+            )
+            DownloadService.sendResumeDownloads(
+                context,
+                AppDownloadService::class.java,
                 false
             )
         }

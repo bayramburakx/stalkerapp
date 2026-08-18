@@ -14,6 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,6 +61,9 @@ private val L10nLocal: Map<String, String> = mapOf(
     "Kütüphane yükleniyor…" to "Loading your library…",
     "Kütüphanen henüz boş.\nİzlediğin ve favorilediğin içerikler burada görünür." to "Your library is still empty.\nContent you watch and favorite will show up here.",
     "Favori Kanallar" to "Favorite Channels",
+    "Sırala" to "Reorder",
+    "Tamam" to "Done",
+    "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir" to "Change favorite channel order using up/down buttons",
     "Bu listede henüz içerik yok. Bir içeriğin detayından listeye ekleyebilirsin." to "This list is still empty. You can add content to it from the item's details.",
     "İzlemeye Devam" to "Keep Watching",
     "devam et" to "continue",
@@ -105,6 +117,16 @@ fun LibraryScreen(
 
     // Favori canlı TV kanalları (tam Channel nesnesi olarak saklanır).
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
+    var isReorderingChannels by remember { mutableStateOf(false) }
+
+    fun moveChannel(from: Int, to: Int) {
+        if (from == to || from !in favChannels.indices || to !in favChannels.indices) return
+        val list = favChannels.toMutableList()
+        val moved = list.removeAt(from)
+        list.add(to, moved)
+        vm.store.saveFavoriteChannels(list)
+        vm.refreshFlows()
+    }
 
     // Katalog hazırsa id -> öğe haritası (listelerdeki öğeleri zenginleştirmek için).
     val byId = remember(catalog.allItems) {
@@ -212,21 +234,80 @@ fun LibraryScreen(
                 // Favori kanallar her filtrenin üstünde sabit gösterilir
                 // (Kütüphanem'de canlı TV favorileri de görünmeli).
                 favChannels.isNotEmpty() && activeList == null && filter == LibFilter.ALL -> {
-                    item { SectionHeader(str(lang, "Favori Kanallar")) }
                     item {
-                        favChannels.forEach { ch ->
-                            ChannelRow(
-                                channel = ch,
-                                baseUrl = profile?.baseUrl.orEmpty(),
-                                isFavorite = true,
-                                onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
-                                onClick = { c ->
-                                    PlaybackManager.playChannel(favChannels, favChannels.indexOfFirst { it.id == c.id }.coerceAtLeast(0), profile)
-                                    onOpenPlayer()
-                                }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                str(lang, "Favori Kanallar") + " (${favChannels.size})",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
                             )
-                            HorizontalDivider()
+                            GlassChip(
+                                selected = isReorderingChannels,
+                                onClick = { isReorderingChannels = !isReorderingChannels },
+                                label = if (isReorderingChannels) str(lang, "Tamam") else str(lang, "Sırala")
+                            )
                         }
+                    }
+                    if (isReorderingChannels) {
+                        item {
+                            Text(
+                                str(lang, "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    itemsIndexed(favChannels, key = { _, ch -> ch.id }) { index, ch ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (isReorderingChannels) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f) else Color.Transparent),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isReorderingChannels) {
+                                Column(
+                                    modifier = Modifier.padding(start = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    IconButton(
+                                        onClick = { moveChannel(index, index - 1) },
+                                        enabled = index > 0,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = if (index > 0) MaterialTheme.colorScheme.primary else Color.Gray)
+                                    }
+                                    IconButton(
+                                        onClick = { moveChannel(index, index + 1) },
+                                        enabled = index < favChannels.size - 1,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = if (index < favChannels.size - 1) MaterialTheme.colorScheme.primary else Color.Gray)
+                                    }
+                                }
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                ChannelRow(
+                                    channel = ch,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isFavorite = true,
+                                    onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                                    onClick = { c ->
+                                        if (!isReorderingChannels) {
+                                            PlaybackManager.playChannel(favChannels, favChannels.indexOfFirst { it.id == c.id }.coerceAtLeast(0), profile)
+                                            onOpenPlayer()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        HorizontalDivider()
                     }
                 }
                 activeList != null -> {
@@ -316,21 +397,80 @@ fun LibraryScreen(
                             item { PosterRow(favResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                         }
                         if (favChannels.isNotEmpty()) {
-                            item { SectionHeader(str(lang, "Favori Kanallar")) }
                             item {
-                                favChannels.forEach { ch ->
-                                    ChannelRow(
-                                        channel = ch,
-                                        baseUrl = profile?.baseUrl.orEmpty(),
-                                        isFavorite = true,
-                                        onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
-                                        onClick = { c ->
-                                            PlaybackManager.playChannel(favChannels, favChannels.indexOfFirst { it.id == c.id }.coerceAtLeast(0), profile)
-                                            onOpenPlayer()
-                                        }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        str(lang, "Favori Kanallar") + " (${favChannels.size})",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
                                     )
-                                    HorizontalDivider()
+                                    GlassChip(
+                                        selected = isReorderingChannels,
+                                        onClick = { isReorderingChannels = !isReorderingChannels },
+                                        label = if (isReorderingChannels) str(lang, "Tamam") else str(lang, "Sırala")
+                                    )
                                 }
+                            }
+                            if (isReorderingChannels) {
+                                item {
+                                    Text(
+                                        str(lang, "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            itemsIndexed(favChannels, key = { _, ch -> ch.id }) { index, ch ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (isReorderingChannels) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f) else Color.Transparent),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isReorderingChannels) {
+                                        Column(
+                                            modifier = Modifier.padding(start = 4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            IconButton(
+                                                onClick = { moveChannel(index, index - 1) },
+                                                enabled = index > 0,
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = if (index > 0) MaterialTheme.colorScheme.primary else Color.Gray)
+                                            }
+                                            IconButton(
+                                                onClick = { moveChannel(index, index + 1) },
+                                                enabled = index < favChannels.size - 1,
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = if (index < favChannels.size - 1) MaterialTheme.colorScheme.primary else Color.Gray)
+                                            }
+                                        }
+                                    }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        ChannelRow(
+                                            channel = ch,
+                                            baseUrl = profile?.baseUrl.orEmpty(),
+                                            isFavorite = true,
+                                            onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                                            onClick = { c ->
+                                                if (!isReorderingChannels) {
+                                                    PlaybackManager.playChannel(favChannels, favChannels.indexOfFirst { it.id == c.id }.coerceAtLeast(0), profile)
+                                                    onOpenPlayer()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                HorizontalDivider()
                             }
                         }
                     }

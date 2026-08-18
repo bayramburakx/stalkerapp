@@ -138,9 +138,10 @@ fun VodScreen(
             (p != null && p.durationMs > 0 && p.positionMs >= p.durationMs * 0.85)
     }
 
-    LaunchedEffect(profile) {
-        val kind = vm.enabledSourceKind()
-        if (kind == "m3u" || kind == "xtream") {
+    val activeKind = vm.enabledSourceKind()
+    val activeSourceId = vm.activeSourceId()
+    LaunchedEffect(profile, activeKind, activeSourceId) {
+        if (activeKind == "m3u" || activeKind == "xtream") {
             vm.ensureExternalVodCatalog()
         } else {
             profile?.let { vm.syncVodIfNeeded(it) }
@@ -170,12 +171,16 @@ fun VodScreen(
 
     val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, filterState, settings.hiddenCategories, adultUnlocked) {
         val q = query.trim()
-        var list = when {
-            selectedCategory != 0L -> catalog.allItems.filter { it.categoryId == selectedCategory }
-            filterIsSeries == true -> catalog.allItems.filter { catalog.isSeriesItem(it) }
-            filterIsSeries == false -> catalog.allItems.filter { !catalog.isSeriesItem(it) }
-            else -> catalog.allItems
-        }.filter { keepItem(it) }
+        var list = catalog.allItems
+        if (filterIsSeries == true) {
+            list = list.filter { catalog.isSeriesItem(it) }
+        } else if (filterIsSeries == false) {
+            list = list.filter { !catalog.isSeriesItem(it) }
+        }
+        if (selectedCategory != 0L) {
+            list = list.filter { it.categoryId == selectedCategory }
+        }
+        list = list.filter { keepItem(it) }
 
         if (q.isNotBlank()) {
             list = list.filter {

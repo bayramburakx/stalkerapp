@@ -1078,9 +1078,13 @@ class PortalRepository(
         }
 
         var sawItems = false
-        for (param in listOf("page", "p")) {
-            val p1 = requestIds(1, 5000, param)
-            val p2 = requestIds(2, 5000, param)
+        for (param in listOf("p", "page")) {
+            var p1 = requestIds(1, 5000, param)
+            var p2 = requestIds(2, 5000, param)
+            if (p1.isEmpty()) {
+                p1 = requestIds(1, 0, param)
+                p2 = requestIds(2, 0, param)
+            }
             if (p1.isNotEmpty()) sawItems = true
             // A param is the pagination key only if page 2 returns DIFFERENT
             // items than page 1 (this portal ignores "page" entirely and pages
@@ -1189,9 +1193,16 @@ class PortalRepository(
         var dupStreak = 0
         var pageSize = 0
         var maxPages = 2000
+        val catParam = probeVodCategoryParam(profile)
+        val queryParams = mapOf(
+            catParam to realCat.toString(),
+            "category" to realCat.toString(),
+            "genre" to realCat.toString(),
+            "category_id" to realCat.toString()
+        )
         while (guard < maxPages) {
             guard++
-            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(probeVodCategoryParam(profile) to realCat.toString()), series = true)
+            val (list, total) = fetchVodPage(profile, page, perPage, queryParams, series = true)
             if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
@@ -1240,6 +1251,8 @@ class PortalRepository(
         val catParam = probeVodCategoryParam(profile)
         val body = buildMap {
             put(pageParam, page.toString())
+            put("page", page.toString())
+            put("p", page.toString())
             if (categoryId > 0) put(catParam, categoryId.toString())
             if (search.isNotBlank()) put("search", search.trim())
         }
@@ -1309,27 +1322,6 @@ class PortalRepository(
 
     /**
      * Loads the COMPLETE VOD catalog in the background, fast and complete.
-     *
-     * Strategy (matches how clients like Tivimate enumerate the whole library):
-     *  1) A full "all items" pass is attempted first. For "all", the `category`
-     *     parameter is OMITTED (passing `category=0` makes the portal treat it as
-     *     a real — usually empty — category, which is what caused only ~14 items
-     *     to be returned). Paging uses the portal-reported `total` to know when
-     *     the whole library is exhausted. This is what makes the real total
-     *     (e.g. 81k) reachable and keeps the request count minimal.
-     *  2) The known categories are fetched first so we can derive `isSeries` from
-     *     any category whose title contains "dizi". Series items get their category
-     *     id stamped (so filtering works) and `isSeries` set.
-     *  3) If the all-pass under-delivers (e.g. the portal ignores `page` and keeps
-     *     returning the same first page), we fall back to iterating EVERY category,
-     *     which is the reliable way to enumerate the full library on such portals.
-     *     Otherwise we only top up the "dizi" categories (cheap) to guarantee
-     *     series coverage — this is the key speed fix versus paging ALL categories
-     *     unconditionally.
-     *
-     * Per-unit page accounting (not the global accumulator) decides when a unit is
-     * exhausted, so we never stop after the first page. Items stream in via
-     * [onItem] (live display) and [onProgress].
      */
     suspend fun syncVodCatalog(
         profile: Profile,
@@ -1354,13 +1346,19 @@ class PortalRepository(
             var guard = 0
             var pageSize = 0
             var maxPages = 2000
+            val catParam = probeVodCategoryParam(profile)
+            val params = if (catId != 0L) mapOf(
+                catParam to catId.toString(),
+                "category" to catId.toString(),
+                "genre" to catId.toString()
+            ) else emptyMap()
             while (guard < maxPages) {
                 guard++
                 val (list, total) = fetchVodPage(
                     profile,
                     page,
                     pp,
-                    if (catId != 0L) mapOf(probeVodCategoryParam(profile) to catId.toString()) else emptyMap()
+                    params
                 )
                 if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
                 if (unitTotal == 0 && total > 0) {
@@ -1370,9 +1368,6 @@ class PortalRepository(
                 }
                 if (unitTotal > 0 && pageSize > 0) {
                     val needed = (unitTotal / pageSize) + 20
-                    // Same tiny-page guard as [fetchAllVod]: portals that ignore
-                    // `per_page` need thousands of pages, so cap the warm-up and
-                    // let the caller fall back to parallel per-category paging.
                     maxPages = if (pageSize <= 30 && needed > 150) 150 else minOf(needed, 2000)
                 }
                 if (list.isEmpty()) {
@@ -1412,11 +1407,8 @@ class PortalRepository(
         // Decide whether the all-pass actually enumerated the library.
         val underDelivered = all.size < 200 || (allPassTotal > 0 && allPassTotal > all.size + 500)
         if (underDelivered) {
-            // Reliable fallback: page every known category (skipping the "All"
-            // pseudo-category, which is just the unfiltered list again).
             cats.filter { it.id != 0L }.forEach { runCatching { pageUnit(it.id, perPage) } }
         } else {
-            // Top up series coverage cheaply.
             cats.filter { it.id in seriesCatIds }.forEach { runCatching { pageUnit(it.id, perPage) } }
         }
         return all.values.toList()
@@ -1429,6 +1421,8 @@ class PortalRepository(
         pageParam: String = "page"
     ): Map<String, String> = buildMap {
         put(pageParam, page.toString())
+        put("page", page.toString())
+        put("p", page.toString())
         params.forEach { (k, v) -> put(k, v) }
         if (perPage > 0) put("per_page", perPage.toString())
     }
