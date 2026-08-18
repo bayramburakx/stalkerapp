@@ -292,11 +292,10 @@ fun EpgGuideScreen(
                     onPlayCatchup = { ch, p ->
                         // Geçmiş yayın (catch-up): kanal akışını utc/lutc parametreleriyle
                         // oynat. Kaynak türüne göre doğru formatı CatchupHelper üretir.
+                        val liveUrl = vm.repository.channelStreamUrl(ch, profile)
                         val url = runCatching {
                             com.stalkerapp.data.CatchupHelper.buildStalkerCatchupUrl(
-                                vm.repository.channelStreamUrl(ch, profile),
-                                p.startTs,
-                                p.stopTs
+                                liveUrl, p.startTs, p.stopTs
                             )
                         }.getOrNull()
                         if (!url.isNullOrBlank()) {
