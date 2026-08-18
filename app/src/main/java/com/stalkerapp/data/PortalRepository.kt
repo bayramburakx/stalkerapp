@@ -53,9 +53,13 @@ sealed class PortalStatus {
 
 class PortalRepository(
     private val store: Store,
-    private val client: StalkerClient
+    private val client: StalkerClient,
+    private val cacheManager: CacheManager? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Akıllı önbellek: bağlantı kurulduktan sonra çalışan temel URL hatırlanır.
+    private val workingBase = mutableMapOf<String, String>()
 
     private fun l10n(text: String): String = L10n.t(store.settings().language, text)
 
@@ -280,7 +284,22 @@ class PortalRepository(
     suspend fun connect(portal: Portal, activate: Boolean = true): Profile {
         _status.value = PortalStatus.Connecting(portal.name)
         return try {
-            val base = StalkerClient.normalizeBase(portal.url)
+            // Yedek URL'ler tanımlanmışsa (Akıllı Önbellek) çalışan kaynak seçilir.
+            val base = run {
+                val normalized = StalkerClient.normalizeBase(portal.url)
+                if (portal.alternativeUrls.isNotEmpty() && cacheManager != null) {
+                    val cached = workingBase[portal.id]
+                    if (cached != null) cached
+                    else {
+                        val w = cacheManager.resolveWorkingUrl(
+                            normalized,
+                            portal.alternativeUrls.map { StalkerClient.normalizeBase(it) }
+                        ) ?: normalized
+                        workingBase[portal.id] = w
+                        w
+                    }
+                } else normalized
+            }
             val mac = portal.mac.ifEmpty { StalkerClient.generateMac() }
             client.setDevice(mac)
             val handshake = client.request(
@@ -351,6 +370,7 @@ class PortalRepository(
             _status.value = PortalStatus.Connected(profile)
             profile
         } catch (e: Exception) {
+            cacheManager?.checkSourceHealth(portal.id, portal.url, portal.name)
             _status.value = PortalStatus.Error(e.message ?: L10n.t(store.settings().language, "Bağlantı hatası"))
             throw e
         }

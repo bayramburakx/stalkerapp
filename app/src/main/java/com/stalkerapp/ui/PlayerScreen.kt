@@ -111,11 +111,13 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.content.pm.ActivityInfo
 import android.view.WindowManager
+import java.io.File
 import kotlin.math.abs
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
@@ -248,6 +250,21 @@ fun PlayerScreen(navController: NavHostController) {
     var showSleepDialog by remember { mutableStateOf(false) }
     // Canlı yayında timeshift: akış geri sarılabilir mi?
     var liveSeekable by remember { mutableStateOf(false) }
+
+    // -------- Intro atlama --------
+    var introRange by remember { mutableStateOf<com.stalkerapp.playback.IntroDetector.IntroRange?>(null) }
+    var showSkipIntro by remember { mutableStateOf(false) }
+    var showSkipOutro by remember { mutableStateOf(false) }
+
+    // -------- Numara tuşu ile kanal (Android TV) --------
+    var numpadBuffer by remember { mutableStateOf("") }
+    var numpadVisible by remember { mutableStateOf(false) }
+
+    // -------- Catch-up takvim --------
+    var showCatchupCalendar by remember { mutableStateOf(false) }
+
+    // -------- OpenSubtitles altyazı arama --------
+    var showSubtitleSearch by remember { mutableStateOf(false) }
 
     val subtitleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -402,13 +419,66 @@ fun PlayerScreen(navController: NavHostController) {
         while (true) {
             val p = PlaybackManager.player
             val fps = p?.videoFormat?.frameRate ?: 0f
-            Afr.apply(activity, settings.afrMode, fps)
+            // API 30+: Surface.setFrameRate ile de sinyalle (120/144 Hz dahil).
+            val surface = playerView.videoSurface ?: p?.videoSurface
+            Afr.apply(activity, settings.afrMode, fps, surface)
             delay(2000)
         }
     }
 
     DisposableEffect(Unit) {
         onDispose { Afr.clear(activity) }
+    }
+
+    // -------- Intro atlama tespiti --------
+    // VOD bölümü oynatılırken TMDB'den intro aralığını çek.
+    LaunchedEffect(PlaybackManager.currentVodId, VodQueue.season, VodQueue.current?.episodeNumber) {
+        introRange = null
+        showSkipIntro = false
+        showSkipOutro = false
+        if (!PlaybackManager.isVod()) return@LaunchedEffect
+        val cur = VodQueue.current ?: return@LaunchedEffect
+        if (!settings.skipIntroEnabled) return@LaunchedEffect
+        val tmdbId = PlaybackManager.currentVodItem?.tmdbId ?: 0L
+        if (tmdbId <= 0L) return@LaunchedEffect
+        val key = app.store.settings().tmdbApiKey
+        if (key.isBlank()) return@LaunchedEffect
+        val dur = runCatching {
+            var waited = 0
+            while (PlaybackManager.player?.duration?.let { it <= 0 } != false && waited < 5000) {
+                delay(300); waited += 300
+            }
+            PlaybackManager.player?.duration ?: 0L
+        }.getOrDefault(0L)
+        introRange = com.stalkerapp.playback.IntroDetector.detect(
+            tmdbId = tmdbId,
+            season = VodQueue.season.toInt(),
+            episode = cur.episodeNumber,
+            apiKey = key,
+            durationMs = dur
+        )
+    }
+
+    // Intro/outro aralığında "Atla" butonunu göster
+    LaunchedEffect(position, introRange) {
+        val range = introRange ?: return@LaunchedEffect
+        showSkipIntro = settings.skipIntroEnabled &&
+            position >= range.startMs && position < range.endMs
+        showSkipOutro = settings.skipOutroEnabled && range.outroStartMs > 0 &&
+            position >= range.outroStartMs
+    }
+
+    // -------- Numara tuşu ile kanal (Android TV) --------
+    LaunchedEffect(numpadBuffer) {
+        if (numpadBuffer.isBlank()) return@LaunchedEffect
+        delay(1500) // 1.5 sn bekle — kullanıcı daha fazla rakam girebilir
+        val channelNum = numpadBuffer.toIntOrNull()
+        if (channelNum != null) {
+            val idx = ChannelQueue.channels.indexOfFirst { it.number == channelNum }
+            if (idx >= 0) switchTo(idx)
+        }
+        numpadBuffer = ""
+        numpadVisible = false
     }
 
     BackHandler(enabled = true) {
@@ -618,6 +688,21 @@ fun PlayerScreen(navController: NavHostController) {
                         if (ChannelQueue.index + 1 < ChannelQueue.channels.size) switchTo(ChannelQueue.index + 1)
                         true
                     }
+                    // Numara tuşları ile kanal girişi (Android TV uzaktan kumanda)
+                    Key.Zero, Key.One, Key.Two, Key.Three, Key.Four,
+                    Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine -> {
+                        if (isLive && settings.tvNumberKeyChannel) {
+                            val digit = when (ev.key) {
+                                Key.Zero -> "0"; Key.One -> "1"; Key.Two -> "2"
+                                Key.Three -> "3"; Key.Four -> "4"; Key.Five -> "5"
+                                Key.Six -> "6"; Key.Seven -> "7"; Key.Eight -> "8"
+                                Key.Nine -> "9"; else -> ""
+                            }
+                            numpadBuffer = (numpadBuffer + digit).takeLast(4)
+                            numpadVisible = true
+                        }
+                        true
+                    }
                     else -> false
                 }
             }
@@ -767,6 +852,65 @@ fun PlayerScreen(navController: NavHostController) {
                 modifier = Modifier.align(Alignment.Center),
                 color = Color.White
             )
+        }
+
+        // ---------- SKIP INTRO / OUTRO butonu ----------
+        if (showSkipIntro && !isLive) {
+            androidx.compose.material3.Button(
+                onClick = {
+                    introRange?.endMs?.let { PlaybackManager.seekTo(it) }
+                    showSkipIntro = false
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 80.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.85f),
+                    contentColor = Color.Black
+                )
+            ) {
+                Text("⏭ İntroya Atla", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+
+        if (showSkipOutro && !isLive) {
+            androidx.compose.material3.Button(
+                onClick = {
+                    // Outro: bir sonraki bölüme geç (binge mod gibi)
+                    val nextEp = VodQueue.next
+                    if (nextEp != null) {
+                        PlaybackManager.playNextEpisode()
+                    }
+                    showSkipOutro = false
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 80.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.85f),
+                    contentColor = Color.Black
+                )
+            ) {
+                Text("⏭ Sonraki Bölüm", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+
+        // ---------- Numara tuşu kanal göstergesi (Android TV) ----------
+        if (numpadVisible && numpadBuffer.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 48.dp, end = 32.dp)
+                    .background(Color.Black.copy(0.75f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Text(
+                    numpadBuffer,
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Normal
+                )
+            }
         }
 
         // ---------- CENTER CONTROLS (Film/Dizi) ----------
@@ -1235,6 +1379,25 @@ fun PlayerScreen(navController: NavHostController) {
                                     Text(str(lang, "Rehber"), color = Color.White, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
+                            // Geçmiş yayın (catch-up): kanal arşivi varsa takvim açılır.
+                            if (currentChannel?.isTvArchive == true && (currentChannel?.archiveDuration ?: 0) > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .clickable { showCatchupCalendar = true }
+                                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                            contentDescription = str(lang, "Geçmiş Yayın"),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Text(str(lang, "Geçmiş"), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
                             Box(
                                 modifier = Modifier
                                     .clickable { showChannels = true }
@@ -1372,6 +1535,43 @@ fun PlayerScreen(navController: NavHostController) {
             onUntilEnd = { PlaybackManager.setSleepUntilEpisodeEnd(); showSleepDialog = false },
             onCancel = { PlaybackManager.cancelSleepTimer(); showSleepDialog = false },
             onDismiss = { showSleepDialog = false }
+        )
+    }
+
+    // Geçmiş yayın (catch-up): gün ve saat seçici → arşiv akışını başlatır.
+    if (showCatchupCalendar && currentChannel != null) {
+        CatchupPickerDialog(
+            lang = lang,
+            channel = currentChannel!!,
+            profile = profile,
+            vm = vm,
+            onDismiss = { showCatchupCalendar = false },
+            onPlay = { url, title ->
+                PlaybackManager.play(url, title, currentChannel?.logo.orEmpty())
+                showCatchupCalendar = false
+            }
+        )
+    }
+
+    // Çevrimiçi altyazı arama (OpenSubtitles): sonuç indirilip geçici dosyaya yazılır.
+    if (showSubtitleSearch) {
+        SubtitleSearchDialog(
+            lang = lang,
+            apiKey = settings.openSubtitlesApiKey,
+            languages = settings.openSubtitlesLanguages,
+            title = PlaybackManager.currentTitle,
+            tmdbId = PlaybackManager.currentVodItem?.tmdbId ?: 0L,
+            season = VodQueue.item?.let { it.season.toInt().takeIf { s -> s > 0 } },
+            episode = VodQueue.current?.episodeNumber?.toInt(),
+            onDismiss = { showSubtitleSearch = false },
+            onApply = { srt ->
+                runCatching {
+                    val f = File(context.cacheDir, "os_sub_${System.currentTimeMillis()}.srt")
+                    f.writeText(srt)
+                    PlaybackManager.setExternalSubtitle(Uri.fromFile(f))
+                }
+                showSubtitleSearch = false
+            }
         )
     }
 }
@@ -1968,4 +2168,166 @@ fun ChannelListPanel(
             }
         }
     }
+}
+
+/** Catch-up takvim seçici: arşiv günü + saat seçilip arşiv akışı başlatılır. */
+@Composable
+private fun CatchupPickerDialog(
+    lang: String,
+    channel: Channel,
+    profile: Profile?,
+    vm: MainViewModel,
+    onDismiss: () -> Unit,
+    onPlay: (String, String) -> Unit
+) {
+    val days = remember { com.stalkerapp.data.CatchupHelper.pastDaysList(7) }
+    var selectedDay by remember { mutableStateOf(0) }
+    var hour by remember { mutableStateOf(20) }
+    var playing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(str(lang, "Geçmiş Yayın (Catch-up)")) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("${channel.name}", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(days.size) { i ->
+                        val d = days[i]
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (i == selectedDay) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { selectedDay = i }
+                        ) {
+                            Text(
+                                d.label,
+                                color = if (i == selectedDay) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("$hour:00", style = MaterialTheme.typography.titleLarge)
+                Slider(
+                    value = hour.toFloat(),
+                    onValueChange = { hour = it.toInt() },
+                    valueRange = 0f..23f,
+                    steps = 22
+                )
+                Text(
+                    str(lang, "Seçilen saatten 1 saatlik arşiv yayını başlatılır."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !playing,
+                onClick = {
+                    playing = true
+                    scope.launch {
+                        try {
+                            val dayStart = days[selectedDay].startOfDayUnix + hour * 3600
+                            val liveUrl = vm.repository.channelStreamUrl(channel, profile)
+                            val url = com.stalkerapp.data.CatchupHelper.buildStalkerCatchupUrl(
+                                liveUrl, dayStart, dayStart + 3600
+                            )
+                            onPlay(url, "${channel.name} — ${days[selectedDay].label} $hour:00")
+                        } catch (e: Exception) {
+                            playing = false
+                        }
+                    }
+                }
+            ) { Text(if (playing) str(lang, "Başlatılıyor…") else str(lang, "İzle")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) } }
+    )
+}
+
+/** OpenSubtitles arama sonuçlarını listeler; seçilen altyazı indirilip uygulanır. */
+@Composable
+private fun SubtitleSearchDialog(
+    lang: String,
+    apiKey: String,
+    languages: String,
+    title: String,
+    tmdbId: Long,
+    season: Int?,
+    episode: Int?,
+    onDismiss: () -> Unit,
+    onApply: (String) -> Unit
+) {
+    val client = remember { com.stalkerapp.data.OpenSubtitlesClient(apiKey) }
+    var results by remember { mutableStateOf<List<com.stalkerapp.data.OpenSubtitlesClient.SubtitleEntry>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var downloading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        results = client.search(tmdbId, title, season, episode, languages)
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!downloading) onDismiss() },
+        title = { Text(str(lang, "Çevrimiçi Altyazı Ara")) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(8.dp))
+                when {
+                    downloading -> CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                    results == null && error == null -> CircularProgressIndicator(
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    error != null -> Text(
+                        error.orEmpty(),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    results.orEmpty().isEmpty() -> Text(
+                        str(lang, "Altyazı bulunamadı. API anahtarı Ayarlar → Altyazı'dan eklenebilir."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    else -> results.orEmpty().take(15).forEach { s ->
+                        ListItem(
+                            headlineContent = { Text(s.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            supportingContent = { Text("${s.languageName} • ${s.format.uppercase()} • ${s.downloadCount} indirme") },
+                            trailingContent = {
+                                Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            modifier = Modifier.clickable(enabled = !downloading) {
+                                downloading = true
+                                scope.launch {
+                                    val content = client.download(s.fileId)
+                                    downloading = false
+                                    if (content == null) {
+                                        error = str(lang, "İndirme başarısız")
+                                    } else {
+                                        onApply(content)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "Kapat")) } }
+    )
 }

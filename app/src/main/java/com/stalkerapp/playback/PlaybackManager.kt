@@ -131,6 +131,9 @@ object PlaybackManager {
     private var vodPlayback: Boolean = false
     fun isVod(): Boolean = vodPlayback
 
+    // Çevrimdışı (indirilen) içerik oynatımı: oyuncu CacheDataSource ile kurulur.
+    @Volatile private var offlineMode = false
+
     // Canlı TV: geçici akış kesintilerinde otomatik yeniden deneme sayacı.
     // Kullanıcı kanal değiştirdiğinde sıfırlanır; peş peşe en fazla 3 deneme.
     private var liveRetryCount = 0
@@ -307,6 +310,9 @@ object PlaybackManager {
             append(st.maxBufferMs).append('|')
             // Aktif kaynak değişince UA da değişir; oyuncu yeniden kurulur.
             append(store.activeSourceKind())
+            append('|').append(if (offlineMode) "offline" else "online")
+            // Ağ yapılandırması (DoH/proxy) değişince oyuncu yeniden kurulur.
+            append('|').append(st.dohEnabled).append(st.dohUrl).append(st.socksProxy).append(st.socksPort)
         }
     }
 
@@ -337,13 +343,36 @@ object PlaybackManager {
         else
             "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
 
-        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(30_000)
-            .setUserAgent(userAgent)
+        // VPN/DoH/proxy yapılandırması (Ayarlar → VPN & Ağ) aktifse HTTP veri
+        // kaynağı OkHttp + NetworkConfig (özel DNS/DoH/SOCKS) üzerinden kurulur.
+        val stNet = st
+        val netCfgOn = stNet.dohEnabled || stNet.socksProxy.isNotBlank()
+        val httpDataSourceFactory = if (netCfgOn) {
+            androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(
+                com.stalkerapp.util.NetworkConfig.buildClient(
+                    dohEnabled = stNet.dohEnabled,
+                    dohUrl = stNet.dohUrl,
+                    socksProxy = stNet.socksProxy,
+                    socksPort = stNet.socksPort
+                )
+            )
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15_000)
+                .setReadTimeoutMs(30_000)
+                .setUserAgent(userAgent)
+        } else {
+            androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15_000)
+                .setReadTimeoutMs(30_000)
+                .setUserAgent(userAgent)
+        }
 
-        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpDataSourceFactory)
+        // Çevrimdışı oynatma: veri kaynağı önbellek öncelikli CacheDataSource.
+        val baseData = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpDataSourceFactory)
+        val dataSourceFactory = if (offlineMode) {
+            com.stalkerapp.data.OfflineDownloadManager.cacheDataSourceFactory()
+        } else baseData
 
         // Akış formatı zorlama (Ayarlar → Oynatıcı): bazı sağlayıcılarda kanal
         // açılmıyorsa veya catch-up'ta sıçramada sorun varsa akış zorla HLS ya da
@@ -428,6 +457,7 @@ object PlaybackManager {
         releaseStandby()
         // Kullanıcı kanal seçti/kanal değiştirdi: otomatik retry sayacı sıfırlanır.
         liveRetryCount = 0
+        offlineMode = false
         ChannelQueue.channels = channels
         ChannelQueue.index = index
         ChannelQueue.profile = profile
@@ -464,6 +494,8 @@ object PlaybackManager {
         releaseStandby()
         // Yeni içerik: önceki akışın uzantı fallback sayacı sıfırlanır.
         seriesExtFallbackIndex = 0
+        // Çevrimdışı moddan çıkış: oyuncu bir sonraki istekte online kurulur.
+        offlineMode = false
         // Film oynatımı: önceki bir diziden kalma bölüm kuyruğu temizlenir,
         // böylece oynatıcıda "Sonraki Bölüm" butonu yalnızca gerçek dizilerde görünür.
         // currentVodId SIFIRLANMAZ: çağıran (VodDetailScreen) film id'sini önceden
@@ -472,6 +504,23 @@ object PlaybackManager {
         VodQueue.item = null
         VodQueue.episodes = emptyList()
         playInternal(url, title, artwork, subtitle, isVod = true, startPositionMs = startPositionMs)
+    }
+
+    /**
+     * İndirilmiş (çevrimdışı) içeriği oynatır. Oyuncu CacheDataSource ile
+     * kurulur; içerik önbellekten beslenir, eksik parçalar ağdan tamamlanır.
+     */
+    fun playOffline(url: String, title: String, artwork: String = "", episodeLabel: String = "") {
+        releaseStandby()
+        seriesExtFallbackIndex = 0
+        offlineMode = true
+        // Oyuncu, cache data source ile yeniden kurulsun.
+        lastPlayerConfig = ""
+        VodQueue.item = null
+        VodQueue.episodes = emptyList()
+        currentVodId = 0
+        currentVodItem = null
+        playInternal(url, title, artwork, episodeLabel, isVod = true)
     }
 
     private fun playInternal(
@@ -529,6 +578,10 @@ object PlaybackManager {
         p.setMediaItem(item, startPositionMs.coerceAtLeast(0))
         p.prepare()
         p.playWhenReady = true
+        // Android TV: HDMI-CEC One Touch Play — TV açılıp bu cihaza geçer.
+        if (store.settings().hdmiCecOneTouchPlay) {
+            runCatching { com.stalkerapp.util.HdmiCecManager.oneTouchPlay() }
+        }
         // Varsayılan oynatma hızı (Ayarlar → Oynatıcı).
         p.setPlaybackSpeed(store.settings().playbackSpeed.coerceIn(0.5f, 2f))
         startService()
@@ -550,6 +603,7 @@ object PlaybackManager {
         val ep = episodes.getOrNull(index) ?: return
         // Yeni bölüm seçildi: önceki akışın uzantı fallback sayacı sıfırlanır.
         seriesExtFallbackIndex = 0
+        offlineMode = false
         VodQueue.item = item
         VodQueue.profile = profile
         VodQueue.episodes = episodes

@@ -179,6 +179,7 @@ fun HomeScreen(
         NavItem(Icons.Default.LiveTv, com.stalkerapp.util.L10n.t(lang, "Canlı TV")),
         NavItem(Icons.Default.Movie, com.stalkerapp.util.L10n.t(lang, "Filmler")),
         NavItem(Icons.Default.VideoLibrary, com.stalkerapp.util.L10n.t(lang, "Diziler")),
+        NavItem(Icons.Default.Download, com.stalkerapp.util.L10n.t(lang, "İndirilenler")),
         NavItem(Icons.Default.Settings, com.stalkerapp.util.L10n.t(lang, "Ayarlar")),
         NavItem(Icons.Default.Search, com.stalkerapp.util.L10n.t(lang, "Ara"), onClick = onOpenSearch)
     )
@@ -257,7 +258,16 @@ fun HomeScreen(
                 1 -> LiveTvScreen(profile, onOpenPlayer, contentModifier.statusBarsPadding(), onOpenGuide = onOpenGuide)
                 2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
                 3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
-                4 -> SettingsScreen(
+                4 -> com.stalkerapp.ui.downloads.DownloadsScreen(
+                    contentModifier.statusBarsPadding(),
+                    onPlayOffline = { entry ->
+                        com.stalkerapp.playback.PlaybackManager.playOffline(
+                            entry.url, entry.title, entry.poster, entry.episodeLabel
+                        )
+                        onOpenPlayer()
+                    }
+                )
+                5 -> SettingsScreen(
                     vm = vm,
                     modifier = contentModifier.statusBarsPadding(),
                     onPortalsChanged = {
@@ -265,14 +275,14 @@ fun HomeScreen(
                         profile = p
                         if (p != null) vm.syncVodIfNeeded(p)
                     },
-                    onOpenLibrary = { tab = 5 },
+                    onOpenLibrary = { tab = 6 },
                     onOpenPlayer = onOpenPlayer,
                     // Telefon geri tuşu ayarlardan çıkarken uygulamayı kapatmasın.
                     onBack = { gotoTab(0) },
                     onRestartSetup = onOpenOnboarding,
                     onOpenProfiles = onOpenProfiles
                 )
-                5 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
+                6 -> LibraryScreen(profile, onOpenPlayer, onOpenVod, contentModifier.statusBarsPadding())
             }
         }
     }

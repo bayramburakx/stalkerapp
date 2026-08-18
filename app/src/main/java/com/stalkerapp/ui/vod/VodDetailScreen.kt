@@ -745,6 +745,40 @@ fun VodDetailScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
+                            if (!isSeries) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.20f))
+                                        .clickable {
+                                            scope.launch {
+                                                try {
+                                                    val url = vm.repository.vodStreamUrl(it, profile, null)
+                                                    com.stalkerapp.data.OfflineDownloadManager.enqueue(
+                                                        com.stalkerapp.data.OfflineDownloadManager.DownloadEntry(
+                                                            id = url,
+                                                            title = it.name,
+                                                            poster = it.poster,
+                                                            url = url
+                                                        )
+                                                    )
+                                                    vm.showMessage(str(lang, "İndirme sıraya eklendi"))
+                                                } catch (e: Exception) {
+                                                    vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
+                                                }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = str(lang, "İndir"),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
                             // Fragman butonu kaldırıldı: sinopsisin altındaki gömülü
                             // fragman oynatıcısı zaten mevcut (TrailerPlayer).
                         }
@@ -1061,6 +1095,45 @@ fun VodDetailScreen(
                                                     Icon(
                                                         Icons.Default.Check,
                                                         contentDescription = if (watched) str(lang, "İzlenmedi yap") else str(lang, "İzlendi işaretle"),
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(15.dp)
+                                                    )
+                                                }
+                                                // İndirme rozeti (sağ alt).
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomEnd)
+                                                        .padding(6.dp)
+                                                        .size(24.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.Black.copy(alpha = 0.55f))
+                                                        .clickable {
+                                                            scope.launch {
+                                                                try {
+                                                                    val eps = episodes.orEmpty()
+                                                                    val idx = eps.indexOfFirst { e -> e.id == ep.id }.coerceAtLeast(0)
+                                                                    val url = vm.repository.vodStreamUrl(it, profile, ep)
+                                                                    com.stalkerapp.data.OfflineDownloadManager.enqueue(
+                                                                        com.stalkerapp.data.OfflineDownloadManager.DownloadEntry(
+                                                                            id = url,
+                                                                            title = it.name,
+                                                                            poster = it.poster,
+                                                                            url = url,
+                                                                            isSeries = true,
+                                                                            episodeLabel = "S${seasonNum}B${ep.episodeNumber}"
+                                                                        )
+                                                                    )
+                                                                    vm.showMessage(str(lang, "Bölüm indirme sırasına eklendi"))
+                                                                } catch (e: Exception) {
+                                                                    vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
+                                                                }
+                                                            }
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Download,
+                                                        contentDescription = str(lang, "İndir"),
                                                         tint = Color.White,
                                                         modifier = Modifier.size(15.dp)
                                                     )

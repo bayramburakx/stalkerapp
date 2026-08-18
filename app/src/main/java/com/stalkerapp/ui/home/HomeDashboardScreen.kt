@@ -235,6 +235,20 @@ fun HomeDashboardScreen(
             .take(20)
     }
 
+    // Senin İçin (Öneriler): RecommendationEngine ile
+    var recommendations by remember { mutableStateOf<List<VodItem>>(emptyList()) }
+    LaunchedEffect(catalog.allItems, watchedVersion, settings.tmdbApiKey) {
+        val storeWatchHistory = app.store.loadVodProgress().map { it.key } +
+            app.store.episodeProgress().mapNotNull { it.key.substringBefore(':').toLongOrNull() }
+        val recommendationsList = com.stalkerapp.data.RecommendationEngine.generate(
+            catalog.allItems,
+            storeWatchHistory.distinct().toSet(),
+            settings.tmdbApiKey,
+            settings.tmdbLanguage
+        )
+        recommendations = recommendationsList
+    }
+
     // Uzun bas → hızlı işlemler sheet'i + izlenme işaretleri.
     var quickActionItem by remember { mutableStateOf<VodItem?>(null) }
     // İzlenme işaretleri anlık: watchedVersion değişince Store'dan taze okunur.
@@ -279,7 +293,7 @@ fun HomeDashboardScreen(
 
     // Bölüm sırası (Ayarlar'dan değiştirilebilir).
     val sectionOrder = remember(settings.homeSectionOrder) {
-        val known = listOf("recentchannels", "recent", "continue", "movies", "series", "favchannels", "live", "favvods")
+        val known = listOf("recentchannels", "recent", "continue", "crossdevice", "recommendations", "movies", "series", "favchannels", "live", "favvods")
         val custom = settings.homeSectionOrder.filter { it in known }
         custom + known.filter { it !in custom }
     }
@@ -346,6 +360,26 @@ fun HomeDashboardScreen(
                                     episodeLabel = e.episodeLabel,
                                     onClick = { onOpenVod(e.item.id, catalog.isSeriesItem(e.item)) },
                                     onLongPress = { quickActionItem = e.item }
+                                )
+                            }
+                        }
+                    }
+                }
+                "recommendations" -> if (recommendations.isNotEmpty()) {
+                    Section(title = str(lang, "Senin İçin"), lang = lang, onSeeAll = null) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(recommendations, key = { it.id }) { item ->
+                                VodPoster(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = catalog.isSeriesItem(item),
+                                    posterWidth = posterWidth,
+                                    watched = isWatched(item),
+                                    onLongPress = { quickActionItem = item },
+                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
                                 )
                             }
                         }

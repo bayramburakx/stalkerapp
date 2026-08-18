@@ -3,6 +3,14 @@ package com.stalkerapp.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+/** Stalker portal için MAC profili (çoklu MAC desteği). */
+@Serializable
+data class MacProfile(
+    val id: String = "",
+    val name: String = "",
+    val mac: String = ""
+)
+
 @Serializable
 data class Portal(
     val id: String = "",
@@ -10,7 +18,15 @@ data class Portal(
     val url: String = "",
     val mac: String = "",
     val username: String = "",
-    val password: String = ""
+    val password: String = "",
+    /** Yedek/alternatif kanal URL'leri (primary düşerse sırayla denenir). */
+    val alternativeUrls: List<String> = emptyList(),
+    /** Çoklu MAC profilleri. */
+    val macProfiles: List<MacProfile> = emptyList(),
+    /** Son sağlık kontrolü (epoch ms). */
+    val lastHealthCheck: Long = 0L,
+    /** Ardışık başarısız istek sayısı. */
+    val failCount: Int = 0
 )
 
 @Serializable
@@ -173,6 +189,44 @@ data class Settings(
     val tmdbTrailers: Boolean = true,
     /** Detay ekranında TMDB oyuncu fotoğrafları gösterilsin mi? */
     val tmdbPeople: Boolean = true,
+    /** OpenSubtitles API anahtarı. Boşsa varsayılan (rate-limited) anahtar kullanılır. */
+    val openSubtitlesApiKey: String = "",
+    /** OpenSubtitles altyazı indirme varsayılan dil kodları (virgülle ayrılmış, ör. "tr,en"). */
+    val openSubtitlesLanguages: String = "tr,en",
+
+    // ---------- Intro Atlama ----------
+    /** Bölüm introsu tespit edildiğinde "Atla" butonu gösterilsin mi? */
+    val skipIntroEnabled: Boolean = true,
+    /** Outro tespiti açık mı? */
+    val skipOutroEnabled: Boolean = false,
+
+    // ---------- Offline İndirme ----------
+    /** Offline indirme maksimum disk kotası (MB). */
+    val maxOfflineStorageMb: Long = 2048L,
+    /** İndirme yalnızca Wi-Fi'de mi yapılsın? */
+    val downloadWifiOnly: Boolean = true,
+
+    // ---------- VPN / Ağ ----------
+    /** DNS-over-HTTPS açık mı? */
+    val dohEnabled: Boolean = false,
+    /** Kullanılan DoH provider URL'si. */
+    val dohUrl: String = "https://cloudflare-dns.com/dns-query",
+    /** SOCKS5 proxy sunucu adresi. Boşsa devre dışı. */
+    val socksProxy: String = "",
+    /** SOCKS5 proxy portu. */
+    val socksPort: Int = 0,
+
+    // ---------- Akıllı Önbellek ----------
+    /** Delta senkron açık mı? (yalnızca değişen içerik indirilir) */
+    val deltaSync: Boolean = true,
+    /** Maksimum VOD katalog önbelleği (MB). */
+    val maxCacheMb: Long = 500L,
+
+    // ---------- Android TV ----------
+    /** HDMI-CEC: oynatma başlayınca TV'yi aç (One Touch Play). */
+    val hdmiCecOneTouchPlay: Boolean = true,
+    /** Numara tuşuyla kanal açma (Android TV). */
+    val tvNumberKeyChannel: Boolean = true,
 
     // ---------- Gizlilik ----------
     /** Ayarlar girişi için 4 haneli PIN. Boşsa PIN kilidi kapalıdır. */
@@ -267,7 +321,9 @@ data class VodItem(
     @SerialName("tmdb_id") val tmdbId: Long = 0,
     var isSeries: Boolean = false,
     /** Real series id on portals with a separate series library (`type=series`); 0 for plain VOD. */
-    val seriesId: Long = 0
+    val seriesId: Long = 0,
+    /** Katalog içi eklenme sırası (epoch ms) — "En Yeni" sıralaması için. */
+    val addedTimestamp: Long = 0
 )
 
 @Serializable

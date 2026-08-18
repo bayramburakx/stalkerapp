@@ -54,11 +54,20 @@ object ExternalVod {
  */
 object M3uParser {
 
-    private val http = OkHttpClient.Builder()
+    private val defaultHttp = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
+
+    // DoH/SOCKS ayarları aktifse NetworkConfig istemcisi kullanılır.
+    private val http: OkHttpClient
+        get() {
+            val st = Store.activeStore?.settings() ?: Settings()
+            return if (st.dohEnabled || st.socksProxy.isNotBlank()) {
+                com.stalkerapp.util.NetworkConfig.buildClientFor(st)
+            } else defaultHttp
+        }
 
     /** M3U içeriğini URL'den indirir; başarısız olursa null. */
     suspend fun fetch(url: String): String? = withContext(Dispatchers.IO) {
@@ -407,11 +416,20 @@ class XtreamApiException(message: String) : Exception(message)
  */
 class XtreamClient {
 
-    private val http = OkHttpClient.Builder()
+    private val defaultHttp = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
+
+    // DoH/SOCKS ayarları aktifse NetworkConfig istemcisi kullanılır.
+    private val http: OkHttpClient
+        get() {
+            val st = Store.activeStore?.settings() ?: Settings()
+            return if (st.dohEnabled || st.socksProxy.isNotBlank()) {
+                com.stalkerapp.util.NetworkConfig.buildClientFor(st)
+            } else defaultHttp
+        }
 
     private val json = Json { ignoreUnknownKeys = true }
 

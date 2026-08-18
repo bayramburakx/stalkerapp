@@ -17,8 +17,11 @@ import com.stalkerapp.data.TmdbClient
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.VodSyncManager
 import com.stalkerapp.ui.VodSyncService
-import com.stalkerapp.util.isWifiConnected
+import com.stalkerapp.data.CacheManager
+import com.stalkerapp.data.OfflineDownloadManager
+import com.stalkerapp.util.HdmiCecManager
 import com.stalkerapp.util.L10n
+import com.stalkerapp.util.isWifiConnected
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,6 +40,8 @@ class StalkerApp : Application() {
         private set
     lateinit var firebase: FirebaseSyncManager
         private set
+    lateinit var cacheManager: CacheManager
+        private set
 
     /** Uygulama geneli coroutine scope (arka plan görevleri + bulut senkron). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -44,7 +49,9 @@ class StalkerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         store = Store(this)
-        repository = PortalRepository(store, StalkerClient { store.settings() })
+        Store.activeStore = store
+        cacheManager = CacheManager(this)
+        repository = PortalRepository(store, StalkerClient { store.settings() }, cacheManager)
         vodSyncManager = VodSyncManager(Dispatchers.IO, repository, store)
         tmdb = TmdbClient(
             keyProvider = { store.settings().tmdbApiKey },
@@ -53,6 +60,21 @@ class StalkerApp : Application() {
         PlaybackManager.init(this, store, repository)
         firebase = FirebaseSyncManager.init(this)
         instance = this
+
+        // Yeni yöneticiler
+        HdmiCecManager.init(this)
+        OfflineDownloadManager.init(this, store.settings().maxOfflineStorageMb)
+
+        // Akıllı önbellek: disk kotası + aktif kaynak sağlık kontrolü.
+        appScope.launch {
+            runCatching {
+                cacheManager.enforceQuota(store.settings().maxOfflineStorageMb * 1024L * 1024L)
+                store.activePortal()?.let { p ->
+                    cacheManager.checkSourceHealth(p.id, p.url, p.name)
+                }
+            }
+        }
+
         // Oturum açıksa veri deposunu o hesaba bağla (her hesabın kendi verisi).
         if (firebase.isSignedIn) {
             store.setAccount(firebase.currentUser.value?.uid)

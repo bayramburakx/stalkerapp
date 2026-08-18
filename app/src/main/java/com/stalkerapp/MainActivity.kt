@@ -3,6 +3,7 @@ package com.stalkerapp
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -224,38 +225,66 @@ private fun AppNav() {
             )
         }
         composable("home") {
-            HomeScreen(
-                onOpenPlayer = { navController.navigate("player") },
-                onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
-                onOpenSearch = { navController.navigate("search") },
-                onOpenGuide = { navController.navigate("epg") },
-                onOpenOnboarding = {
-                    // Oturum kapalıysa giriş ekranına, açıksa kurulum sihirbazına.
-                    if (firebase.isSignedIn) {
-                        navController.navigate("onboarding") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
+            // Android TV (Leanback): 10-foot arayüz — büyük kartlar, D-pad gezinme.
+            val isTv = (LocalContext.current.resources.configuration.uiMode and
+                Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
+            if (isTv) {
+                com.stalkerapp.ui.tv.TvHomeScreen(
+                    vm = vm,
+                    onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
+                    onOpenChannel = { ch ->
+                        vm.playChannelById(ch.id)
+                        navController.navigate("player") { launchSingleTop = true }
+                    },
+                    onOpenSettings = { navController.navigate("settings") }
+                )
+            } else {
+                HomeScreen(
+                    onOpenPlayer = { navController.navigate("player") },
+                    onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
+                    onOpenSearch = { navController.navigate("search") },
+                    onOpenGuide = { navController.navigate("epg") },
+                    onOpenOnboarding = {
+                        // Oturum kapalıysa giriş ekranına, açıksa kurulum sihirbazına.
+                        if (firebase.isSignedIn) {
+                            navController.navigate("onboarding") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        } else {
+                            navController.navigate("login") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                            }
                         }
-                    } else {
-                        navController.navigate("login") {
+                    },
+                    onOpenProfiles = {
+                        navController.navigate("profiles") {
                             popUpTo("home") { inclusive = false }
                             launchSingleTop = true
                         }
                     }
-                },
-                onOpenProfiles = {
-                    navController.navigate("profiles") {
-                        popUpTo("home") { inclusive = false }
-                        launchSingleTop = true
-                    }
-                }
-            )
+                )
+            }
         }
         composable("epg") {
             EpgGuideScreen(
                 profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
                 onBack = { safeBack() },
                 onOpenPlayer = { navController.navigate("player") }
+            )
+        }
+        composable("settings") {
+            com.stalkerapp.ui.settings.SettingsScreen(
+                vm = vm,
+                onOpenPlayer = { navController.navigate("player") },
+                onOpenProfiles = {
+                    navController.navigate("profiles") {
+                        popUpTo("settings") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+                onBack = { safeBack() }
             )
         }
         composable("search") { SearchScreen(onBack = { safeBack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }

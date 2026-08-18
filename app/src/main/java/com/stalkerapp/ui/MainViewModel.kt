@@ -881,6 +881,12 @@ data class VodCatalogState(
             item.categoryId in seriesCategoryIds
     }
 
+    /** Film kataloğu (dizi olmayanlar). */
+    val movies: List<VodItem> get() = allItems.filterNot { isSeriesItem(it) }
+
+    /** Dizi kataloğu. */
+    val series: List<VodItem> get() = allItems.filter { isSeriesItem(it) }
+
     companion object {
         val seriesKeywords = listOf("dizi", "series", "serial", "diziler", "show", "tv show")
 

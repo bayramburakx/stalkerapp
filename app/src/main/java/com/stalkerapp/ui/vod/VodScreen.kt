@@ -152,26 +152,7 @@ fun VodScreen(
         return !hidden && (adultVisible || !adult)
     }
 
-    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, settings.adultContentEnabled, settings.lockAdultWithPin, adultUnlocked, settings.hiddenCategories) {
-        val q = query.trim()
-        catalog.allItems
-            .filter { keepItem(it) }
-            .let { list ->
-                when (filterIsSeries) {
-                    true -> list.filter { catalog.isSeriesItem(it) }
-                    false -> list.filter { !catalog.isSeriesItem(it) }
-                    else -> list
-                }
-            }
-            .let { list -> if (selectedCategory > 0L) list.filter { it.categoryId == selectedCategory } else list }
-            .let { list ->
-                if (q.isBlank()) list
-                else list.filter {
-                    it.name.contains(q, ignoreCase = true) ||
-                        it.originalName.contains(q, ignoreCase = true)
-                }
-            }
-    }
+    // `filtered` tanımı aşağıda, filterState ile yapılıyor.
 
     // Aşağı scroll ettikçe yükle: son satıra yaklaşınca bir sonraki sayfayı ekle.
     val shouldLoadMore by remember {
@@ -255,24 +236,78 @@ fun VodScreen(
             }
         }
 
-        if (shownCats.isNotEmpty()) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    GlassChip(
-                        selected = selectedCategory == 0L && query.isBlank(),
-                        onClick = { selectedCategory = 0L },
-                        label = str(lang, "Tümü")
-                    )
+        // Filtre/Sıralama durumunu VodFilterState'de tutalım
+        var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
+        var showFilterDialog by remember { mutableStateOf(false) }
+
+        // filtered update: filtre state'ine göre
+        val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, settings.adultContentEnabled, settings.lockAdultWithPin, adultUnlocked, settings.hiddenCategories, filterState) {
+            val q = query.trim()
+            catalog.allItems
+                .filter { keepItem(it) }
+                .let { list ->
+                    when (filterIsSeries) {
+                        true -> list.filter { catalog.isSeriesItem(it) }
+                        false -> list.filter { !catalog.isSeriesItem(it) }
+                        else -> list
+                    }
                 }
-                items(shownCats) { c ->
-                    GlassChip(
-                        selected = selectedCategory == c.id,
-                        onClick = { selectedCategory = c.id },
-                        label = str(lang, c.title)
-                    )
+                .let { list -> if (selectedCategory > 0L) list.filter { it.categoryId == selectedCategory } else list }
+                .let { list ->
+                    if (q.isBlank()) list
+                    else list.filter {
+                        it.name.contains(q, ignoreCase = true) ||
+                            it.originalName.contains(q, ignoreCase = true)
+                    }
+                }
+                .let { list ->
+                    list.filter { item ->
+                        val yearOk = filterState.yearRange == null || item.year.take(4).toIntOrNull()?.let { it in filterState.yearRange!! } != false
+                        val ratingOk = item.rating.toFloatOrNull()?.let { it >= filterState.minRating } != false
+                        val langOk = filterState.language.isBlank() ||
+                            item.country.contains(filterState.language, ignoreCase = true)
+                        yearOk && ratingOk && langOk
+                    }
+                }
+                .let { list ->
+                    when (filterState.sortMode) {
+                        com.stalkerapp.data.SortMode.A_Z -> list.sortedBy { it.name }
+                        com.stalkerapp.data.SortMode.Z_A -> list.sortedByDescending { it.name }
+                        com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending { it.addedTimestamp }
+                        com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending { it.rating.toFloatOrNull() ?: 0f }
+                        com.stalkerapp.data.SortMode.DEFAULT -> list
+                    }
+                }
+        }
+
+        if (shownCats.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(end = 12.dp)
+            ) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        GlassChip(
+                            selected = selectedCategory == 0L && query.isBlank(),
+                            onClick = { selectedCategory = 0L },
+                            label = str(lang, "Tümü")
+                        )
+                    }
+                    items(shownCats) { c ->
+                        GlassChip(
+                            selected = selectedCategory == c.id,
+                            onClick = { selectedCategory = c.id },
+                            label = str(lang, c.title)
+                        )
+                    }
+                }
+                // Filtreleme / Sıralama Butonu
+                IconButton(onClick = { showFilterDialog = true }) {
+                    Icon(Icons.Default.FilterList, contentDescription = str(lang, "Filtreler"))
                 }
             }
         }
@@ -332,6 +367,18 @@ fun VodScreen(
             vm = vm,
             onOpenDetail = { onOpenVod(qi.id, catalog.isSeriesItem(qi)) },
             onDismiss = { quickActionItem = null }
+        )
+    }
+
+    if (showFilterDialog) {
+        VodFilterDialog(
+            lang = lang,
+            state = filterState,
+            onDismiss = { showFilterDialog = false },
+            onApply = { newState ->
+                filterState = newState
+                showFilterDialog = false
+            }
         )
     }
 }
@@ -463,3 +510,135 @@ fun VodPoster(
         }
     }
 }
+
+@Composable
+fun VodFilterDialog(
+    lang: String,
+    state: com.stalkerapp.data.VodFilterState,
+    onDismiss: () -> Unit,
+    onApply: (com.stalkerapp.data.VodFilterState) -> Unit
+) {
+    var sortMode by remember { mutableStateOf(state.sortMode) }
+    var minRating by remember { mutableStateOf(state.minRating) }
+    var yearFrom by remember { mutableStateOf(state.yearRange?.first ?: 1980) }
+    var yearTo by remember { mutableStateOf(state.yearRange?.last ?: currentYear()) }
+    var yearFilterOn by remember { mutableStateOf(state.yearRange != null) }
+    var langFilter by remember { mutableStateOf(state.language) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                onApply(
+                    state.copy(
+                        sortMode = sortMode,
+                        minRating = minRating,
+                        yearRange = if (yearFilterOn) yearFrom..yearTo else null,
+                        language = langFilter
+                    )
+                )
+            }) { Text(str(lang, "Uygula")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) }
+        },
+        title = { Text(str(lang, "Filtrele & Sırala")) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                // Sıralama
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(str(lang, "Sıralama"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    val options = listOf(
+                        com.stalkerapp.data.SortMode.DEFAULT to str(lang, "Varsayılan"),
+                        com.stalkerapp.data.SortMode.NEWEST to str(lang, "En Yeni"),
+                        com.stalkerapp.data.SortMode.HIGHEST_RATED to str(lang, "En Yüksek Puanlı"),
+                        com.stalkerapp.data.SortMode.A_Z to "A-Z",
+                        com.stalkerapp.data.SortMode.Z_A to "Z-A"
+                    )
+                    options.forEach { (mode, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { sortMode = mode }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            androidx.compose.material3.RadioButton(
+                                selected = sortMode == mode,
+                                onClick = { sortMode = mode }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                HorizontalDivider()
+                // Puan Filtresi
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(str(lang, "Minimum IMDb Puanı: ${minRating.toInt()}"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Slider(
+                        value = minRating,
+                        onValueChange = { minRating = it },
+                        valueRange = 0f..9f,
+                        steps = 8
+                    )
+                }
+                HorizontalDivider()
+                // Yıl Aralığı Filtresi
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(str(lang, "Yıl Aralığı"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        androidx.compose.material3.FilterChip(
+                            selected = yearFilterOn,
+                            onClick = { yearFilterOn = !yearFilterOn },
+                            label = { Text(str(lang, if (yearFilterOn) "Açık" else "Kapalı")) }
+                        )
+                    }
+                    if (yearFilterOn) {
+                        Text("$yearFrom – $yearTo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Slider(
+                            value = yearFrom.toFloat(),
+                            onValueChange = { yearFrom = it.toInt().coerceAtMost(yearTo) },
+                            valueRange = 1980f..currentYear().toFloat(),
+                            steps = 0
+                        )
+                        Slider(
+                            value = yearTo.toFloat(),
+                            onValueChange = { yearTo = it.toInt().coerceAtLeast(yearFrom) },
+                            valueRange = 1980f..currentYear().toFloat(),
+                            steps = 0
+                        )
+                    }
+                }
+                HorizontalDivider()
+                // Dil Filtresi
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(str(lang, "Dil"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GlassChip(
+                            selected = langFilter.isEmpty(),
+                            onClick = { langFilter = "" },
+                            label = str(lang, "Tümü")
+                        )
+                        GlassChip(
+                            selected = langFilter == "tr",
+                            onClick = { langFilter = "tr" },
+                            label = "Türkçe"
+                        )
+                        GlassChip(
+                            selected = langFilter == "en",
+                            onClick = { langFilter = "en" },
+                            label = "English"
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+private fun currentYear(): Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)

@@ -712,9 +712,11 @@ fun SettingsScreen(
             SettingsNavRow(Icons.Default.Star, com.stalkerapp.util.L10n.t(settings.language, "Kütüphanem"), com.stalkerapp.util.L10n.t(settings.language, "Favoriler, Sonra İzle, özel listeler")) { currentSection = "library" }
             SettingsNavRow(Icons.Default.VolumeUp, com.stalkerapp.util.L10n.t(settings.language, "Oynatıcı"), com.stalkerapp.util.L10n.t(settings.language, "Kalite, altyazı, çözücü, jestler")) { currentSection = "player" }
             SettingsNavRow(Icons.Default.Palette, com.stalkerapp.util.L10n.t(settings.language, "Görünüm & Cihaz"), com.stalkerapp.util.L10n.t(settings.language, "Tema, vurgu rengi, yazı ölçeği, TV")) { currentSection = "appearance" }
-            SettingsNavRow(Icons.Default.Link, com.stalkerapp.util.L10n.t(settings.language, "Entegrasyonlar"), com.stalkerapp.util.L10n.t(settings.language, "TMDB ve harici servisler")) { currentSection = "integrations" }
+            SettingsNavRow(Icons.Default.Link, com.stalkerapp.util.L10n.t(settings.language, "Entegrasyonlar"), com.stalkerapp.util.L10n.t(settings.language, "TMDB, OpenSubtitles ve harici servisler")) { currentSection = "integrations" }
+            SettingsNavRow(Icons.Default.Wifi, com.stalkerapp.util.L10n.t(settings.language, "VPN & Ağ"), com.stalkerapp.util.L10n.t(settings.language, "DNS-over-HTTPS, SOCKS5 Proxy")) { currentSection = "network" }
+            SettingsNavRow(Icons.Default.Storage, com.stalkerapp.util.L10n.t(settings.language, "Önbellek & İndirmeler"), com.stalkerapp.util.L10n.t(settings.language, "Akıllı önbellek, çevrimdışı indirme kotası")) { currentSection = "cache" }
             SettingsNavRow(Icons.Default.Person, com.stalkerapp.util.L10n.t(settings.language, "Hesap"), com.stalkerapp.util.L10n.t(settings.language, "Profil ve hesap ayarları")) { currentSection = "account" }
-            SettingsNavRow(Icons.Default.VerifiedUser, com.stalkerapp.util.L10n.t(settings.language, "Gizlilik & Güvenlik"), com.stalkerapp.util.L10n.t(settings.language, "Gizlilik anlaşması")) { currentSection = "privacy" }
+            SettingsNavRow(Icons.Default.VerifiedUser, com.stalkerapp.util.L10n.t(settings.language, "Gizlilik & Güvenlik"), com.stalkerapp.util.L10n.t(settings.language, "PIN kilidi, gizlilik anlaşması")) { currentSection = "privacy" }
             SettingsNavRow(Icons.Default.Info, com.stalkerapp.util.L10n.t(settings.language, "Hakkında & Destek"), com.stalkerapp.util.L10n.t(settings.language, "Sürüm, güncelleme, destek")) { currentSection = "about" }
             // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor (scroll altı boş kalmasın).
             Spacer(Modifier.height(96.dp))
@@ -1748,6 +1750,20 @@ fun SettingsScreen(
                     onCheckedChange = { vm.saveSettings(settings.copy(bingeMode = it)) }
                 )
                 ToggleRow(
+                    icon = Icons.Default.FastForward,
+                    title = str(lang, "İntro Atlama Butonu"),
+                    desc = str(lang, "Dizi bölümlerinde tespit edilirse 'İntroya Atla' butonu çıkar (TMDB anahtarı gerektirir)"),
+                    checked = settings.skipIntroEnabled,
+                    onCheckedChange = { vm.saveSettings(settings.copy(skipIntroEnabled = it)) }
+                )
+                ToggleRow(
+                    icon = Icons.Default.FastForward,
+                    title = str(lang, "Outro Atlama Butonu"),
+                    desc = str(lang, "Bölüm sonunda 'Sonraki Bölüme Geç' butonu çıkar"),
+                    checked = settings.skipOutroEnabled,
+                    onCheckedChange = { vm.saveSettings(settings.copy(skipOutroEnabled = it)) }
+                )
+                ToggleRow(
                     icon = Icons.Default.Schedule,
                     title = str(lang, "Picture-in-Picture"),
                     desc = str(lang, "Oynatıcıdan çıkınca küçük pencere devam eder"),
@@ -2039,7 +2055,9 @@ fun SettingsScreen(
                         "25" to str(lang, "25 Hz"),
                         "30" to str(lang, "30 Hz"),
                         "50" to str(lang, "50 Hz"),
-                        "60" to str(lang, "60 Hz")
+                        "60" to str(lang, "60 Hz"),
+                        "120" to str(lang, "120 Hz"),
+                        "144" to str(lang, "144 Hz")
                     ).forEach { (key, label) ->
                         GlassChip(
                             selected = settings.afrMode == key,
@@ -2333,6 +2351,159 @@ fun SettingsScreen(
                     onCheckedChange = { vm.saveSettings(settings.copy(tmdbPeople = it)) }
                 )
 
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                
+                Text(str(lang, "OpenSubtitles.com"), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    str(lang, "OpenSubtitles REST API anahtarı. Boş bırakırsanız uygulamanın sınırlı varsayılan anahtarı kullanılır."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                var osKey by remember(settings.openSubtitlesApiKey) { mutableStateOf(settings.openSubtitlesApiKey) }
+                OutlinedTextField(
+                    value = osKey,
+                    onValueChange = { osKey = it },
+                    label = { Text(str(lang, "API Anahtarı")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        vm.saveSettings(settings.copy(openSubtitlesApiKey = osKey.trim()))
+                        vm.showMessage(str(lang, "OpenSubtitles anahtarı kaydedildi"))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(str(lang, "Kaydet")) }
+
+            }
+            "network" -> {
+                Text(str(lang, "DNS üzerinden HTTPS (DoH)"), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    str(lang, "İnternet sağlayıcısı DNS bazlı engelleme yapıyorsa DoH ile bu engelleri aşabilirsiniz."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ToggleRow(
+                    icon = Icons.Default.Security,
+                    title = str(lang, "DoH Etkinleştir"),
+                    desc = str(lang, "Özel DNS sunucusunu kullan"),
+                    checked = settings.dohEnabled,
+                    onCheckedChange = { vm.saveSettings(settings.copy(dohEnabled = it)) }
+                )
+                if (settings.dohEnabled) {
+                    var dohUrl by remember(settings.dohUrl) { mutableStateOf(settings.dohUrl) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            "https://cloudflare-dns.com/dns-query" to "Cloudflare",
+                            "https://dns.google/dns-query" to "Google"
+                        ).forEach { (url, label) ->
+                            GlassChip(
+                                selected = dohUrl == url,
+                                onClick = { dohUrl = url; vm.saveSettings(settings.copy(dohUrl = url)) },
+                                label = label
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = dohUrl,
+                        onValueChange = { dohUrl = it },
+                        label = { Text(str(lang, "DoH Sunucu URL")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        onClick = { vm.saveSettings(settings.copy(dohUrl = dohUrl.trim())) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(str(lang, "URL'yi Kaydet")) }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                
+                Text(str(lang, "SOCKS5 Proxy"), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    str(lang, "Tüm bağlantıyı bir SOCKS5 proxy üzerinden geçirir. Boş bırakırsanız proxy kullanılmaz."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                var socksProxy by remember(settings.socksProxy) { mutableStateOf(settings.socksProxy) }
+                var socksPort by remember(settings.socksPort) { mutableStateOf(settings.socksPort.toString()) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = socksProxy,
+                        onValueChange = { socksProxy = it },
+                        label = { Text(str(lang, "Proxy Adresi (örn. 192.168.1.50)")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(2f)
+                    )
+                    OutlinedTextField(
+                        value = socksPort,
+                        onValueChange = { socksPort = it },
+                        label = { Text(str(lang, "Port")) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Button(
+                    onClick = {
+                        val portInt = socksPort.toIntOrNull() ?: 0
+                        vm.saveSettings(settings.copy(socksProxy = socksProxy.trim(), socksPort = portInt))
+                        vm.showMessage(str(lang, "Proxy ayarları kaydedildi"))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(str(lang, "Kaydet")) }
+            }
+            "cache" -> {
+                Text(str(lang, "Önbellek & Çevrimdışı İndirmeler"), style = MaterialTheme.typography.titleSmall)
+                
+                ToggleRow(
+                    icon = Icons.Default.Sync,
+                    title = str(lang, "Delta Senkronizasyon"),
+                    desc = str(lang, "Katalog güncellenirken sadece değişen içerikler indirilir (bant genişliği tasarrufu)"),
+                    checked = settings.deltaSync,
+                    onCheckedChange = { vm.saveSettings(settings.copy(deltaSync = it)) }
+                )
+                
+                ToggleRow(
+                    icon = Icons.Default.Wifi,
+                    title = str(lang, "Yalnızca Wi-Fi'da İndir"),
+                    desc = str(lang, "Çevrimdışı indirmeler hücresel veriyi kullanmaz"),
+                    checked = settings.downloadWifiOnly,
+                    onCheckedChange = { vm.saveSettings(settings.copy(downloadWifiOnly = it)) }
+                )
+                
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                
+                var maxCacheMb by remember(settings.maxCacheMb) { mutableFloatStateOf(settings.maxCacheMb.toFloat()) }
+                SliderSetting(
+                    icon = Icons.Default.Storage,
+                    title = str(lang, "Katalog Önbellek Boyutu"),
+                    description = str(lang, "Katalog verileri ve görseller için maksimum alan (MB)"),
+                    value = maxCacheMb,
+                    valueRange = 100f..2000f,
+                    steps = 19,
+                    valueText = "${maxCacheMb.toInt()} MB",
+                    onChange = {
+                        maxCacheMb = it
+                        vm.saveSettings(settings.copy(maxCacheMb = it.toLong()))
+                    }
+                )
+                
+                var maxOfflineMb by remember(settings.maxOfflineStorageMb) { mutableFloatStateOf(settings.maxOfflineStorageMb.toFloat()) }
+                SliderSetting(
+                    icon = Icons.Default.Download,
+                    title = str(lang, "Çevrimdışı İndirme Kotası"),
+                    description = str(lang, "Film ve diziler için ayrılan maksimum depolama (MB)"),
+                    value = maxOfflineMb,
+                    valueRange = 500f..10000f,
+                    steps = 19,
+                    valueText = "${maxOfflineMb.toInt()} MB",
+                    onChange = {
+                        maxOfflineMb = it
+                        vm.saveSettings(settings.copy(maxOfflineStorageMb = it.toLong()))
+                        com.stalkerapp.data.OfflineDownloadManager.init(context, it.toLong())
+                    }
+                )
             }
             "account" -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3101,6 +3272,9 @@ private fun PortalEditDialog(
     var username by remember { mutableStateOf(initial?.username ?: "") }
     var password by remember { mutableStateOf(initial?.password ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
+    
+    // MAC Profiles listesi dialogu için
+    var showMacProfilesDialog by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3127,13 +3301,67 @@ private fun PortalEditDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(str(lang, "İsim")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("Portal URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = mac, onValueChange = { mac = it }, label = { Text(str(lang, "MAC (boş olabilir)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(value = mac, onValueChange = { mac = it }, label = { Text(str(lang, "MAC (boş olabilir)")) }, singleLine = true, modifier = Modifier.weight(1f))
+                    if (initial != null) {
+                        IconButton(onClick = { showMacProfilesDialog = true }) {
+                            Icon(Icons.Default.List, contentDescription = str(lang, "MAC Profilleri"))
+                        }
+                    }
+                }
                 OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text(str(lang, "Kullanıcı adı (opsiyonel)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(str(lang, "Şifre (opsiyonel)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
     )
+
+    if (showMacProfilesDialog && initial != null) {
+        var newMacName by remember { mutableStateOf("") }
+        var newMacAddress by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showMacProfilesDialog = false },
+            confirmButton = { TextButton(onClick = { showMacProfilesDialog = false }) { Text(str(lang, "Kapat")) } },
+            title = { Text(str(lang, "MAC Profilleri")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        str(lang, "Bu portala ait farklı MAC adresleri kaydedip hızlıca geçiş yapabilirsiniz."),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    initial.macProfiles.forEach { profile ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(profile.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                Text(profile.mac, style = MaterialTheme.typography.bodySmall)
+                            }
+                            OutlinedButton(onClick = {
+                                mac = profile.mac
+                                showMacProfilesDialog = false
+                            }) { Text(str(lang, "Seç")) }
+                            IconButton(onClick = {
+                                val newList = initial.macProfiles.filter { it.mac != profile.mac }
+                                onSave(initial.copy(macProfiles = newList))
+                            }) { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text(str(lang, "Yeni MAC Profili Ekle"), style = MaterialTheme.typography.titleSmall)
+                    OutlinedTextField(value = newMacName, onValueChange = { newMacName = it }, label = { Text(str(lang, "Profil Adı")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = newMacAddress, onValueChange = { newMacAddress = it }, label = { Text(str(lang, "MAC Adresi")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = {
+                        if (newMacName.isNotBlank() && newMacAddress.isNotBlank()) {
+                            val profile = com.stalkerapp.data.MacProfile(name = newMacName.trim(), mac = newMacAddress.trim())
+                            val newList = initial.macProfiles + profile
+                            onSave(initial.copy(macProfiles = newList))
+                            newMacName = ""
+                            newMacAddress = ""
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text(str(lang, "Ekle")) }
+                }
+            }
+        )
+    }
 }
 
 @Composable

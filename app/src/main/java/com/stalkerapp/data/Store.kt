@@ -1059,6 +1059,9 @@ class Store(private val context: Context) {
     }
 
     companion object {
+        /** Uygulama genelinde erişilebilen son Store örneği (NetworkConfig vb. için). */
+        @Volatile var activeStore: Store? = null
+
         /** Bump to force a full re-sync of catalogs saved by older app versions. */
         const val VOD_CATALOG_VERSION = 7
         private const val META_FILE = "meta.json"

@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +62,7 @@ import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
+import kotlinx.coroutines.launch
 
 private val L10nLocal: Map<String, String> = mapOf(
     // Türkçe -> English
@@ -286,6 +288,24 @@ fun EpgGuideScreen(
                             PlaybackManager.playChannel(list, idx, profile)
                             onOpenPlayer()
                         }
+                    },
+                    onPlayCatchup = { ch, p ->
+                        // Geçmiş yayın (catch-up): kanal akışını utc/lutc parametreleriyle
+                        // oynat. Kaynak türüne göre doğru formatı CatchupHelper üretir.
+                        val url = runCatching {
+                            com.stalkerapp.data.CatchupHelper.buildStalkerCatchupUrl(
+                                vm.repository.channelStreamUrl(ch, profile),
+                                p.startTs,
+                                p.stopTs
+                            )
+                        }.getOrNull()
+                        if (!url.isNullOrBlank()) {
+                            PlaybackManager.play(url, "${ch.name} - ${p.name}", ch.logo)
+                            onOpenPlayer()
+                        } else {
+                            PlaybackManager.playChannel(list, list.indexOfFirst { it.id == ch.id }, profile)
+                            onOpenPlayer()
+                        }
                     }
                 )
                 else -> LazyColumn(
@@ -413,11 +433,13 @@ private fun EpgGridView(
     channels: List<Channel>,
     epg: Map<Long, List<EpgProgram>>,
     baseUrl: String,
-    onPlay: (Channel) -> Unit
+    onPlay: (Channel) -> Unit,
+    onPlayCatchup: suspend (Channel, EpgProgram) -> Unit
 ) {
     val hourWidthDp = 110f
     val rowHeight = 56.dp
     val hScroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val now = System.currentTimeMillis() / 1000
     val dayStart = now - (now % 86400)
     val totalWidthDp = (hourWidthDp * 24).dp
@@ -503,9 +525,17 @@ private fun EpgGridView(
                                                 .clip(RoundedCornerShape(5.dp))
                                                 .background(
                                                     if (p.isCurrent) Color(0xFF1E3A8A).copy(alpha = 0.85f)
+                                                    else if (p.stopTs < now && ch.isTvArchive && ch.archiveDuration > 0) Color(0xFF2E7D32).copy(alpha = 0.5f)
                                                     else Color.White.copy(alpha = 0.10f)
                                                 )
-                                                .clickable { onPlay(ch) }
+                                                .clickable {
+                                                    // Geçmiş yayınlar (catch-up) yeşil işaretlenir ve oynatılabilir.
+                                                    if (p.stopTs < now && ch.isTvArchive && ch.archiveDuration > 0) {
+                                                        scope.launch { onPlayCatchup(ch, p) }
+                                                    } else {
+                                                        onPlay(ch)
+                                                    }
+                                                }
                                                 .padding(horizontal = 5.dp, vertical = 2.dp),
                                             contentAlignment = Alignment.CenterStart
                                         ) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -89,23 +90,35 @@ fun FavoritesScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
-                items(favChannels, key = { "ch${it.id}" }) { ch ->
-                    ChannelRow(
-                        channel = ch,
-                        baseUrl = profile.baseUrl,
-                        isFavorite = true,
-                        onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
-                        onClick = {
-                            scope.launch {
-                                val idx = favChannels.indexOfFirst { it.id == ch.id }
-                                if (idx >= 0) {
-                                    PlaybackManager.playChannel(favChannels, idx, profile)
-                                    onOpenPlayer()
+                item {
+                    com.stalkerapp.ui.components.DragDropList(
+                        items = favChannels,
+                        onMove = { from, to ->
+                            val mutableList = favChannels.toMutableList()
+                            val moved = mutableList.removeAt(from)
+                            mutableList.add(to, moved)
+                            vm.store.saveFavoriteChannels(mutableList)
+                            vm.refreshFlows()
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)
+                    ) { ch ->
+                        ChannelRow(
+                            channel = ch,
+                            baseUrl = profile.baseUrl,
+                            isFavorite = true,
+                            onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                            onClick = {
+                                scope.launch {
+                                    val idx = favChannels.indexOfFirst { it.id == ch.id }
+                                    if (idx >= 0) {
+                                        PlaybackManager.playChannel(favChannels, idx, profile)
+                                        onOpenPlayer()
+                                    }
                                 }
                             }
-                        }
-                    )
-                    HorizontalDivider()
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
             if (favVods.isNotEmpty()) {

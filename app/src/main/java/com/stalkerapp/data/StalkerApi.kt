@@ -28,12 +28,20 @@ class StalkerClient(private val settingsProvider: () -> Settings) {
         isLenient = true
     }
 
-    private val okHttp = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val okHttp = run {
+        val st = settingsProvider()
+        // VPN & Ağ ayarları (DoH/SOCKS): aktifse NetworkConfig ile kurulur.
+        if (st.dohEnabled || st.socksProxy.isNotBlank()) {
+            com.stalkerapp.util.NetworkConfig.buildClientFor(st)
+        } else {
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build()
+        }
+    }
 
     private fun l10n(text: String): String = L10n.t(settingsProvider().language, text)
 
