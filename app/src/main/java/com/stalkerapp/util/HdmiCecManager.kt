@@ -30,20 +30,22 @@ object HdmiCecManager {
     private fun initReflection(): Boolean {
         if (hdmiControlManagerClass != null) return true
         return try {
-            hdmiControlManagerClass = Class.forName("android.hardware.hdmi.HdmiControlManager")
-            playbackClientClass = Class.forName("android.hardware.hdmi.HdmiPlaybackClient")
+            val controlClass = Class.forName("android.hardware.hdmi.HdmiControlManager")
+            val clientClass = Class.forName("android.hardware.hdmi.HdmiPlaybackClient")
+            hdmiControlManagerClass = controlClass
+            playbackClientClass = clientClass
             
             // HdmiControlManager.getPlaybackClient()
-            getPlaybackClientMethod = hdmiControlManagerClass.getMethod("getPlaybackClient")
+            getPlaybackClientMethod = controlClass.getMethod("getPlaybackClient")
             
             // HdmiPlaybackClient.oneTouchPlay(OneTouchPlayCallback)
-            oneTouchPlayMethod = playbackClientClass.getMethod("oneTouchPlay", Class.forName("android.hardware.hdmi.HdmiPlaybackClient\$OneTouchPlayCallback"))
+            oneTouchPlayMethod = clientClass.getMethod("oneTouchPlay", Class.forName("android.hardware.hdmi.HdmiPlaybackClient\$OneTouchPlayCallback"))
             
             // HdmiPlaybackClient.sendKeyEvent(int, boolean)
-            sendKeyEventMethod = playbackClientClass.getMethod("sendKeyEvent", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            sendKeyEventMethod = clientClass.getMethod("sendKeyEvent", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
             
             // HdmiPlaybackClient.queryDisplayStatus(DisplayStatusCallback)
-            queryDisplayStatusMethod = playbackClientClass.getMethod("queryDisplayStatus", Class.forName("android.hardware.hdmi.HdmiPlaybackClient\$DisplayStatusCallback"))
+            queryDisplayStatusMethod = clientClass.getMethod("queryDisplayStatus", Class.forName("android.hardware.hdmi.HdmiPlaybackClient\$DisplayStatusCallback"))
             
             true
         } catch (e: Exception) {
@@ -58,7 +60,7 @@ object HdmiCecManager {
         runCatching {
             if (!initReflection()) return@runCatching
             
-            val hdmiManagerObj = context.getSystemService(Context.HDMI_CONTROL_SERVICE)
+            val hdmiManagerObj = context.getSystemService("hdmi_control")
             if (hdmiManagerObj != null) {
                 hdmiManager = hdmiManagerObj
                 playbackClient = getPlaybackClientMethod?.invoke(hdmiManagerObj)

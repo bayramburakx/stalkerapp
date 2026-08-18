@@ -37,7 +37,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Spacer
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.border
@@ -163,7 +164,38 @@ fun VodScreen(
         return !hidden && (adultVisible || !adult)
     }
 
-    // `filtered` tanımı aşağıda, filterState ile yapılıyor.
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
+
+    val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, settings.hiddenCategories, adultUnlocked) {
+        var list = when {
+            selectedCategory != 0L -> catalog.itemsByCategory(selectedCategory)
+            filterIsSeries == true -> catalog.allItems.filter { catalog.isSeriesItem(it) }
+            filterIsSeries == false -> catalog.allItems.filter { !catalog.isSeriesItem(it) }
+            else -> catalog.allItems
+        }.filter { keepItem(it) }
+
+        if (query.isNotBlank()) {
+            list = list.filter { it.name.contains(query, ignoreCase = true) }
+        }
+
+        if (filterState.isActive) {
+            list = list.filter { item ->
+                filterState.matches(
+                    year = item.year,
+                    rating = item.rating
+                )
+            }
+            list = when (filterState.sortMode) {
+                com.stalkerapp.data.SortMode.DEFAULT -> list
+                com.stalkerapp.data.SortMode.A_Z -> list.sortedBy { it.name.lowercase() }
+                com.stalkerapp.data.SortMode.Z_A -> list.sortedByDescending { it.name.lowercase() }
+                com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending { it.year.toIntOrNull() ?: 0 }
+                com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending { it.rating.toFloatOrNull() ?: 0f }
+            }
+        }
+        list
+    }
 
     // Aşağı scroll ettikçe yükle: son satıra yaklaşınca bir sonraki sayfayı ekle.
     val shouldLoadMore by remember {

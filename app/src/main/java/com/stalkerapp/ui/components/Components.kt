@@ -56,9 +56,8 @@ fun LoadingBox() {
 }
 
 @Composable
-@Composable
 fun EmptyState(
-    text: String,
+    text: String = "",
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     title: String? = null,
     subtitle: String? = null
@@ -258,7 +257,7 @@ fun ChannelRow(
     }
 }
 
-fun resolveUrl(url: String, baseUrl: String): String {
+fun resolveUrl(url: String, baseUrl: String = ""): String {
     if (url.isBlank()) return ""
     if (url.startsWith("http://") || url.startsWith("https://")) return url
     if (baseUrl.isBlank()) return url

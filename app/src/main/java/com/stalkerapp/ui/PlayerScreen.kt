@@ -421,7 +421,7 @@ fun PlayerScreen(navController: NavHostController) {
             val p = PlaybackManager.player
             val fps = p?.videoFormat?.frameRate ?: 0f
             // API 30+: Surface.setFrameRate ile de sinyalle (120/144 Hz dahil).
-            val surface = playerView.getVideoSurface() ?: p?.videoSurface
+            val surface = (playerView.videoSurfaceView as? android.view.SurfaceView)?.holder?.surface
             Afr.apply(activity, settings.afrMode, fps, surface)
             delay(2000)
         }

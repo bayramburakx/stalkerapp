@@ -112,15 +112,7 @@ object OfflineDownloadManager {
         // DownloadHelper ile request üret (HLS/DASH/TS için stream keys + mime
         // tespiti); hazırlanamazsa düz dosya isteğine düş (progressive indirme).
         // prepare() Looper gerektirdiğinden ana iş parçacığında koşulur.
-        val request = withContext(Dispatchers.Main) {
-            runCatching {
-                DownloadHelper.forMediaItem(context, MediaItem.fromUri(entry.url))
-                    .apply { prepare() }
-                    .let { helper -> helper.getDownloadRequest(entry.id.toByteArray()).also { helper.release() } }
-            }.getOrElse {
-                DownloadRequest.Builder(entry.id, Uri.parse(entry.url)).build()
-            }
-        }
+        val request = DownloadRequest.Builder(entry.id, Uri.parse(entry.url)).build()
         downloadManager.addDownload(request)
     }
 

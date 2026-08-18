@@ -237,8 +237,7 @@ private fun TvChannelCard(
         contentAlignment = Alignment.Center
     ) {
         ChannelLogo(
-            logoUrl = channel.logo,
-            channelName = channel.name,
+            logo = channel.logo,
             modifier = Modifier.size(80.dp, 52.dp)
         )
         if (focused) {

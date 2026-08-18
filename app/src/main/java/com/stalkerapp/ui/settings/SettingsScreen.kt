@@ -30,10 +30,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.History
@@ -49,12 +52,15 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -3305,7 +3311,7 @@ private fun PortalEditDialog(
                     OutlinedTextField(value = mac, onValueChange = { mac = it }, label = { Text(str(lang, "MAC (boş olabilir)")) }, singleLine = true, modifier = Modifier.weight(1f))
                     if (initial != null) {
                         IconButton(onClick = { showMacProfilesDialog = true }) {
-                            Icon(Icons.Default.List, contentDescription = str(lang, "MAC Profilleri"))
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = str(lang, "MAC Profilleri"))
                         }
                     }
                 }
