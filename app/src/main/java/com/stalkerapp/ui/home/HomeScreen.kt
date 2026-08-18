@@ -259,13 +259,13 @@ fun HomeScreen(
                 2 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = false)
                 3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
                 4 -> com.stalkerapp.ui.downloads.DownloadsScreen(
-                    contentModifier.statusBarsPadding(),
                     onPlayOffline = { entry ->
                         com.stalkerapp.playback.PlaybackManager.playOffline(
                             entry.url, entry.title, entry.poster, entry.episodeLabel
                         )
                         onOpenPlayer()
-                    }
+                    },
+                    modifier = contentModifier.statusBarsPadding()
                 )
                 5 -> SettingsScreen(
                     vm = vm,
