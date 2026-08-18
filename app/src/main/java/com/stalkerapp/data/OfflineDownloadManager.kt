@@ -14,10 +14,14 @@ import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Requirements
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -109,11 +113,11 @@ object OfflineDownloadManager {
         startProgressTracker()
     }
 
-    private var trackerJob: kotlinx.coroutines.Job? = null
+    private var trackerJob: Job? = null
 
     private fun startProgressTracker() {
         trackerJob?.cancel()
-        trackerJob = kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+        trackerJob = CoroutineScope(Dispatchers.IO).launch {
             while (true) {
                 if (!::downloadManager.isInitialized) break
                 val current = downloadManager.currentDownloads
@@ -122,12 +126,12 @@ object OfflineDownloadManager {
                     it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED || it.state == Download.STATE_RESTARTING
                 }
                 if (!active && current.isNotEmpty()) {
-                    kotlinx.coroutines.delay(1500)
+                    delay(1500)
                     refreshState()
                     break
                 }
                 if (current.isEmpty()) break
-                kotlinx.coroutines.delay(500)
+                delay(500)
             }
         }
     }

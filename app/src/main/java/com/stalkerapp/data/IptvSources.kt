@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -326,8 +327,8 @@ object M3uParser {
         return out
     }
 
-    private val m3uSeriesSeasons = ConcurrentHashMap<Long, List<Season>>()
-    private val m3uSeriesEpisodes = ConcurrentHashMap<Long, Map<Long, List<Episode>>>()
+    private val m3uSeriesSeasons: MutableMap<Long, List<Season>> = ConcurrentHashMap()
+    private val m3uSeriesEpisodes: MutableMap<Long, Map<Long, List<Episode>>> = ConcurrentHashMap()
 
     fun getSeasons(vodId: Long): List<Season>? = m3uSeriesSeasons[vodId]
     fun getEpisodes(vodId: Long, seasonId: Long): List<Episode>? = m3uSeriesEpisodes[vodId]?.get(seasonId)

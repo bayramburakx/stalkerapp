@@ -39,11 +39,6 @@ fun JsonElement?.asJsonPrimitiveOrNull(): JsonPrimitive? = this as? JsonPrimitiv
  * ids from colliding with plain VOD ids in the catalog, and lets
  * [PortalRepository.realSeriesId] recover the real id for API calls.
  */
-private const val SERIES_ID_BASE = 10_000_000_000L
-
-/** Catalog-id base for `type=series` category ids (kept apart from VOD category ids). */
-private const val SERIES_CAT_BASE = 100_000L
-
 sealed class PortalStatus {
     data object Idle : PortalStatus()
     data class Connecting(val portalName: String) : PortalStatus()
@@ -56,6 +51,10 @@ class PortalRepository(
     private val client: StalkerClient,
     private val cacheManager: CacheManager? = null
 ) {
+    companion object {
+        const val SERIES_ID_BASE = 10_000_000_000L
+        const val SERIES_CAT_BASE = 100_000L
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Akıllı önbellek: bağlantı kurulduktan sonra çalışan temel URL hatırlanır.

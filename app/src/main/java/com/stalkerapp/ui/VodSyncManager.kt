@@ -1,5 +1,6 @@
 package com.stalkerapp.ui
 
+import com.stalkerapp.data.ExternalVod
 import com.stalkerapp.data.Genre
 import com.stalkerapp.data.PortalRepository
 import com.stalkerapp.data.Profile
