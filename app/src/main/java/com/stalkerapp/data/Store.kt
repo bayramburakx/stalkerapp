@@ -115,7 +115,55 @@ class Store(private val context: Context) {
 
     fun deleteM3uContent(id: String) {
         runCatching { m3uContentFile(id).delete() }
+        deleteExternalCaches(id)
     }
+
+    /** Harici kaynağın disk önbelleklerini (kanal + katalog) temizler. */
+    fun deleteExternalCaches(sourceId: String) {
+        runCatching { externalCacheFile("ch", sourceId).delete() }
+        runCatching { externalCacheFile("vod", sourceId).delete() }
+    }
+
+    // ---------- Harici (M3U/Xtream) katalog & kanal disk önbelleği ----------
+    // Uygulama her açıldığında Xtream kataloğu (68k öğe) ve M3U kanal listesi
+    // yeniden çekilip çözülüyordu ("her açılışta yenileniyor"). Çözülen katalog
+    // dosyaya yazılır; açılışta önbellekten okunur, ağ isteği yapılmaz.
+
+    private fun externalCacheFile(kind: String, sourceId: String): File =
+        File(context.filesDir, "ext_${kind}_$sourceId.json")
+
+    fun saveExternalVodCache(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
+        runCatching {
+            // 120k+ öğe JSON'a dönüştürmek bellek ister — devasa M3U katalogları
+            // önbelleklenmez (parse her açılışta yapılır); Xtream gibi makul
+            // boyutlar önbelleklenir.
+            if (items.size > 120_000) return
+            val f = externalCacheFile("vod", sourceId)
+            f.writeText(json.encodeToString(ExternalVodCacheDto(genres, items)))
+        }
+    }
+
+    fun loadExternalVodCache(sourceId: String): Pair<List<Genre>, List<VodItem>>? = runCatching {
+        val f = externalCacheFile("vod", sourceId)
+        if (!f.exists()) return null
+        val dto = json.decodeFromString(ExternalVodCacheDto.serializer(), f.readText())
+        dto.genres to dto.items
+    }.getOrNull()
+
+    fun saveExternalChannelCache(sourceId: String, genres: List<Genre>, channels: List<Channel>) {
+        runCatching {
+            if (channels.size > 50_000) return
+            val f = externalCacheFile("ch", sourceId)
+            f.writeText(json.encodeToString(ExternalChannelCacheDto(genres, channels)))
+        }
+    }
+
+    fun loadExternalChannelCache(sourceId: String): Pair<List<Genre>, List<Channel>>? = runCatching {
+        val f = externalCacheFile("ch", sourceId)
+        if (!f.exists()) return null
+        val dto = json.decodeFromString(ExternalChannelCacheDto.serializer(), f.readText())
+        dto.genres to dto.channels
+    }.getOrNull()
 
     /**
      * M3U kaynaklarını kaydeder; içerik alanı dosyaya yazılıp listeden
@@ -768,9 +816,28 @@ class Store(private val context: Context) {
         )
     }.getOrDefault(emptyMap())
 
-    fun saveEpisodeProgress(key: String, positionMs: Long, durationMs: Long) {
+    fun saveEpisodeProgress(
+        key: String,
+        positionMs: Long,
+        durationMs: Long,
+        item: VodItem? = null,
+        episodeLabel: String = ""
+    ) {
         val map = episodeProgress().toMutableMap()
-        map[key] = VodProgress(positionMs, durationMs, System.currentTimeMillis())
+        val prev = map[key]
+        map[key] = VodProgress(
+            positionMs = positionMs,
+            durationMs = durationMs,
+            lastUpdated = System.currentTimeMillis(),
+            // Dizi anlık görüntüsü: katalog senkronu olmasa da "İzlemeye Devam /
+            // Son İzlenenler" bölüm kartını gösterebilsin.
+            name = item?.name?.ifBlank { prev?.name.orEmpty() } ?: prev?.name.orEmpty(),
+            poster = item?.poster?.ifBlank { prev?.poster.orEmpty() } ?: prev?.poster.orEmpty(),
+            isSeries = true,
+            categoryId = item?.categoryId ?: prev?.categoryId ?: 0,
+            sourceKey = activeSourceKey(),
+            episodeLabel = episodeLabel.ifBlank { prev?.episodeLabel.orEmpty() }
+        )
         prefs.edit().putString(
             scoped(KEY_EPISODE_PROGRESS),
             json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
@@ -783,6 +850,39 @@ class Store(private val context: Context) {
             prefs.edit().putString(
                 scoped(KEY_EPISODE_PROGRESS),
                 json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), map)
+            ).apply()
+        }
+    }
+
+    /**
+     * Aktif kaynağın anahtarı: "m3u|<id>", "xtream|<id>" veya "stalker|<portalId>".
+     * İzleme ilerlemeleri bu anahtarla etiketlenir; kaynak silinince/değişince
+     * ana sayfadaki "İzlemeye Devam / Son İzlenenler" eski kaynağın içeriğini
+     * göstermez (kaynak bazlı izolasyon).
+     */
+    fun activeSourceKey(): String = when (activeSourceKind()) {
+        "m3u" -> "m3u|" + (activeSourceId() ?: "")
+        "xtream" -> "xtream|" + (activeSourceId() ?: "")
+        else -> "stalker|" + (activePortalId() ?: "")
+    }
+
+    /** Bir kaynağa ait tüm izleme ilerlemelerini (film + bölüm) siler. */
+    fun purgeProgressForSource(sourceKey: String) {
+        if (sourceKey.isBlank()) return
+        val vp = loadVodProgress().filterValues { it.sourceKey == sourceKey }
+        if (vp.isNotEmpty()) {
+            val rest = loadVodProgress().filterValues { it.sourceKey != sourceKey }
+            prefs.edit().putString(
+                scoped(KEY_VOD_PROGRESS),
+                json.encodeToString(MapSerializer(Long.serializer(), VodProgress.serializer()), rest)
+            ).apply()
+        }
+        val ep = episodeProgress().filterValues { it.sourceKey == sourceKey }
+        if (ep.isNotEmpty()) {
+            val rest = episodeProgress().filterValues { it.sourceKey != sourceKey }
+            prefs.edit().putString(
+                scoped(KEY_EPISODE_PROGRESS),
+                json.encodeToString(MapSerializer(String.serializer(), VodProgress.serializer()), rest)
             ).apply()
         }
     }
@@ -800,7 +900,8 @@ class Store(private val context: Context) {
             name = item?.name?.ifBlank { prev?.name.orEmpty() } ?: prev?.name.orEmpty(),
             poster = item?.poster?.ifBlank { prev?.poster.orEmpty() } ?: prev?.poster.orEmpty(),
             isSeries = item?.isSeries ?: prev?.isSeries ?: false,
-            categoryId = item?.categoryId ?: prev?.categoryId ?: 0
+            categoryId = item?.categoryId ?: prev?.categoryId ?: 0,
+            sourceKey = activeSourceKey()
         )
         prefs.edit().putString(
             scoped(KEY_VOD_PROGRESS),
@@ -902,6 +1003,11 @@ data class AppBackup(
 )
 
 @kotlinx.serialization.Serializable
+data class ExternalVodCacheDto(val genres: List<Genre>, val items: List<VodItem>)
+
+@kotlinx.serialization.Serializable
+data class ExternalChannelCacheDto(val genres: List<Genre>, val channels: List<Channel>)
+
 data class CatalogMetaFile(
     val categories: List<Genre>,
     val itemCount: Int,
@@ -918,7 +1024,11 @@ data class VodProgress(
     val name: String = "",
     val poster: String = "",
     val isSeries: Boolean = false,
-    val categoryId: Long = 0
+    val categoryId: Long = 0,
+    /** İlerlemenin ait olduğu kaynak ("m3u|id", "xtream|id", "stalker|portalId"). */
+    val sourceKey: String = "",
+    /** Dizi bölümleri için etiket (ör: "S1 E3"). */
+    val episodeLabel: String = ""
 ) {
     /** Katalog byId'sinde öğe yoksa ana sayfa için yeterli bir [VodItem] üretir. */
     fun toVodItem(id: Long): VodItem? =

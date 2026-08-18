@@ -326,6 +326,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         store.deleteM3uContent(id)
         m3uCache.remove(id)
         m3uVodCache.remove(id)
+        // Bu kaynağa ait izleme ilerlemelerini de sil — ana sayfada eski kaynağın
+        // "Son İzlenenler / İzlemeye Devam" içeriği kalmasın.
+        store.purgeProgressForSource("m3u|$id")
         if (store.activeSourceKind() == "m3u" && store.activeSourceId() == id) {
             // Aktif kaynak silindiyse Stalker'a dön (katalog akışını da tazeler).
             setActiveSource("stalker", null)
@@ -345,8 +348,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     fun deleteXtreamSource(id: String) {
         store.saveXtreamSources(store.xtreamSources().filterNot { it.id == id })
+        // Disk önbellekleri de sil — kaynak yeniden eklenirse bayat veri okunmasın.
+        store.deleteExternalCaches(id)
         xtreamCache.remove(id)
         xtreamVodCache.remove(id)
+        store.purgeProgressForSource("xtream|$id")
         if (store.activeSourceKind() == "xtream" && store.activeSourceId() == id) {
             // Aktif kaynak silindiyse Stalker'a dön (katalog akışını da tazeler).
             setActiveSource("stalker", null)
@@ -405,6 +411,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının kanallarını yükler (gerekirse indirir + çözer). */
     suspend fun loadM3uChannels(source: M3uSource): Pair<List<Genre>, List<Channel>> {
         m3uCache[source.id]?.let { return it }
+        // 134MB listeyi her açılışta yeniden ayrıştırmamak için çözülen kanallar
+        // disk önbelleğine yazılır (ilk açılışta oluşturulur, sonra hazır okunur).
+        store.loadExternalChannelCache(source.id)?.let {
+            m3uCache[source.id] = it
+            return it
+        }
         // İndirme, dosya okuma ve ayrıştırma ana iş parçacığını kilitleyip ANR'a
         // yol açıyordu (yüzlerce MB liste) — tamamı IO'da, dosyadan akışla.
         val result = withContext(Dispatchers.IO) {
@@ -419,6 +431,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             val groups = channels.map { it.tvGenreTitle }.filter { it.isNotBlank() }.distinct().sorted()
             val genres = listOf(Genre(0, "Tümü")) +
                 groups.mapIndexed { i, g -> Genre((i + 1).toLong(), g) }
+            store.saveExternalChannelCache(source.id, genres, channels)
             genres to channels
         }
         m3uCache[source.id] = result
@@ -428,12 +441,18 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** Xtream kaynağının canlı kanallarını yükler (kategoriler + kanallar). */
     suspend fun loadXtreamChannels(source: XtreamSource): Pair<List<Genre>, List<Channel>> {
         xtreamCache[source.id]?.let { return it }
+        // Uygulama her açılışında ağ isteği tekrarlanmasın — disk önbelleği kullan.
+        store.loadExternalChannelCache(source.id)?.let {
+            xtreamCache[source.id] = it
+            return it
+        }
         val client = XtreamClient()
         val cats = client.liveCategories(source)
         val channels = client.liveStreams(source)
         val genres = listOf(Genre(0, "Tümü")) + cats
         val result = genres to channels
         xtreamCache[source.id] = result
+        withContext(Dispatchers.IO) { store.saveExternalChannelCache(source.id, genres, channels) }
         return result
     }
 
@@ -445,6 +464,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** M3U kaynağının film/dizi kataloğunu yükler (gerekirse içeriği indirir). */
     suspend fun loadM3uVod(source: M3uSource): Pair<List<Genre>, List<VodItem>> {
         m3uVodCache[source.id]?.let { return it }
+        // Makul boyutlu M3U katalogları disk önbelleğinden okunur (devasa
+        // 120k+ listeler önbelleklenmez, her açılışta parse edilir).
+        store.loadExternalVodCache(source.id)?.let {
+            m3uVodCache[source.id] = it
+            return it
+        }
         // İndirme/okuma + ayrıştırma ana iş parçacığını kilitlemesin — dosyadan
         // akışla, dev String kurulmadan çalışır.
         val result = withContext(Dispatchers.IO) {
@@ -457,16 +482,23 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             }
         }
         m3uVodCache[source.id] = result
+        withContext(Dispatchers.IO) { store.saveExternalVodCache(source.id, result.first, result.second) }
         return result
     }
 
     /** Xtream kaynağının film + dizi kataloğunu yükler. */
     suspend fun loadXtreamVod(source: XtreamSource): Pair<List<Genre>, List<VodItem>> {
         xtreamVodCache[source.id]?.let { return it }
+        // Katalog her açılışta yeniden çekilmesin (68k öğe ≈ 30MB) — disk önbelleği.
+        store.loadExternalVodCache(source.id)?.let {
+            xtreamVodCache[source.id] = it
+            return it
+        }
         // fetchVodCatalog ağ/HTTP hatasında XtreamApiException fırlatır;
         // ensureExternalVodCatalog bunu yakalayıp Error durumuna düşürür.
         val result = XtreamClient().fetchVodCatalog(source)
         xtreamVodCache[source.id] = result
+        withContext(Dispatchers.IO) { store.saveExternalVodCache(source.id, result.first, result.second) }
         return result
     }
 
@@ -477,6 +509,10 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamVod(it) }
             else -> null
         } ?: (emptyList<Genre>() to emptyList<VodItem>())
+
+    // Dış katalog kurulumu tekilleştirilir: Home + Filmler/Diziler aynı anda
+    // çağırınca iki coroutine dev kataloğu iki kez parse edip OOM'a yol açabiliyordu.
+    private val externalCatalogMutex = Mutex()
 
     /**
      * Aktif M3U/Xtream kaynağı için VOD kataloğunu kurup arayüze yayınlar.
@@ -491,39 +527,60 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         val ready = _externalCatalog.value.status == VodCatalogStatus.Ready &&
             _externalCatalog.value.loadedCount > 0
         if (!force && ready) return
-        val id = store.activeSourceId() ?: return
-        val prev = _externalCatalog.value
-        _externalCatalog.value = prev.copy(status = VodCatalogStatus.Syncing)
-        var result: Pair<List<Genre>, List<VodItem>>? = null
-        repeat(2) { attempt ->
-            try {
-                result = loadExternalCatalog(kind, id)
-            } catch (e: Exception) {
-                if (attempt == 0) delay(1500)
+        externalCatalogMutex.withLock {
+            // Kilit beklerken başka çağrı kataloğu kurmuş olabilir — yeniden kontrol et.
+            val reReady = _externalCatalog.value.status == VodCatalogStatus.Ready &&
+                _externalCatalog.value.loadedCount > 0
+            if (!force && reReady) return@withLock
+            val id = store.activeSourceId() ?: return@withLock
+            val prev = _externalCatalog.value
+            _externalCatalog.value = prev.copy(status = VodCatalogStatus.Syncing)
+            var result: Pair<List<Genre>, List<VodItem>>? = null
+            repeat(2) { attempt ->
+                try {
+                    result = loadExternalCatalog(kind, id)
+                } catch (e: Exception) {
+                    if (attempt == 0) delay(1500)
+                }
             }
-        }
-        if (result != null) {
-            val (genres, items) = result!!
-            // 400k+ öğelik M3U kataloğunda associateBy + kategori hesapları ana
-            // iş parçacığını kilitleyip donmaya yol açıyordu — arka planda kurulur.
-            val state = withContext(Dispatchers.Default) {
-                VodCatalogState.of(
-                    status = VodCatalogStatus.Ready,
-                    doneCategories = genres.size,
-                    totalCategories = genres.size,
-                    loadedCount = items.size,
-                    allItems = items,
-                    categories = genres,
-                    lastSync = System.currentTimeMillis()
-                )
-            }
-            _externalCatalog.value = state
-        } else {
-            // Geçici hata: eski hazır katalog varsa Error'a düşürme, onu koru.
-            _externalCatalog.value = if (prev.status == VodCatalogStatus.Ready && prev.loadedCount > 0) {
-                prev
+            if (result != null) {
+                val (genres, items) = result!!
+                // 400k+ öğelik M3U kataloğunda associateBy + kategori hesapları ana
+                // iş parçacığını kilitleyip donmaya yol açıyordu — arka planda kurulur.
+                val state = try {
+                    withContext(Dispatchers.Default) {
+                        VodCatalogState.of(
+                            status = VodCatalogStatus.Ready,
+                            doneCategories = genres.size,
+                            totalCategories = genres.size,
+                            loadedCount = items.size,
+                            allItems = items,
+                            categories = genres,
+                            lastSync = System.currentTimeMillis()
+                        )
+                    }
+                } catch (e: Exception) {
+                    // Katalog kurulamadı (bellek vb.): Syncing'de takılı kalmasın,
+                    // önceki hazır durumu koru ya da boş Ready yayınla.
+                    if (prev.status == VodCatalogStatus.Ready && prev.loadedCount > 0) prev
+                    else VodCatalogState.of(
+                        status = VodCatalogStatus.Ready,
+                        doneCategories = genres.size,
+                        totalCategories = genres.size,
+                        loadedCount = items.size,
+                        allItems = emptyList(),
+                        categories = genres,
+                        lastSync = System.currentTimeMillis()
+                    )
+                }
+                _externalCatalog.value = state
             } else {
-                prev.copy(status = VodCatalogStatus.Error)
+                // Geçici hata: eski hazır katalog varsa Error'a düşürme, onu koru.
+                _externalCatalog.value = if (prev.status == VodCatalogStatus.Ready && prev.loadedCount > 0) {
+                    prev
+                } else {
+                    prev.copy(status = VodCatalogStatus.Error)
+                }
             }
         }
     }
@@ -536,6 +593,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
                 withContext(Dispatchers.IO) { M3uParser.fetchToFile(source.url, file) }
             } else false
             if (ok) {
+                // Disk önbellekleri bayat — sil ki yeni içerikle yeniden kurulsun.
+                store.deleteExternalCaches(source.id)
                 m3uCache.remove(source.id)
                 m3uVodCache.remove(source.id)
                 ensureExternalVodCatalog(force = true)
@@ -546,6 +605,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** Xtream kaynağının önbelleklerini temizleyip katalogları yeniden çeker. */
     fun refreshXtream(source: XtreamSource) {
         viewModelScope.launch {
+            // Disk önbellekleri bayat — sil ki yeniden çekilsin.
+            store.deleteExternalCaches(source.id)
             xtreamCache.remove(source.id)
             xtreamVodCache.remove(source.id)
             ensureExternalVodCatalog(force = true)
@@ -704,6 +765,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     fun deletePortal(id: String) {
         store.deletePortal(id)
+        // Portal silinince o portalın izleme ilerlemelerini de temizle.
+        store.purgeProgressForSource("stalker|$id")
     }
 
     /** Switches the active portal, reconnects, and re-syncs the VOD catalog. */

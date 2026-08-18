@@ -345,6 +345,7 @@ fun VodPoster(
     isSeries: Boolean = item.isSeries,
     posterWidth: Int? = null,
     watched: Boolean = false,
+    label: String? = null,
     onLongPress: (() -> Unit)? = null
 ) {
     val lang = (LocalContext.current.applicationContext as StalkerApp).store.settings().language
@@ -422,10 +423,28 @@ fun VodPoster(
                     )
                 }
             }
+            if (label != null) {
+                // Bölüm etiketi ("S1E3" vb.): sağ alt köşede gösterilir.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.72f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        label,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
+                    )
+                }
+            }
         }
         Column(modifier = Modifier.padding(top = 6.dp)) {
             Text(
-                text = item.name,
+                text = if (label != null) "${item.name} • $label" else item.name,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

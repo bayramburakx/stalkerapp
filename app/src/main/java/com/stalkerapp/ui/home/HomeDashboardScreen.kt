@@ -100,6 +100,16 @@ private val L10nLocal: Map<String, String> = mapOf(
 private fun str(lang: String, text: String): String =
     if (lang == "en") L10nLocal[text] ?: text else text
 
+// Ana sayfa "İzlemeye Devam / Son İzlenenler" kartı için ortak veri yapısı.
+// Bölüm ilerlemeleri için episodeLabel ("S1E3") de taşınır.
+private data class HomeEntry(
+    val item: VodItem,
+    val positionMs: Long,
+    val durationMs: Long,
+    val lastUpdated: Long,
+    val episodeLabel: String? = null
+)
+
 @Composable
 fun HomeDashboardScreen(
     profile: Profile?,
@@ -172,31 +182,55 @@ fun HomeDashboardScreen(
     fun itemFor(id: Long, p: com.stalkerapp.data.VodProgress): com.stalkerapp.data.VodItem? =
         catalog.byId[id] ?: p.toVodItem(id)
 
-    val continueWatching = remember(catalog, watchedVersion, hiddenFromHome) {
-        val progress = app.store.loadVodProgress()
-        progress.mapNotNull { (id, p) ->
-            if (id !in hiddenFromHome && p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85) {
-                itemFor(id, p)?.let { it to p }
-            } else null
+    // Yalnızca AKTİF kaynağın ilerlemeleri gösterilir: kaynak silinince/değişince
+    // eski kaynağın "İzlemeye Devam / Son İzlenenler" içeriği görünmez.
+    val curSourceKey = app.store.activeSourceKey()
+    // Dizi bölümü kartları için etiket ("S1E3" veya bölüm adı).
+    fun episodeLabelOf(key: String, p: com.stalkerapp.data.VodProgress): String {
+        if (p.episodeLabel.isNotBlank()) return p.episodeLabel
+        val parts = key.split(':')
+        return buildString {
+            if (parts.size > 1) append("S").append(parts[1])
+            if (parts.size > 2) append("E").append(parts[2])
         }
     }
 
-    // Son İzlenenler: hem film ilerlemeleri hem de dizi bölüm ilerlemeleri,
-    // son izlenme zamanına göre sıralanır (tamamlanmışlar da dahil).
-    val recentlyWatched = remember(catalog, watchedVersion, hiddenFromHome) {
-        val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
-            if (id in hiddenFromHome) null else itemFor(id, p)?.let { Triple(it, p.lastUpdated, p.positionMs) }
+    // İzlemeye Devam: filmler + dizi bölümleri, EN YENİ İZLENEN BAŞTA.
+    val continueWatching = remember(catalog, watchedVersion, hiddenFromHome, curSourceKey) {
+        val movies = app.store.loadVodProgress().mapNotNull { (id, p) ->
+            if (id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+            else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85)
+                itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated) }
+            else null
         }
         val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
             val id = key.substringBefore(':').toLongOrNull()
-            if (id == null || id in hiddenFromHome) null
-            else catalog.byId[id]?.let { Triple(it, p.lastUpdated, p.positionMs) }
+            if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+            else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85)
+                itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
+            else null
+        }
+        (movies + eps)
+            .sortedByDescending { it.lastUpdated }
+            .distinctBy { it.item.id }
+    }
+
+    // Son İzlenenler: film + bölüm ilerlemeleri, son izlenme zamanına göre
+    // sıralanır (tamamlanmışlar da dahil). En yeni başta.
+    val recentlyWatched = remember(catalog, watchedVersion, hiddenFromHome, curSourceKey) {
+        val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
+            if (id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+            else itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated) }
+        }
+        val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
+            val id = key.substringBefore(':').toLongOrNull()
+            if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+            else itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
         }
         (vod + eps)
-            .sortedByDescending { it.second }
-            .distinctBy { it.first.id }
+            .sortedByDescending { it.lastUpdated }
+            .distinctBy { it.item.id }
             .take(20)
-            .map { it.first to it.third }
     }
 
     // Uzun bas → hızlı işlemler sheet'i + izlenme işaretleri.
@@ -280,15 +314,16 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(recentlyWatched, key = { it.first.id }) { (item, _) ->
+                            items(recentlyWatched, key = { it.item.id }) { e ->
                                 VodPoster(
-                                    item = item,
+                                    item = e.item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
-                                    isSeries = catalog.isSeriesItem(item),
+                                    isSeries = catalog.isSeriesItem(e.item),
                                     posterWidth = posterWidth,
-                                    watched = isWatched(item),
-                                    onLongPress = { quickActionItem = item },
-                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                    label = e.episodeLabel,
+                                    watched = isWatched(e.item),
+                                    onLongPress = { quickActionItem = e.item },
+                                    onClick = { onOpenVod(e.item.id, catalog.isSeriesItem(e.item)) }
                                 )
                             }
                         }
@@ -300,14 +335,15 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(continueWatching, key = { it.first.id }) { (item, prog) ->
+                            items(continueWatching, key = { it.item.id }) { e ->
                                 ContinueWatchingCard(
-                                    item = item,
+                                    item = e.item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
-                                    positionMs = prog.positionMs,
-                                    durationMs = prog.durationMs,
-                                    onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) },
-                                    onLongPress = { quickActionItem = item }
+                                    positionMs = e.positionMs,
+                                    durationMs = e.durationMs,
+                                    episodeLabel = e.episodeLabel,
+                                    onClick = { onOpenVod(e.item.id, catalog.isSeriesItem(e.item)) },
+                                    onLongPress = { quickActionItem = e.item }
                                 )
                             }
                         }
@@ -674,6 +710,7 @@ private fun ContinueWatchingCard(
     baseUrl: String,
     positionMs: Long,
     durationMs: Long,
+    episodeLabel: String? = null,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null
 ) {
@@ -705,9 +742,24 @@ private fun ContinueWatchingCard(
                 modifier = Modifier.fillMaxWidth().height(4.dp).align(Alignment.BottomCenter),
                 color = Color(0xFFE50914)
             )
+            if (episodeLabel != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
+                        .background(Color(0xCC000000), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        episodeLabel,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
         }
         Text(
-            item.name,
+            if (episodeLabel != null) "${item.name} • $episodeLabel" else item.name,
             style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

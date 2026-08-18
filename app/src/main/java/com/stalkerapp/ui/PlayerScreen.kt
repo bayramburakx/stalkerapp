@@ -516,7 +516,9 @@ fun PlayerScreen(navController: NavHostController) {
                         // Bölüm bazlı ilerleme (devam et / binge için).
                         app.store.saveEpisodeProgress(
                             "${PlaybackManager.currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
-                            pos, dur
+                            pos, dur,
+                            PlaybackManager.currentVodItem,
+                            "S${VodQueue.season}E${cur.episodeNumber}"
                         )
                     } else if (pos < dur * 0.95) {
                         app.store.saveVodProgress(
@@ -539,7 +541,9 @@ fun PlayerScreen(navController: NavHostController) {
                     if (cur != null) {
                         app.store.saveEpisodeProgress(
                             "${PlaybackManager.currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
-                            pos, dur
+                            pos, dur,
+                            PlaybackManager.currentVodItem,
+                            "S${VodQueue.season}E${cur.episodeNumber}"
                         )
                     } else {
                         app.store.saveVodProgress(

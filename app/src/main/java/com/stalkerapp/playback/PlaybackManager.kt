@@ -867,7 +867,12 @@ object PlaybackManager {
         if (dur <= 0 || pos <= 0) return
         val cur = VodQueue.current
         if (cur != null) {
-            store.saveEpisodeProgress("${currentVodId}:${VodQueue.season}:${cur.episodeNumber}", pos, dur)
+            store.saveEpisodeProgress(
+                "${currentVodId}:${VodQueue.season}:${cur.episodeNumber}",
+                pos, dur,
+                currentVodItem,
+                "S${VodQueue.season}E${cur.episodeNumber}"
+            )
         } else {
             store.saveVodProgress(currentVodId, pos, dur, currentVodItem)
         }
