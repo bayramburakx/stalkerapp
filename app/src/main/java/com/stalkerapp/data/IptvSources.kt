@@ -784,7 +784,7 @@ class XtreamClient {
             id = ExternalVod.XTREAM_VOD_BASE + streamId,
             categoryId = (info["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0,
             name = name,
-            originalName = (info["o_name"] as? JsonPrimitive)?.contentOrNull.ifBlank { name },
+            originalName = (info["o_name"] as? JsonPrimitive)?.contentOrNull.orEmpty().ifBlank { name },
             poster = coverBig.ifBlank { movieImage }.ifBlank { backdrop },
             description = (info["plot"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
             year = (info["releasedate"] as? JsonPrimitive)?.contentOrNull.orEmpty().take(4),
