@@ -162,6 +162,8 @@ fun VodDetailScreen(
     // Panelin plot/cast'i boşsa (Xtream filmleri) TMDB özeti ve oyuncu adları kullanılır.
     var tmdbOverview by remember { mutableStateOf("") }
     var tmdbActorNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Panel director boşsa TMDB yönetmen(leri) kullanılır.
+    var tmdbDirector by remember { mutableStateOf("") }
     // Sezon posterleri + bölüm küçük resimleri (portal önce, yoksa TMDB).
     var seasonPosters by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var episodeThumbs by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
@@ -207,6 +209,7 @@ fun VodDetailScreen(
                     // Panel metni boşsa TMDB'den tamamla (Xtream filmlerinde plot/cast boş).
                     if (i.description.isBlank()) tmdbOverview = enr.overview
                     if (i.actors.isBlank()) tmdbActorNames = enr.actorNames
+                    if (i.director.isBlank()) tmdbDirector = enr.director
                 }
                 if (settings.tmdbTrailers) trailerKey = enr.trailerKey
             }
@@ -693,7 +696,7 @@ fun VodDetailScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                     }
-                    it.director.takeIf { d -> d.isNotBlank() }?.let { d ->
+                    it.director.ifBlank { tmdbDirector }.takeIf { d -> d.isNotBlank() }?.let { d ->
                         Text(
                             "${str(lang, "Yönetmen: ")}$d",
                             style = MaterialTheme.typography.bodyMedium,

@@ -41,7 +41,9 @@ data class TmdbEnrichment(
      */
     val overview: String = "",
     /** TMDB oyuncu adları (panel `cast`'ı boşsa oyuncular bölümü buradan doldurulur). */
-    val actorNames: List<String> = emptyList()
+    val actorNames: List<String> = emptyList(),
+    /** Yönetmen(ler) — panel `director`'ı boşsa detay ekranı bunu kullanır. */
+    val director: String = ""
 )
 
 /**
@@ -115,7 +117,8 @@ class TmdbClient(
         val cast = extractCast(obj["credits"])
         val overview = (obj["overview"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val actorNames = cast.map { it.name }.filter { it.isNotBlank() }.distinct().take(20)
-        return TmdbEnrichment(rating, trailerKey, cast, overview, actorNames).also { cache[cacheKey] = it }
+        val director = extractDirector(obj["credits"])
+        return TmdbEnrichment(rating, trailerKey, cast, overview, actorNames, director).also { cache[cacheKey] = it }
     }
 
     /**
@@ -177,19 +180,39 @@ class TmdbClient(
         }
         val obj = getJson(url) ?: return 0
         val results = obj["results"] as? JsonArray ?: return 0
-        // Tam ad eşleşmesi önceliklidir; yoksa ilk sonuç kabul edilir.
-        val id = results.mapNotNull { it as? JsonObject }.firstNotNullOfOrNull { o ->
+        // Yıl ile yapılan arama boş döndüyse, yıl olmadan tekrar dene (Xtream
+        // başlıkları ("PRIMAFILA 1 FHD" gibi) panel yılından sapabilir).
+        if (results.isEmpty() && y != null) {
+            val fallback = getJson(
+                "https://api.themoviedb.org/3/search/$type?api_key=$apiKey&query=" +
+                    Uri.encode(name) + "&language=${languageProvider()}"
+            )
+            val fbResults = fallback?.get("results") as? JsonArray
+            if (fbResults != null && fbResults.isNotEmpty()) {
+                return resolveId(fbResults, name).also { cache[cacheKey] = it }
+            }
+        }
+        val id = resolveId(results, name)
+        cache[cacheKey] = id
+        return id
+    }
+
+    /** Arama sonuçlarından TMDB kimliğini çözer: tam ad eşleşmesi önceliklidir, yoksa ilk sonuç. */
+    private fun resolveId(results: JsonArray, name: String): Long {
+        val objs = results.mapNotNull { it as? JsonObject }
+        // Tam ad eşleşmesini öncele.
+        objs.firstNotNullOfOrNull { o ->
             val n = (o["name"] as? JsonPrimitive)?.contentOrNull
                 ?: (o["title"] as? JsonPrimitive)?.contentOrNull
                 ?: return@firstNotNullOfOrNull null
             if (n.equals(name.trim(), ignoreCase = true)) {
-                (o["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: return@firstNotNullOfOrNull null
+                (o["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
             } else null
-        } ?: results.mapNotNull { it as? JsonObject }.firstNotNullOfOrNull { o ->
+        }?.let { return it }
+        // Aksi halde ilk sonucu kabul et.
+        return objs.firstNotNullOfOrNull { o ->
             (o["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
         } ?: 0
-        cache[cacheKey] = id
-        return id
     }
 
     /** İsme göre kişi ara; fotoğraf yolu + TMDB kişi id'si döner. */
@@ -286,6 +309,18 @@ class TmdbClient(
                 character = (o["character"] as? JsonPrimitive)?.contentOrNull ?: ""
             )
         }.distinctBy { it.id }
+    }
+
+    /** Yönetmen(leri) — crew içindeki job "Director"/"Yönetmen" olan kişiler. */
+    private fun extractDirector(credits: JsonElement?): String {
+        val arr = (credits as? JsonObject)?.get("crew") as? JsonArray ?: return ""
+        return arr.mapNotNull { v ->
+            val o = v as? JsonObject ?: return@mapNotNull null
+            val job = (o["job"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            if (job.equals("Director", ignoreCase = true) || job.equals("Yönetmen", ignoreCase = true)) {
+                (o["name"] as? JsonPrimitive)?.contentOrNull
+            } else null
+        }.filter { it.isNotBlank() }.joinToString(", ")
     }
 
     companion object {

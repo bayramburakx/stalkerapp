@@ -884,6 +884,9 @@ object PlaybackManager {
     }
 
     fun stop() {
+        // Çıkıştan önce son izlenen konumu (bölüm/film) kalıcı kaydet — aksi halde
+        // "kaldığı yerden devam et" özelliği kapatma düğmesiyle çıkışta çalışmaz.
+        saveProgressBeforeExit()
         // Oynatıcıdan çıkılırken son konum %85+ ise bölüm izlendi işaretlenir
         // (5 sn'lik döngü henüz çalışmadan çıkılmış olabilir; stop konumu sıfırlar).
         checkAutoWatched()

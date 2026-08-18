@@ -94,7 +94,8 @@ object M3uParser {
 
     /** Film/VOD grup anahtar kelimeleri: grup adı bunlardan birini içeriyorsa film sayılır. */
     private val MOVIE_KEYWORDS = listOf(
-        "film", "filmler", "movie", "movies", "sinema", "cinema", "kino", "vod", "pelicula", "filme"
+        "film", "filmler", "movie", "movies", "sinema", "cinema", "kino", "vod", "pelicula", "filme",
+        "video club", "filmizle", "filmler hd", "turk film", "türk film", "dizi", "diziler"
     )
 
     /**
@@ -140,8 +141,16 @@ object M3uParser {
             "live", "radio", "tv", "channel", "iptv" -> return M3uEntryType.LIVE
 
         }
-        val group = attrs["group-title"].orEmpty().lowercase()
+        // Token tabanlı (dosya uzantısız) sağlayıcılar genelde içeriği yol ile ayırır:
+        // /movie/..., /vod/..., /film/..., /series/... → kesin VOD sinyali.
         val u = url.lowercase()
+        if (u.contains("/series/") || u.contains("/serie/") || u.contains("/dizi/")) {
+            return M3uEntryType.SERIES
+        }
+        if (u.contains("/movie/") || u.contains("/vod/") || u.contains("/film/") || u.contains("/filme/")) {
+            return M3uEntryType.MOVIE
+        }
+        val group = attrs["group-title"].orEmpty().lowercase()
         // Dizi bölümü deseni ("S01E05") → kesin dizi.
         if (EPISODE_IN_NAME.containsMatchIn(name)) return M3uEntryType.SERIES
         // URL bir VOD dosya uzantısıyla bitiyorsa kesin olarak canlı değildir.
@@ -394,6 +403,23 @@ class XtreamClient {
         return t.startsWith("-----")
     }
 
+    /**
+     * Panel `{"user_info":{"auth":0}}` (veya `{"auth":0}`) döndürebilir; bu HTTP
+     * 200 ile gelir ama aslında başarısız senkronizasyondur. Boş katalog yerine
+     * hata olarak ele alınmalı. `max_connections` aşımında sık görülür.
+     */
+    private fun isAuthFailure(el: JsonElement?): Boolean {
+        val obj = el as? JsonObject ?: return false
+        val ui = obj["user_info"] as? JsonObject
+        if (ui != null) {
+            val auth = (ui["auth"] as? JsonPrimitive)?.contentOrNull
+            if (auth == "0") return true
+        }
+        val topAuth = (obj["auth"] as? JsonPrimitive)?.contentOrNull
+        if (topAuth == "0") return true
+        return false
+    }
+
     private fun parseCategories(el: JsonElement): List<Genre> =
         (el as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { o ->
             val id = (o["category_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
@@ -416,7 +442,9 @@ class XtreamClient {
                     if (!r.isSuccessful) throw XtreamApiException("HTTP ${r.code} (${r.request.url})")
                     val text = r.body?.string().orEmpty()
                     if (text.isBlank()) throw XtreamApiException("empty response: ${r.request.url}")
-                    return@withContext json.parseToJsonElement(text)
+                    val parsed = json.parseToJsonElement(text)
+                    if (isAuthFailure(parsed)) throw XtreamApiException("auth failed (auth=0): ${r.request.url}")
+                    return@withContext parsed
                 }
             } catch (e: Exception) {
                 lastError = e
@@ -444,7 +472,9 @@ class XtreamClient {
                 if (!r.isSuccessful) return@use null
                 val text = r.body?.string().orEmpty()
                 if (text.isBlank()) return@use null
-                json.parseToJsonElement(text)
+                val parsed = json.parseToJsonElement(text)
+                if (isAuthFailure(parsed)) return@use null
+                parsed
             }
         }.getOrNull()
     }
