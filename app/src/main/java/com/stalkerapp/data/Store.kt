@@ -141,7 +141,7 @@ class Store(private val context: Context) {
     // eski sürümlerde M3U film/dizileri canlı TV'ye atıyordu ve boş katalog
     // önbelleğe yazılmıştı). Sürüm eşleşmezse önbellek yok sayılır, yeniden
     // ayrıştırılır.
-    private const val EXTERNAL_CACHE_VERSION = 2
+    private val EXTERNAL_CACHE_VERSION = 2
 
     fun saveExternalVodCache(sourceId: String, genres: List<Genre>, items: List<VodItem>) {
         runCatching {
