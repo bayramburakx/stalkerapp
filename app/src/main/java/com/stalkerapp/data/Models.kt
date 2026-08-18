@@ -317,7 +317,14 @@ data class Episode(
     @SerialName("episode_number") val episodeNumber: Int = 0,
     val cmd: String = "",
     /** Portal'ın bölüm küçük resmi (yoksa TMDB'den çekilir). */
-    val thumb: String = ""
+    val thumb: String = "",
+    /**
+     * Yedek oynatma URL'si: bazı paneller standart `series/id/sezon/bölüm`
+     * formatını reddeder (401) ve bölüm başına doğrudan URL ister
+     * (`series/kullanıcı/şifre/BÖLÜM_ID.uzantı` — panelin kendi M3U'sunda da
+     * bu format kullanılır). Standart URL başarısız olursa buradan denenir.
+     */
+    val altCmd: String = ""
 )
 
 /** EPG program hatırlatıcısı: program başlayınca bildirim gönderilir. */

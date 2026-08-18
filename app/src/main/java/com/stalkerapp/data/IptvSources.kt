@@ -750,6 +750,22 @@ class XtreamClient {
         return "$base/series/${source.username}/${source.password}/$seriesId/$seasonNum/$episodeNum.$e"
     }
 
+    /**
+     * Bölüm-id tabanlı dizi URL'si: `series/kullanıcı/şifre/BÖLÜM_ID.uzantı`.
+     * Bazı paneller (reseller/dengeleyici kurulumlar) standart sezon/bölüm
+     * yolunu reddedip (HTTP 401) yalnızca bu formatı kabul eder — panelin kendi
+     * M3U dışa aktarımında da aynı format kullanılır.
+     */
+    fun episodePlayUrlByEpisodeId(
+        source: XtreamSource,
+        episodeId: Long,
+        container: String = ""
+    ): String {
+        val e = container.ifBlank { "mkv" }.removePrefix(".")
+        val base = apiBase(source)
+        return "$base/series/${source.username}/${source.password}/$episodeId.$e"
+    }
+
     companion object {
         const val LIVE_CATEGORY_ALL = 0L
     }

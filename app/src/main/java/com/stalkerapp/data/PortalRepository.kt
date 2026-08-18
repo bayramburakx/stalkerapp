@@ -1578,12 +1578,16 @@ class PortalRepository(
                     // Panel doğrudan URL veriyorsa (direct_source) onu kullan;
                     // yoksa standart /series/... URL'si kurulur.
                     val direct = ep.directSource.trim().takeIf { it.startsWith("http") }
+                    val standard = client.episodePlayUrl(src, real, seasonId, ep.number, ep.container)
                     Episode(
                         id = ep.id,
                         name = ep.name,
                         episodeNumber = ep.number,
                         thumb = ep.thumb,
-                        cmd = direct ?: client.episodePlayUrl(src, real, seasonId, ep.number, ep.container)
+                        cmd = direct ?: standard,
+                        // Yedek: standart format 401/hataya düşerse bölüm-id URL'si
+                        // denenir (bazı paneller yalnızca bu formatı kabul eder).
+                        altCmd = client.episodePlayUrlByEpisodeId(src, ep.id, ep.container)
                     )
                 }
             }
