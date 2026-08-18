@@ -139,7 +139,7 @@ class Store(private val context: Context) {
             // boyutlar önbelleklenir.
             if (items.size > 120_000) return
             val f = externalCacheFile("vod", sourceId)
-            f.writeText(json.encodeToString(ExternalVodCacheDto(genres, items)))
+            f.writeText(json.encodeToString(ExternalVodCacheDto.serializer(), ExternalVodCacheDto(genres, items)))
         }
     }
 
@@ -154,7 +154,7 @@ class Store(private val context: Context) {
         runCatching {
             if (channels.size > 50_000) return
             val f = externalCacheFile("ch", sourceId)
-            f.writeText(json.encodeToString(ExternalChannelCacheDto(genres, channels)))
+            f.writeText(json.encodeToString(ExternalChannelCacheDto.serializer(), ExternalChannelCacheDto(genres, channels)))
         }
     }
 
@@ -1008,6 +1008,7 @@ data class ExternalVodCacheDto(val genres: List<Genre>, val items: List<VodItem>
 @kotlinx.serialization.Serializable
 data class ExternalChannelCacheDto(val genres: List<Genre>, val channels: List<Channel>)
 
+@kotlinx.serialization.Serializable
 data class CatalogMetaFile(
     val categories: List<Genre>,
     val itemCount: Int,
