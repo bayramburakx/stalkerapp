@@ -265,22 +265,24 @@ fun HomeDashboardScreen(
     val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
     val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
     val adultVisible = settings.adultContentEnabled && (!settings.lockAdultWithPin || adultUnlocked)
-    val allowedCategoryIds = remember(catalog.categories, settings.hiddenCategories, adultVisible) {
+    val blockedCategoryIds = remember(catalog.categories, settings.hiddenCategories, adultVisible) {
         val hiddenSet = settings.hiddenCategories.toSet()
         catalog.categories.filter { cat ->
             val hidden = hiddenSet.contains(cat.title)
             val adult = adultRegex.containsMatchIn(cat.title)
-            !hidden && (adultVisible || !adult)
+            hidden || (!adultVisible && adult)
         }.map { it.id }.toSet()
     }
 
     // Bölüm başına öğe sayısı (Kütüphane & İçerik → Ana Sayfa ayarları).
     val sectionSize = settings.homeSectionSize.coerceIn(5, 50)
-    val movies = remember(catalog.movies, allowedCategoryIds, sectionSize) {
-        catalog.movies.filter { it.categoryId in allowedCategoryIds }.take(sectionSize)
+    val mList = if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
+    val sList = if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
+    val movies = remember(mList, blockedCategoryIds, sectionSize) {
+        mList.filter { it.categoryId !in blockedCategoryIds }.take(sectionSize)
     }
-    val series = remember(catalog.series, allowedCategoryIds, sectionSize) {
-        catalog.series.filter { it.categoryId in allowedCategoryIds }.take(sectionSize)
+    val series = remember(sList, blockedCategoryIds, sectionSize) {
+        sList.filter { it.categoryId !in blockedCategoryIds }.take(sectionSize)
     }
     val featured = remember(series, movies) {
         (series.take(6) + movies.take(6)).shuffled()

@@ -608,14 +608,20 @@ object M3uParser {
         runCatching {
             val req = Request.Builder().url(url)
                 .header("User-Agent", "IPTVSmartersPro/3.1.5 (Linux; Android 12)")
-                .header("Accept-Encoding", "gzip, deflate")
                 .build()
             val resp = http.newCall(req).execute()
             resp.use { r ->
                 if (!r.isSuccessful) return@use false
                 val body = r.body ?: return@use false
-                body.byteStream().use { input ->
-                    dest.outputStream().use { out -> input.copyTo(out, 256 * 1024) }
+                val rawInput = java.io.BufferedInputStream(body.byteStream())
+                rawInput.mark(2)
+                val byte1 = rawInput.read()
+                val byte2 = rawInput.read()
+                rawInput.reset()
+                val isGzip = (byte1 == 0x1f && byte2 == 0x8b)
+                val input = if (isGzip) java.util.zip.GZIPInputStream(rawInput) else rawInput
+                input.use { inp ->
+                    dest.outputStream().use { out -> inp.copyTo(out, 256 * 1024) }
                 }
                 return@use true
             }
@@ -1068,7 +1074,7 @@ class XtreamClient {
 
     /** Film için doğrudan oynatılabilir URL. */
     fun vodPlayUrl(source: XtreamSource, streamId: Long, container: String = ""): String {
-        val e = container.ifBlank { "mkv" }.removePrefix(".")
+        val e = container.ifBlank { "mp4" }.removePrefix(".")
         val base = apiBase(source)
         return "$base/movie/${source.username}/${source.password}/$streamId.$e"
     }

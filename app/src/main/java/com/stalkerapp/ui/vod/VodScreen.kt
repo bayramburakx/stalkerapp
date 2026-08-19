@@ -156,30 +156,32 @@ fun VodScreen(
 
     // +18 ve kullanıcının gizlediği kategoriler listelerden filtrelenir.
     val adultVisible = settings.adultContentEnabled && (!settings.lockAdultWithPin || adultUnlocked)
-    val allowedCategoryIds = remember(catalog.categories, settings.hiddenCategories, adultVisible) {
+    val blockedCategoryIds = remember(catalog.categories, settings.hiddenCategories, adultVisible) {
         val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
         val hiddenSet = settings.hiddenCategories.toSet()
         catalog.categories.filter { cat ->
             val hidden = hiddenSet.contains(cat.title)
             val adult = adultRegex.containsMatchIn(cat.title)
-            !hidden && (adultVisible || !adult)
+            hidden || (!adultVisible && adult)
         }.map { it.id }.toSet()
     }
 
     var showFilterDialog by remember { mutableStateOf(false) }
     var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
 
-    val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, allowedCategoryIds) {
+    val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, blockedCategoryIds) {
         val q = query.trim()
         var list = when (filterIsSeries) {
-            true -> catalog.series
-            false -> catalog.movies
+            true -> if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
+            false -> if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
             else -> catalog.allItems
         }
         if (selectedCategory != 0L) {
             list = list.filter { it.categoryId == selectedCategory }
         }
-        list = list.filter { it.categoryId in allowedCategoryIds }
+        if (blockedCategoryIds.isNotEmpty()) {
+            list = list.filter { it.categoryId !in blockedCategoryIds }
+        }
 
         if (q.isNotBlank()) {
             list = list.filter {
@@ -234,7 +236,7 @@ fun VodScreen(
         true -> catList.filter { it.id in seriesCatIds }
         false -> catList.filter { it.id !in seriesCatIds }
         else -> catList
-    }.filter { it.id in allowedCategoryIds }
+    }.filter { it.id !in blockedCategoryIds }
 
     Column(modifier = modifier.fillMaxSize()) {
         if (catalog.status == VodCatalogStatus.Error) {

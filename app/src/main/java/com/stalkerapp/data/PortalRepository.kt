@@ -1609,18 +1609,18 @@ class PortalRepository(
                 val client = XtreamClient()
                 return season.episodes.map { ep ->
                     // Panel doğrudan URL veriyorsa (direct_source) onu kullan;
-                    // yoksa standart /series/... URL'si kurulur.
+                    // yoksa standart Xtream bölüm URL'si (/series/user/pass/EPISODE_ID.uzantı) kurulur.
                     val direct = ep.directSource.trim().takeIf { it.startsWith("http") }
+                    val byEpId = client.episodePlayUrlByEpisodeId(src, ep.id, ep.container)
                     val standard = client.episodePlayUrl(src, real, seasonId, ep.number, ep.container)
                     Episode(
                         id = ep.id,
                         name = ep.name,
                         episodeNumber = ep.number,
                         thumb = ep.thumb,
-                        cmd = direct ?: standard,
-                        // Yedek: standart format 401/hataya düşerse bölüm-id URL'si
-                        // denenir (bazı paneller yalnızca bu formatı kabul eder).
-                        altCmd = client.episodePlayUrlByEpisodeId(src, ep.id, ep.container)
+                        cmd = direct ?: byEpId,
+                        // Yedek: bazı eski paneller /series/user/pass/seriesId/season/episode formatını kullanır
+                        altCmd = standard
                     )
                 }
             }

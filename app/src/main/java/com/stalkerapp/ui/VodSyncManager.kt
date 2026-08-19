@@ -365,18 +365,25 @@ class VodSyncManager(
         // son hazır kataloğun haritası kullanılır (yarım liste için de faydalı).
         if (status == VodCatalogStatus.Syncing) {
             val now = System.currentTimeMillis()
-            // 80k+ öğelik listeyi her kategori bitişinde yayınlamak ana iş
-            // parçacığında ağır filtreleri (ana sayfa/VOD) sürekli tetikliyordu.
-            // En fazla ~1000ms'de bir tam liste yayınlanır; aradakilerde liste
-            // korunur, yalnızca ilerleme sayaçları güncellenir.
             val publish = now - lastUiPublish >= 1000L
-            if (publish) lastUiPublish = now
+            if (publish) {
+                lastUiPublish = now
+                return VodCatalogState.of(
+                    status = status,
+                    doneCategories = doneCategories,
+                    totalCategories = totalCategories,
+                    loadedCount = loadedCount,
+                    allItems = allItems,
+                    categories = categories,
+                    portalTotal = portalTotal,
+                    lastSync = lastSync
+                )
+            }
             return prev.copy(
                 status = status,
                 doneCategories = doneCategories,
                 totalCategories = totalCategories,
                 loadedCount = loadedCount,
-                allItems = if (publish) allItems else prev.allItems,
                 categories = categories,
                 portalTotal = portalTotal,
                 lastSync = lastSync
