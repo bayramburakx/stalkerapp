@@ -46,7 +46,9 @@ object ExternalVod {
     /** Dizi olarak sayılacak grup/kategori başlığı anahtar kelimeleri. */
     val SERIES_KEYWORDS = listOf(
         "dizi", "diziler", "series", "serien", "seriale", "serial", "serials", "tv show", "tv shows", "tv series",
-        "sezon", "season", "netflix", "exxen", "blutv", "gain", "disney", "prime video", "apple tv", "hbo", "tod", "tabii", "anime"
+        "sezon", "season", "netflix", "exxen", "blutv", "blu tv", "gain", "disney", "disney+", "disney +",
+        "prime video", "amazon prime", "apple tv", "apple tv+", "hbo", "hbo max", "tod", "tabii", "anime",
+        "cizgi dizi", "çizgi dizi", "belgesel dizi", "yerli dizi", "yabanci dizi", "yabancı dizi"
     )
 }
 
@@ -121,7 +123,18 @@ object M3uParser {
     )
 
     private val YEAR_IN_NAME = Regex("""\((19\d\d|20\d\d)\)?|[-–.]\s*(19\d\d|20\d\d)\s*$""")
-    private val EPISODE_IN_NAME = Regex("""\bS\d{1,2}\s*E\d{1,3}\b""", RegexOption.IGNORE_CASE)
+    private val EPISODE_PATTERNS = listOf(
+        Regex("""(?i)\bS(\d{1,2})\s*[.x_–-]?\s*E(\d{1,3})\b"""),
+        Regex("""(?i)\b(\d{1,2})\.?\s*Sezon\s*[-–._/]?\s*(\d{1,3})\.?\s*B[oö]l[uü]m\b"""),
+        Regex("""(?i)\bSeason\s*(\d{1,2})\s*[-–._/]?\s*Ep(?:isode)?\s*(\d{1,3})\b"""),
+        Regex("""(?i)\b(\d{1,2})x(\d{1,3})\b"""),
+        Regex("""(?i)\b(?:(\d{1,3})\.?\s*B[oö]l[uü]m|B[oö]l[uü]m\s*(\d{1,3}))\b"""),
+        Regex("""(?i)\b(?:Ep(?:isode)?\.?\s*(\d{1,3})|Episode\s*(\d{1,3}))\b"""),
+        Regex("""(?i)(?:[-–._/]\s*E(\d{1,3})\b|\bE(\d{1,3})[-–._/])""")
+    )
+
+    private fun hasEpisodeSignal(name: String): Boolean =
+        EPISODE_PATTERNS.any { it.containsMatchIn(name) }
 
     private val VOD_GROUP_KEYWORDS = listOf(
         "drama", "komödie", "komedie", "comedy", "thriller", "krimi", "crime", "horror",
@@ -163,12 +176,9 @@ object M3uParser {
 
         val group = attrs["group-title"].orEmpty().lowercase()
             .ifBlank { attrs["group"]?.lowercase().orEmpty() }
-        val nameLower = name.lowercase()
 
-        // 2) Dizi bölüm sinyali:
-        val hasEpisode = (nameLower.contains('s') || nameLower.contains("sezon") || nameLower.contains("season") || nameLower.contains('x')) &&
-            EPISODE_IN_NAME.containsMatchIn(name)
-        if (hasEpisode) return M3uEntryType.SERIES
+        // 2) Dizi bölüm sinyali (S01E01, 1. Sezon 1. Bölüm, 1x01 vb.):
+        if (hasEpisodeSignal(name)) return M3uEntryType.SERIES
 
         // 3) Canlı kanal grup kontrolü:
         val isExplicitLiveGroup = LIVE_GROUP_KEYWORDS.any { group.contains(it) } &&
@@ -342,27 +352,81 @@ object M3uParser {
     )
 
     private val S_E_REGEX_1 = Regex("""^(.*?)\s*[-–._/]?\s*S(\d{1,2})\s*[.x_–-]?\s*E(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
-    private val S_E_REGEX_2 = Regex("""^(.*?)\s*[-–._/]?\s*(\d{1,2})\.?\s*Sezon\s*[-–._/]?\s*(\d{1,3})\.?\s*Bölüm\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
-    private val S_E_REGEX_3 = Regex("""^(.*?)\s*[-–._/]?\s*Season\s*(\d{1,2})\s*[-–._/]?\s*Episode\s*(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_2 = Regex("""^(.*?)\s*[-–._/]?\s*(\d{1,2})\.?\s*Sezon\s*[-–._/]?\s*(\d{1,3})\.?\s*B[oö]l[uü]m\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_3 = Regex("""^(.*?)\s*[-–._/]?\s*Season\s*(\d{1,2})\s*[-–._/]?\s*Ep(?:isode)?\s*(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
     private val S_E_REGEX_4 = Regex("""^(.*?)\s*[-–._/]?\s*(\d{1,2})x(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_5 = Regex("""^(.*?)\s*[-–._/]?\s*(\d{1,3})\.?\s*B[oö]l[uü]m\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_6 = Regex("""^(.*?)\s*[-–._/]?\s*Ep(?:isode)?\.?\s*(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
+    private val S_E_REGEX_7 = Regex("""^(.*?)\s*[-–._/]\s*E(\d{1,3})\s*[-–._:]?\s*(.*)$""", RegexOption.IGNORE_CASE)
 
     private fun parseM3uEpisodeName(rawName: String): ParsedM3uEpisode {
         val trimmed = rawName.trim()
-        val lower = trimmed.lowercase()
-        if (!lower.contains('s') && !lower.contains("sezon") && !lower.contains("season") && !lower.contains('x')) {
-            return ParsedM3uEpisode(trimmed, 1, 1, trimmed)
+        val m1 = S_E_REGEX_1.matchEntire(trimmed)
+        if (m1 != null) {
+            val rawSeries = m1.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val s = m1.groupValues[2].toIntOrNull() ?: 1
+            val e = m1.groupValues[3].toIntOrNull() ?: 1
+            val title = m1.groupValues[4].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, s, e, finalTitle)
         }
-        for (rgx in listOf(S_E_REGEX_1, S_E_REGEX_2, S_E_REGEX_3, S_E_REGEX_4)) {
-            val m = rgx.matchEntire(trimmed)
-            if (m != null) {
-                val rawSeries = m.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
-                val s = m.groupValues[2].toIntOrNull() ?: 1
-                val e = m.groupValues[3].toIntOrNull() ?: 1
-                val title = m.groupValues[4].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
-                val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
-                val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
-                return ParsedM3uEpisode(finalSeries, s, e, finalTitle)
-            }
+        val m2 = S_E_REGEX_2.matchEntire(trimmed)
+        if (m2 != null) {
+            val rawSeries = m2.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val s = m2.groupValues[2].toIntOrNull() ?: 1
+            val e = m2.groupValues[3].toIntOrNull() ?: 1
+            val title = m2.groupValues[4].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, s, e, finalTitle)
+        }
+        val m3 = S_E_REGEX_3.matchEntire(trimmed)
+        if (m3 != null) {
+            val rawSeries = m3.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val s = m3.groupValues[2].toIntOrNull() ?: 1
+            val e = m3.groupValues[3].toIntOrNull() ?: 1
+            val title = m3.groupValues[4].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, s, e, finalTitle)
+        }
+        val m4 = S_E_REGEX_4.matchEntire(trimmed)
+        if (m4 != null) {
+            val rawSeries = m4.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val s = m4.groupValues[2].toIntOrNull() ?: 1
+            val e = m4.groupValues[3].toIntOrNull() ?: 1
+            val title = m4.groupValues[4].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, s, e, finalTitle)
+        }
+        val m5 = S_E_REGEX_5.matchEntire(trimmed)
+        if (m5 != null) {
+            val rawSeries = m5.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val e = m5.groupValues[2].toIntOrNull() ?: 1
+            val title = m5.groupValues[3].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, 1, e, finalTitle)
+        }
+        val m6 = S_E_REGEX_6.matchEntire(trimmed)
+        if (m6 != null) {
+            val rawSeries = m6.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val e = m6.groupValues[2].toIntOrNull() ?: 1
+            val title = m6.groupValues[3].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, 1, e, finalTitle)
+        }
+        val m7 = S_E_REGEX_7.matchEntire(trimmed)
+        if (m7 != null) {
+            val rawSeries = m7.groupValues[1].trim().removeSuffix("-").removeSuffix(":").removeSuffix("–").trim()
+            val e = m7.groupValues[2].toIntOrNull() ?: 1
+            val title = m7.groupValues[3].trim().removePrefix("-").removePrefix(":").removePrefix("–").trim()
+            val finalSeries = if (rawSeries.isNotBlank()) rawSeries else trimmed
+            val finalTitle = if (title.isNotBlank()) title else "$e. Bölüm"
+            return ParsedM3uEpisode(finalSeries, 1, e, finalTitle)
         }
         return ParsedM3uEpisode(trimmed, 1, 1, trimmed)
     }
@@ -829,24 +893,45 @@ class XtreamClient {
         pageAll(source, "get_series", categoryId) { o -> seriesItemFrom(o) }
 
     /**
-     * VOD senkronu için film + dizi kataloğunu tek akışta çeker. Ağ/HTTP
-     * hatasında (geçici 401/taşma dahil) bir kez yeniden dener ve hâlâ
-     * başarısızsa [XtreamApiException] fırlatır — böylece gerçek arıza
-     * "Senkronizasyon hatası" olarak görünür, boş panel yanıtıyla karışmaz.
+     * VOD senkronu için film + dizi kataloğunu çeker. Paralel isteklerle
+     * hızlı yüklenir; dizi veya film kategorilerinden biri başarısız olsa bile
+     * diğeri gösterilir (sağlam hata toleransı).
      */
-    suspend fun fetchVodCatalog(source: XtreamSource): Pair<List<Genre>, List<VodItem>> {
-        val vcats = parseCategories(
-            getJsonOrThrow("${playerApi(source)}&action=get_vod_categories")
-        )
-        val scats = parseCategories(
-            getJsonOrThrow("${playerApi(source)}&action=get_series_categories")
-        )
-        val vods = pageAllOrThrow(source, "get_vod_streams") { o -> vodItemFrom(source, o) }
-        val series = pageAllOrThrow(source, "get_series") { o -> seriesItemFrom(o) }
+    suspend fun fetchVodCatalog(source: XtreamSource): Pair<List<Genre>, List<VodItem>> = kotlinx.coroutines.coroutineScope {
+        val vcatsDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+            runCatching {
+                parseCategories(getJsonOrThrow("${playerApi(source)}&action=get_vod_categories"))
+            }.getOrDefault(emptyList())
+        }
+        val scatsDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+            runCatching {
+                parseCategories(getJsonOrThrow("${playerApi(source)}&action=get_series_categories"))
+            }.getOrDefault(emptyList())
+        }
+        val vodsDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+            runCatching {
+                pageAllOrThrow(source, "get_vod_streams") { o -> vodItemFrom(source, o) }
+            }.getOrDefault(emptyList())
+        }
+        val seriesDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+            runCatching {
+                pageAllOrThrow(source, "get_series") { o -> seriesItemFrom(o) }
+            }.getOrDefault(emptyList())
+        }
+
+        val vcats = vcatsDeferred.await()
+        val scats = scatsDeferred.await()
+        val vods = vodsDeferred.await()
+        val series = seriesDeferred.await()
+
+        if (vods.isEmpty() && series.isEmpty() && vcats.isEmpty() && scats.isEmpty()) {
+            throw XtreamApiException("VOD ve Dizi içeriği alınamadı (panel boş veya erişilemiyor)")
+        }
+
         val genres = listOf(Genre(0, "Tümü")) +
             vcats +
             scats.map { it.copy(id = ExternalVod.seriesCatId(it.id)) }
-        return genres to (vods + series)
+        genres to (vods + series)
     }
 
     private suspend fun pageAllOrThrow(

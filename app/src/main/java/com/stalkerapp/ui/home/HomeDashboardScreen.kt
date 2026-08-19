@@ -156,9 +156,12 @@ fun HomeDashboardScreen(
     val homeChannels by vm.homeChannels.collectAsStateWithLifecycle()
     var loadingChannels by remember { mutableStateOf(homeChannels == null) }
 
-    LaunchedEffect(Unit) {
-        val kind = vm.enabledSourceKind()
-        if (kind == "m3u" || kind == "xtream") {
+    val sourcesVersion by vm.sourcesVersion.collectAsStateWithLifecycle()
+    val activeKind = vm.enabledSourceKind()
+    val activeSourceId = vm.activeSourceId()
+
+    LaunchedEffect(profile, activeKind, activeSourceId, sourcesVersion) {
+        if (activeKind == "m3u" || activeKind == "xtream") {
             // M3U/Xtream: VOD kataloğu aktif kaynaktan kurulur, kanallar da
             // aktif kaynaktan gelir (Stalker profili gerekmez).
             vm.ensureExternalVodCatalog()
@@ -168,8 +171,8 @@ fun HomeDashboardScreen(
         if (homeChannels == null) {
             loadingChannels = true
             vm.loadHomeChannels(profile)
+            loadingChannels = false
         }
-        loadingChannels = false
     }
 
     // Ana sayfadan kaldırılanlar (uzun bas → "Ana Sayfadan Kaldır").

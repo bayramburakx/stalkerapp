@@ -252,7 +252,10 @@ fun HomeScreen(
         val contentModifier = Modifier.padding(top = padding.calculateTopPadding())
         // Portal değişince (farklı id) HomeDashboardScreen'i baştan kur ki Canlı TV
         // önizleme kanalları yeni portaldan yüklensin (iç LaunchedEffect(Unit) yeniden tetiklenir).
-        val portalKey = profile?.portal?.id ?: "none"
+        val portalKey = when (vm.activeSourceKind()) {
+            "m3u", "xtream" -> "${vm.activeSourceKind()}:${vm.activeSourceId() ?: "none"}"
+            else -> profile?.portal?.id ?: "none"
+        }
         saveableStateHolder.SaveableStateProvider("$tab:$portalKey") {
             when (tab) {
                 0 -> HomeDashboardScreen(profile, onOpenVod, onOpenPlayer, gotoTab, contentModifier)
@@ -261,9 +264,7 @@ fun HomeScreen(
                 3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
                 4 -> com.stalkerapp.ui.downloads.DownloadsScreen(
                     onPlayOffline = { entry ->
-                        val playUrl = if (entry.localPath.isNotBlank() && java.io.File(entry.localPath).exists()) {
-                            android.net.Uri.fromFile(java.io.File(entry.localPath)).toString()
-                        } else entry.url
+                        val playUrl = com.stalkerapp.data.OfflineDownloadManager.getPlayableOfflineUrl(entry)
                         com.stalkerapp.playback.PlaybackManager.playOffline(
                             playUrl, entry.title, entry.poster, entry.episodeLabel
                         )

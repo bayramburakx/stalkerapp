@@ -168,53 +168,73 @@ class TmdbClient(
     }
 
     /**
-     * Başlığa göre TMDB film/dizi kimliğini arar. Xtream panelleri `tmdb_id`
-     * alanını çoğu zaman boş/0 döndürür — bu durumda detay ekranı ad + yıla
-     * göre eşleştirme yapıp buradan kimliği alır (oyuncu fotoğrafları, sezon
-     * kapakları ve fragmanlar için). Bulunamazsa 0 döner.
+     * Başlığa göre TMDB film/dizi kimliğini arar. M3U ve Xtream panelleri `tmdb_id`
+     * alanını çoğu zaman boş/0 döndürür veya başlıkta IPTV etiketleri (TR |, 1080p,
+     * Dublaj vb.) taşır. Başlık temizlenip ad + yıla göre aranır. Bulunamazsa 0 döner.
      */
     suspend fun searchTitle(name: String, year: String, isSeries: Boolean, apiKey: String): Long {
         val type = if (isSeries) "tv" else "movie"
         val cacheKey = "search:$type:$name:$year"
         cache[cacheKey]?.let { return it as Long }
         if (apiKey.isBlank() || name.isBlank()) return 0
-        val y = year.take(4).takeIf { it.length == 4 && it.all(Char::isDigit) }
+
+        val (cleanedName, extractedYear) = cleanTitle(name)
+        val searchName = cleanedName.ifBlank { name.trim() }
+        val targetYear = year.take(4).takeIf { it.length == 4 && it.all(Char::isDigit) }
+            ?: extractedYear
+
+        // 1. Temizlenmiş ad + yıl ile dene
+        var id = queryTmdb(type, searchName, targetYear, apiKey)
+
+        // 2. Bulunamazsa ve yıl verilmişse yıl olmadan temiz adla dene
+        if (id <= 0 && targetYear != null) {
+            id = queryTmdb(type, searchName, null, apiKey)
+        }
+
+        // 3. Bulunamazsa orijinal ad + yıl ile dene
+        if (id <= 0 && searchName != name.trim()) {
+            id = queryTmdb(type, name.trim(), targetYear, apiKey)
+        }
+
+        // 4. Bulunamazsa orijinal adla yıl olmadan dene
+        if (id <= 0 && searchName != name.trim() && targetYear != null) {
+            id = queryTmdb(type, name.trim(), null, apiKey)
+        }
+
+        if (id > 0) {
+            cache[cacheKey] = id
+        }
+        return id
+    }
+
+    private suspend fun queryTmdb(type: String, query: String, year: String?, apiKey: String): Long {
+        if (query.isBlank()) return 0
         val url = buildString {
             append("https://api.themoviedb.org/3/search/$type?api_key=$apiKey&query=")
-            append(Uri.encode(name))
-            if (y != null) {
-                append(if (isSeries) "&first_air_date_year=$y" else "&year=$y")
+            append(Uri.encode(query))
+            if (year != null) {
+                append(if (type == "tv") "&first_air_date_year=$year" else "&year=$year")
             }
             append("&language=${languageProvider()}")
         }
         val obj = getJson(url) ?: return 0
         val results = obj["results"] as? JsonArray ?: return 0
-        // Yıl ile yapılan arama boş döndüyse, yıl olmadan tekrar dene (Xtream
-        // başlıkları ("PRIMAFILA 1 FHD" gibi) panel yılından sapabilir).
-        if (results.isEmpty() && y != null) {
-            val fallback = getJson(
-                "https://api.themoviedb.org/3/search/$type?api_key=$apiKey&query=" +
-                    Uri.encode(name) + "&language=${languageProvider()}"
-            )
-            val fbResults = fallback?.get("results") as? JsonArray
-            if (fbResults != null && fbResults.isNotEmpty()) {
-                return resolveId(fbResults, name).also { cache[cacheKey] = it }
-            }
-        }
-        val id = resolveId(results, name)
-        cache[cacheKey] = id
-        return id
+        if (results.isEmpty()) return 0
+        return resolveId(results, query)
     }
 
     /** Arama sonuçlarından TMDB kimliğini çözer: tam ad eşleşmesi önceliklidir, yoksa ilk sonuç. */
     private fun resolveId(results: JsonArray, name: String): Long {
         val objs = results.mapNotNull { it as? JsonObject }
+        val target = name.trim().lowercase()
         // Tam ad eşleşmesini öncele.
         objs.firstNotNullOfOrNull { o ->
             val n = (o["name"] as? JsonPrimitive)?.contentOrNull
                 ?: (o["title"] as? JsonPrimitive)?.contentOrNull
+                ?: (o["original_name"] as? JsonPrimitive)?.contentOrNull
+                ?: (o["original_title"] as? JsonPrimitive)?.contentOrNull
                 ?: return@firstNotNullOfOrNull null
-            if (n.equals(name.trim(), ignoreCase = true)) {
+            if (n.trim().lowercase() == target) {
                 (o["id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
             } else null
         }?.let { return it }
@@ -340,5 +360,44 @@ class TmdbClient(
         /** TMDB görsel yolu -> tam URL (boşsa boş döner). */
         fun photoUrl(path: String, large: Boolean = false): String =
             if (path.isBlank()) "" else (if (large) IMAGE_BASE_LARGE else IMAGE_BASE) + path
+
+        /**
+         * M3U ve IPTV başlıklarını TMDB aramasına uygun hale getirir.
+         * "TR | Inception (2010) [1080p] [Türkçe Dublaj]" -> ("Inception", "2010")
+         */
+        fun cleanTitle(rawName: String): Pair<String, String?> {
+            var name = rawName.trim()
+            val yearRegex = Regex("""[\(\[\s\-_–](19\d\d|20\d\d)[\)\]\s\-_–]?""")
+            val foundYear = yearRegex.findAll(name).lastOrNull()?.groupValues?.getOrNull(1)
+
+            // IPTV ön ekleri: "TR | ", "[TR] ", "VIP | ", "FILM | ", "4K | " vb.
+            name = name.replace(Regex("""^(\[[^\]]+\]|\([^)]+\)|[A-Za-z0-9_#\s+-]{1,12}[:|-])\s*"""), "")
+
+            // Çözünürlük ve kodek etiketleri
+            val tagsRegex = Regex("""(?i)\b(4k|uhd|fhd|hd|sd|1080p|1080i|720p|480p|2160p|hevc|x264|x265|h264|h265|10bit|bluray|blu-ray|web-dl|webrip|dvdrip|remux|hdr|dolby|atmos|aac|ac3|dts|xvid)\b""")
+            name = name.replace(tagsRegex, "")
+
+            // Dublaj / altyazı ve sürüm etiketleri
+            val langRegex = Regex("""(?i)\b(dublaj|altyazili|altyazılı|turkce|türkçe|dual|multi|multisub|multi-sub|tr-en|en-tr|original|extended|unrated|directors cut|director's cut)\b""")
+            name = name.replace(langRegex, "")
+
+            // Köşeli ve normal parantez içi ek bilgiler
+            name = name.replace(Regex("""\[[^\]]*\]"""), "")
+            name = name.replace(Regex("""\((19\d\d|20\d\d)[^)]*\)"""), "")
+            name = name.replace(Regex("""\([^)]*(dublaj|altyaz|1080|720|4k|fhd|hevc|uhd)[^)]*\)""", RegexOption.IGNORE_CASE), "")
+
+            // Dizi bölüm kalıpları
+            name = name.replace(Regex("""(?i)\b(s\d{1,2}\s*[.x_–-]?\s*e\d{1,3}|\d{1,2}\s*x\s*\d{1,3}|\d{1,2}\.?\s*sezon|\d{1,3}\.?\s*b[oö]l[uü]m|season\s*\d+|episode\s*\d+|ep\s*\d+)\b"""), "")
+
+            // Nokta ve alt çizgileri boşluğa çevir
+            name = name.replace('.', ' ').replace('_', ' ')
+
+            // Baştaki/sondaki tire ve noktalama işaretlerini temizle
+            name = name.replace(Regex("""\s*[-–:]+\s*$"""), "")
+            name = name.replace(Regex("""^\s*[-–:]+\s*"""), "")
+            name = name.replace(Regex("""\s+"""), " ").trim()
+
+            return name to foundYear
+        }
     }
 }

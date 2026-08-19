@@ -1533,6 +1533,13 @@ class PortalRepository(
     suspend fun loadSeasons(profile: Profile?, vodId: Long): List<Season> {
         // M3U dizisi:
         M3uParser.getSeasons(vodId)?.let { return it }
+        activeM3uSource()?.let { src ->
+            val f = store.m3uContentFile(src.id)
+            if (f.exists()) {
+                M3uParser.parseVodFile(f, src.id)
+                M3uParser.getSeasons(vodId)?.let { return it }
+            }
+        }
         // Xtream dizisi: get_series_info'dan sezonlar (profil gerekmez).
         activeXtreamSource()?.let { src ->
             if (ExternalVod.isXtreamSeries(vodId)) {
@@ -1599,6 +1606,13 @@ class PortalRepository(
     suspend fun loadEpisodes(profile: Profile?, vodId: Long, seasonId: Long): List<Episode> {
         // M3U dizisi:
         M3uParser.getEpisodes(vodId, seasonId)?.let { return it }
+        activeM3uSource()?.let { src ->
+            val f = store.m3uContentFile(src.id)
+            if (f.exists()) {
+                M3uParser.parseVodFile(f, src.id)
+                M3uParser.getEpisodes(vodId, seasonId)?.let { return it }
+            }
+        }
         // Xtream dizisi: bölümler get_series_info'dan; her bölümün cmd'i doğrudan
         // oynatılabilir URL taşır (create_link gerekmez).
         activeXtreamSource()?.let { src ->

@@ -202,11 +202,29 @@ object OfflineDownloadManager {
      * Önce önbellekten beslenir; eksik parçalar ağdan çekilir (karma mod).
      */
     fun cacheDataSourceFactory(): androidx.media3.datasource.cache.CacheDataSource.Factory {
-        val cache = getCache()!!
+        val cache = getCache() ?: throw IllegalStateException("Download cache not initialized")
+        val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(30_000)
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+        val upstreamFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         return CacheDataSource.Factory()
             .setCache(cache)
-            .setUpstreamDataSourceFactory(DefaultDataSource.Factory(context))
+            .setUpstreamDataSourceFactory(upstreamFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
             .setCacheWriteDataSinkFactory(null)
+    }
+
+    /** İndirilen öğenin hemen oynatılabilir URL'sini döner (yerel dosya ya da önbellek akış URL'si). */
+    fun getPlayableOfflineUrl(entry: DownloadEntry): String {
+        if (entry.localPath.isNotBlank()) {
+            val f = File(entry.localPath)
+            if (f.exists() && f.length() > 1024L && !f.name.endsWith(".tmp")) {
+                return android.net.Uri.fromFile(f).toString()
+            }
+        }
+        return entry.url
     }
 
     /** Bir öğenin indirilip indirilmediğini kontrol eder. */
@@ -268,11 +286,12 @@ object OfflineDownloadManager {
                 }
                 val safeName = entry.title.replace(Regex("""[\\/:*?"<>|]"""), "_").trim() + ".$ext"
                 val destFile = File(moviesDir, safeName)
+                val tempFile = File(moviesDir, "$safeName.tmp")
                 if (!destFile.exists() || destFile.length() < 1024L) {
                     val cacheDataSource = cacheDataSourceFactory().createDataSource()
                     val dataSpec = androidx.media3.datasource.DataSpec(Uri.parse(entry.url))
                     cacheDataSource.open(dataSpec)
-                    destFile.outputStream().use { out ->
+                    tempFile.outputStream().use { out ->
                         val buf = ByteArray(128 * 1024)
                         var bytesRead: Int
                         while (cacheDataSource.read(buf, 0, buf.size).also { bytesRead = it } != -1) {
@@ -280,13 +299,18 @@ object OfflineDownloadManager {
                         }
                     }
                     cacheDataSource.close()
+                    if (tempFile.exists() && tempFile.length() > 1024L) {
+                        tempFile.renameTo(destFile)
+                    }
                 }
-                android.media.MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), arrayOf("video/*"), null)
-                val current = _downloads.value.map {
-                    if (it.id == entry.id) it.copy(localPath = destFile.absolutePath) else it
+                if (destFile.exists() && destFile.length() > 1024L) {
+                    android.media.MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), arrayOf("video/*"), null)
+                    val current = _downloads.value.map {
+                        if (it.id == entry.id) it.copy(localPath = destFile.absolutePath) else it
+                    }
+                    _downloads.value = current
+                    saveMeta(current)
                 }
-                _downloads.value = current
-                saveMeta(current)
             }
         }
     }

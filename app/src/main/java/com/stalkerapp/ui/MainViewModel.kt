@@ -347,6 +347,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         xtreamCache.remove(source.id)
         xtreamVodCache.remove(source.id)
         _sourcesVersion.value++
+        if (store.activeSourceKind() == "xtream" && store.activeSourceId() == source.id) {
+            viewModelScope.launch { ensureExternalVodCatalog(force = true) }
+        }
     }
 
     fun deleteXtreamSource(id: String) {
@@ -888,7 +891,7 @@ data class VodCatalogState(
         if (com.stalkerapp.data.ExternalVod.isXtreamVod(item.id)) false
         else if (com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id)) true
         else if (item.id in com.stalkerapp.data.PortalRepository.SERIES_ID_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
-        else (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() || item.categoryId in seriesCategoryIds)) ||
+        else item.isSeries ||
             (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
             (item.seriesData.isNotBlank() && item.seriesData != "[]" && item.seriesData != "0" && item.seriesData != "null") ||
             (item.selectedSeason.isNotBlank() && item.selectedSeason != "0" && item.selectedSeason != "null") ||
@@ -896,7 +899,11 @@ data class VodCatalogState(
     }
 
     companion object {
-        val seriesKeywords = listOf("dizi", "series", "serial", "diziler", "show", "tv show")
+        val seriesKeywords = listOf(
+            "dizi", "series", "serial", "diziler", "show", "tv show", "season", "sezon",
+            "serien", "seriale", "telenovela", "anime", "exxen", "blutv", "gain", "tod",
+            "tabii", "netflix dizi", "yerli dizi", "yabanci dizi", "yabancı dizi"
+        )
 
         fun of(
             status: VodCatalogStatus = VodCatalogStatus.Idle,
@@ -917,7 +924,7 @@ data class VodCatalogState(
                 if (com.stalkerapp.data.ExternalVod.isXtreamVod(item.id)) false
                 else if (com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id)) true
                 else if (item.id in com.stalkerapp.data.PortalRepository.SERIES_ID_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
-                else (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() || item.categoryId in seriesCatIds)) ||
+                else item.isSeries ||
                     (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
                     (item.seriesData.isNotBlank() && item.seriesData != "[]" && item.seriesData != "0" && item.seriesData != "null") ||
                     (item.selectedSeason.isNotBlank() && item.selectedSeason != "0" && item.selectedSeason != "null") ||

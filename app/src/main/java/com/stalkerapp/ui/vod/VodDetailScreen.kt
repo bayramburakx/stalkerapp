@@ -175,6 +175,8 @@ fun VodDetailScreen(
     var tmdbYear by remember { mutableStateOf("") }
     // Panel afişi boşsa TMDB posteri kullanılır (hero + sezon kartları).
     var tmdbPoster by remember { mutableStateOf("") }
+    // Panel puanı boşsa TMDB puanı kullanılır.
+    var tmdbRating by remember { mutableStateOf(0.0) }
     // Sezon posterleri + bölüm küçük resimleri (portal önce, yoksa TMDB).
     var seasonPosters by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var episodeThumbs by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
@@ -207,6 +209,7 @@ fun VodDetailScreen(
         }
     }
 
+    // TMDB id'si çözülünce fragman + oyuncular + özet tek istekte zenginleştirilir.
     LaunchedEffect(resolvedTmdbId, item?.isSeries, isSeriesHint) {
         val i = item ?: return@LaunchedEffect
         val settings = app.store.settings()
@@ -215,6 +218,7 @@ fun VodDetailScreen(
             // Zenginleştirme alt-anahtarları (Ayarlar → Entegrasyonlar).
             if (settings.tmdbPeople || settings.tmdbTrailers) {
                 val enr = app.tmdb.enrich(resolvedTmdbId, i.isSeries || isSeriesHint, key)
+                if (enr.rating > 0.0) tmdbRating = enr.rating
                 if (settings.tmdbPeople) {
                     tmdbCast = enr.cast
                     // Panel metni boşsa TMDB'den tamamla (Xtream filmlerinde plot/cast boş).
@@ -516,9 +520,7 @@ fun VodDetailScreen(
             playing = true
             try {
                 if (!isSeries && movieDl != null) {
-                    val playUrl = if (movieDl.localPath.isNotBlank() && java.io.File(movieDl.localPath).exists()) {
-                        android.net.Uri.fromFile(java.io.File(movieDl.localPath)).toString()
-                    } else movieDl.url
+                    val playUrl = com.stalkerapp.data.OfflineDownloadManager.getPlayableOfflineUrl(movieDl)
                     PlaybackManager.currentVodId = it.id
                     PlaybackManager.currentVodItem = it
                     PlaybackManager.playOffline(playUrl, it.name, it.poster)
@@ -620,9 +622,7 @@ fun VodDetailScreen(
                     val epEntryId = "ep_${it.id}_${seasonNum}_${target.episodeNumber}"
                     val epDl = allDownloads.find { d -> (d.id == epEntryId || d.id == target.id.toString()) && (d.state == "completed" || d.localPath.isNotBlank()) }
                     if (epDl != null) {
-                        val playUrl = if (epDl.localPath.isNotBlank() && java.io.File(epDl.localPath).exists()) {
-                            android.net.Uri.fromFile(java.io.File(epDl.localPath)).toString()
-                        } else epDl.url
+                        val playUrl = com.stalkerapp.data.OfflineDownloadManager.getPlayableOfflineUrl(epDl)
                         PlaybackManager.currentVodId = it.id
                         PlaybackManager.currentVodItem = it
                         PlaybackManager.playOffline(playUrl, "${it.name} - S${seasonNum}B${target.episodeNumber}", it.poster, "S${seasonNum}B${target.episodeNumber}")
@@ -875,10 +875,12 @@ fun VodDetailScreen(
             // ---------- Bilgiler: yıl • süre, yönetmen, yazar, sinopsis ----------
             item {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    val ratingStr = it.rating.takeIf { r -> r.isNotBlank() && r != "0" && r != "0.0" }
+                        ?: (if (tmdbRating > 0.0) String.format(java.util.Locale.US, "%.1f", tmdbRating) else null)
                     val metaParts = listOfNotNull(
                         yearText.takeIf { it.isNotBlank() },
                         durationText.takeIf { it.isNotBlank() },
-                        it.rating.takeIf { r -> r.isNotBlank() && r != "0" }?.let { "★ $it" }
+                        ratingStr?.let { "★ $it" }
                     )
                     if (metaParts.isNotEmpty()) {
                         Row(
