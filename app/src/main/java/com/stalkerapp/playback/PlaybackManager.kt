@@ -323,7 +323,7 @@ object PlaybackManager {
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_IGNORE_SPLICE_INFO_STREAM)
-            .setTsExtractorMode(TsExtractor.MODE_DEFAULT)
+            .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
             .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 2)
 
         val bufferMs = st.maxBufferMs.coerceIn(15_000, 60_000)
