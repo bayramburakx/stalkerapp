@@ -265,22 +265,24 @@ fun HomeDashboardScreen(
     val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
     val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
     val adultVisible = settings.adultContentEnabled && (!settings.lockAdultWithPin || adultUnlocked)
-    fun keepItem(item: VodItem): Boolean {
-        val title = catTitles[item.categoryId]
-        val hidden = settings.hiddenCategories.contains(title.orEmpty())
-        val adult = title != null && adultRegex.containsMatchIn(title)
-        return !hidden && (adultVisible || !adult)
+    val allowedCategoryIds = remember(catalog.categories, settings.hiddenCategories, adultVisible) {
+        val hiddenSet = settings.hiddenCategories.toSet()
+        catalog.categories.filter { cat ->
+            val hidden = hiddenSet.contains(cat.title)
+            val adult = adultRegex.containsMatchIn(cat.title)
+            !hidden && (adultVisible || !adult)
+        }.map { it.id }.toSet()
     }
 
     // Bölüm başına öğe sayısı (Kütüphane & İçerik → Ana Sayfa ayarları).
     val sectionSize = settings.homeSectionSize.coerceIn(5, 50)
-    val movies = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories, sectionSize) {
-        catalog.allItems.filter { !catalog.isSeriesItem(it) && keepItem(it) }.take(sectionSize)
+    val movies = remember(catalog.movies, allowedCategoryIds, sectionSize) {
+        catalog.movies.filter { it.categoryId in allowedCategoryIds }.take(sectionSize)
     }
-    val series = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories, sectionSize) {
-        catalog.allItems.filter { catalog.isSeriesItem(it) && keepItem(it) }.take(sectionSize)
+    val series = remember(catalog.series, allowedCategoryIds, sectionSize) {
+        catalog.series.filter { it.categoryId in allowedCategoryIds }.take(sectionSize)
     }
-    val featured = remember(catalog, settings.adultContentEnabled, settings.hiddenCategories) {
+    val featured = remember(series, movies) {
         (series.take(6) + movies.take(6)).shuffled()
     }
 

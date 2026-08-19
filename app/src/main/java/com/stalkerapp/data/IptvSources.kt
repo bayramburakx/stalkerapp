@@ -184,7 +184,13 @@ object M3uParser {
             else M3uEntryType.MOVIE
         }
 
-        // 5) Grup adı anahtarları:
+        // 5) Canlı yayın akışları (.m3u8, .ts, vb.): grup adı film/dizi içerse dahi
+        // dosya uzantısı/yıl/bölüm deseni yoksa 7/24 lineer televizyon kanalıdır (Canlı TV).
+        if (u.endsWith(".m3u8") || u.endsWith(".ts")) {
+            return M3uEntryType.LIVE
+        }
+
+        // 6) Grup adı anahtarları:
         if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) return M3uEntryType.SERIES
         if (MOVIE_KEYWORDS.any { group.contains(it) }) return M3uEntryType.MOVIE
         if (VOD_GROUP_KEYWORDS.any { group.contains(it) }) {

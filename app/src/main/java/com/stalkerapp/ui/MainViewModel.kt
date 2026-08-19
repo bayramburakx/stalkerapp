@@ -317,6 +317,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
         m3uCache.remove(source.id)
         m3uVodCache.remove(source.id)
         _sourcesVersion.value++
+        if (store.activeSourceKind() == "m3u" && store.activeSourceId() == source.id) {
+            viewModelScope.launch { ensureExternalVodCatalog(force = true) }
+        }
     }
 
     fun deleteM3uSource(id: String) {
@@ -440,6 +443,9 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             genres to channels
         }
         m3uCache[source.id] = result
+        if (_externalCatalog.value.loadedCount == 0 && enabledSourceKind() == "m3u") {
+            viewModelScope.launch { ensureExternalVodCatalog() }
+        }
         return result
     }
 
@@ -870,6 +876,8 @@ data class VodCatalogState(
     val totalCategories: Int = 0,
     val loadedCount: Int = 0,
     val allItems: List<VodItem> = emptyList(),
+    val movies: List<VodItem> = emptyList(),
+    val series: List<VodItem> = emptyList(),
     val categories: List<Genre> = emptyList(),
     val portalTotal: Int = 0,
     val lastSync: Long = 0,
@@ -887,12 +895,6 @@ data class VodCatalogState(
             item.categoryId in seriesCategoryIds
     }
 
-    /** Film kataloğu (dizi olmayanlar). */
-    val movies: List<VodItem> get() = allItems.filterNot { isSeriesItem(it) }
-
-    /** Dizi kataloğu. */
-    val series: List<VodItem> get() = allItems.filter { isSeriesItem(it) }
-
     companion object {
         val seriesKeywords = listOf("dizi", "series", "serial", "diziler", "show", "tv show")
 
@@ -905,21 +907,44 @@ data class VodCatalogState(
             categories: List<Genre> = emptyList(),
             portalTotal: Int = 0,
             lastSync: Long = 0
-        ): VodCatalogState = VodCatalogState(
-            status = status,
-            doneCategories = doneCategories,
-            totalCategories = totalCategories,
-            loadedCount = loadedCount,
-            allItems = allItems,
-            categories = categories,
-            portalTotal = portalTotal,
-            lastSync = lastSync,
-            byId = allItems.associateBy { it.id },
-            seriesCategoryIds = categories
+        ): VodCatalogState {
+            val seriesCatIds = categories
                 .filter { c -> seriesKeywords.any { kw -> c.title.contains(kw, ignoreCase = true) } }
                 .map { it.id }
                 .toSet()
-        )
+
+            val isSeries: (VodItem) -> Boolean = { item ->
+                if (com.stalkerapp.data.ExternalVod.isXtreamVod(item.id)) false
+                else if (com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id)) true
+                else if (item.id in com.stalkerapp.data.PortalRepository.SERIES_ID_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
+                else (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank() || item.categoryId in seriesCatIds)) ||
+                    (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
+                    (item.seriesData.isNotBlank() && item.seriesData != "[]" && item.seriesData != "0" && item.seriesData != "null") ||
+                    (item.selectedSeason.isNotBlank() && item.selectedSeason != "0" && item.selectedSeason != "null") ||
+                    item.categoryId in seriesCatIds
+            }
+
+            val mList = ArrayList<VodItem>(allItems.size)
+            val sList = ArrayList<VodItem>(allItems.size / 4)
+            for (item in allItems) {
+                if (isSeries(item)) sList.add(item) else mList.add(item)
+            }
+
+            return VodCatalogState(
+                status = status,
+                doneCategories = doneCategories,
+                totalCategories = totalCategories,
+                loadedCount = loadedCount,
+                allItems = allItems,
+                movies = mList,
+                series = sList,
+                categories = categories,
+                portalTotal = portalTotal,
+                lastSync = lastSync,
+                byId = allItems.associateBy { it.id },
+                seriesCategoryIds = seriesCatIds
+            )
+        }
     }
 }
 

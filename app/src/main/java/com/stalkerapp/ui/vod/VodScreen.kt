@@ -155,32 +155,31 @@ fun VodScreen(
     }
 
     // +18 ve kullanıcının gizlediği kategoriler listelerden filtrelenir.
-    // PIN kilidi açıksa yetişkin içerik, oturumda PIN girilmedikçe gizli kalır.
-    val catTitles = remember(catalog) { catalog.categories.associate { it.id to it.title } }
-    val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
     val adultVisible = settings.adultContentEnabled && (!settings.lockAdultWithPin || adultUnlocked)
-    fun keepItem(item: VodItem): Boolean {
-        val title = catTitles[item.categoryId]
-        val hidden = settings.hiddenCategories.contains(title.orEmpty())
-        val adult = title != null && adultRegex.containsMatchIn(title)
-        return !hidden && (adultVisible || !adult)
+    val allowedCategoryIds = remember(catalog.categories, settings.hiddenCategories, adultVisible) {
+        val adultRegex = Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE)
+        val hiddenSet = settings.hiddenCategories.toSet()
+        catalog.categories.filter { cat ->
+            val hidden = hiddenSet.contains(cat.title)
+            val adult = adultRegex.containsMatchIn(cat.title)
+            !hidden && (adultVisible || !adult)
+        }.map { it.id }.toSet()
     }
 
     var showFilterDialog by remember { mutableStateOf(false) }
     var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
 
-    val filtered = remember(catalog.allItems, selectedCategory, query, filterIsSeries, filterState, settings.hiddenCategories, adultUnlocked) {
+    val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, allowedCategoryIds) {
         val q = query.trim()
-        var list = catalog.allItems
-        if (filterIsSeries == true) {
-            list = list.filter { catalog.isSeriesItem(it) }
-        } else if (filterIsSeries == false) {
-            list = list.filter { !catalog.isSeriesItem(it) }
+        var list = when (filterIsSeries) {
+            true -> catalog.series
+            false -> catalog.movies
+            else -> catalog.allItems
         }
         if (selectedCategory != 0L) {
             list = list.filter { it.categoryId == selectedCategory }
         }
-        list = list.filter { keepItem(it) }
+        list = list.filter { it.categoryId in allowedCategoryIds }
 
         if (q.isNotBlank()) {
             list = list.filter {
@@ -230,16 +229,12 @@ fun VodScreen(
     }
 
     val catList = catalog.categories
-    val seriesCatIds = remember(catalog) {
-        catalog.allItems.filter { catalog.isSeriesItem(it) }.map { it.categoryId }.toSet()
-    }
-    val hiddenTitles = remember(settings.hiddenCategories) { settings.hiddenCategories.toSet() }
+    val seriesCatIds = catalog.seriesCategoryIds
     val shownCats = when (filterIsSeries) {
         true -> catList.filter { it.id in seriesCatIds }
         false -> catList.filter { it.id !in seriesCatIds }
         else -> catList
-    }.filter { it.title !in hiddenTitles }
-        .filter { adultVisible || !Regex("18|yetkin|adult|xxx|erotik|porno", RegexOption.IGNORE_CASE).containsMatchIn(it.title) }
+    }.filter { it.id in allowedCategoryIds }
 
     Column(modifier = modifier.fillMaxSize()) {
         if (catalog.status == VodCatalogStatus.Error) {

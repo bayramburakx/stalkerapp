@@ -182,9 +182,13 @@ private fun DownloadItem(
                     )
                 }
                 "completed" -> {
-                    val sizeMb = entry.fileSizeBytes / (1024 * 1024)
+                    val sizeStr = if (entry.fileSizeBytes >= 1024L * 1024L * 1024L) {
+                        String.format(java.util.Locale.US, "%.2f GB", entry.fileSizeBytes / (1024.0 * 1024.0 * 1024.0))
+                    } else if (entry.fileSizeBytes > 0) {
+                        "${entry.fileSizeBytes / (1024 * 1024)} MB"
+                    } else ""
                     Text(
-                        "✓ İndirildi${if (sizeMb > 0) " · $sizeMb MB" else ""}",
+                        "✓ İndirildi${if (sizeStr.isNotBlank()) " · $sizeStr" else ""}",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF4CAF50)
                     )
