@@ -84,11 +84,12 @@ object M3uParser {
         }.getOrNull()
     }
 
+    private val ATTR_REGEX = Regex("""([a-zA-Z0-9_-]+)="([^"]*)"""")
+
     /** #EXTINF satırındaki tvg-* özniteliklerini okur. */
     private fun parseAttributes(extinf: String): Map<String, String> {
         val attrs = mutableMapOf<String, String>()
-        val regex = Regex("""([a-zA-Z0-9_-]+)="([^"]*)"""")
-        regex.findAll(extinf).forEach { m ->
+        ATTR_REGEX.findAll(extinf).forEach { m ->
             attrs[m.groupValues[1]] = m.groupValues[2]
         }
         return attrs
@@ -106,30 +107,22 @@ object M3uParser {
         ".m4v", ".mpg", ".mpeg", ".3gp", ".vob", ".divx", ".ogv"
     )
 
+    private val LIVE_GROUP_KEYWORDS = listOf(
+        "canlı", "live", "haber", "spor", "sport", "sports", "ulusal", "yerel", "belgesel tv",
+        "müzik", "music", "radio", "radyo", "yayın", "yayini", "tv", "channels", "kanallar"
+    )
+
     /** Film/VOD grup anahtar kelimeleri: grup adı bunlardan birini içeriyorsa film sayılır. */
     private val MOVIE_KEYWORDS = listOf(
         "film", "filmler", "movie", "movies", "sinema", "cinema", "kino", "vod", "pelicula", "filme",
         "video club", "filmizle", "filmler hd", "turk film", "türk film", "on demand", "video on demand",
         "action", "aksiyon", "comedy", "komedi", "horror", "korku", "drama", "gerilim", "thriller",
-        "bilim kurgu", "sci-fi", "romantik", "animasyon", "belgesel", "documentary", "box office", "vizyon",
-        "4k", "uhd", "1080p", "hevc"
+        "bilim kurgu", "sci-fi", "romantik", "box office", "vizyon"
     )
 
-    /**
-     * VOD isim sinyalleri: parantez içi yıl "(1994)", " - 1994", ".1987" gibi
-     * biçimler. Canlı kanal adlarında ("FIFA World Cup 2022" gibi) yıl genelde
-     * düz boşlukla yazılır ve bu desene takılmaz.
-     */
     private val YEAR_IN_NAME = Regex("""\((19\d\d|20\d\d)\)?|[-–.]\s*(19\d\d|20\d\d)\s*$""")
-
-    /** Dizi bölüm sinyali: "S01E05", "S1 E5" vb. */
     private val EPISODE_IN_NAME = Regex("""\bS\d{1,2}\s*E\d{1,3}\b""", RegexOption.IGNORE_CASE)
 
-    /**
-     * Tür tabanlı VOD grupları (yıl sinyali olmayan film/dizi grupları — ör:
-     * "DE ✪ DRAMA", "DE ✪ KOMODIE"). Canlı kanal paketlerinde (ülke/spor/radyo)
-     * bu kelimeler nadiren bulunur, bu yüzden güvenle VOD sayılabilir.
-     */
     private val VOD_GROUP_KEYWORDS = listOf(
         "drama", "komödie", "komedie", "comedy", "thriller", "krimi", "crime", "horror",
         "korku", "sci-fi", "scifi", "science fiction", "fantasy", "abenteuer", "adventure",
@@ -141,7 +134,7 @@ object M3uParser {
     /** VOD grubunun dizi mi film mi olduğunu belirleyen anahtarlar. */
     private val VOD_SERIES_GROUP_KEYWORDS = listOf(
         "serie", "dizi", "anime", "netflix", "disney", "hbo", "amazon", "cartoon",
-        "animation", "animasyon", "exxen", "blutv", "gain", "tod", "tabii"
+        "animation", "animasyon", "exxen", "blutv", "gain"
     )
 
     /**
@@ -155,49 +148,50 @@ object M3uParser {
             "series", "tvshow", "show", "dizi", "serial", "serie", "serien", "tv series" -> return M3uEntryType.SERIES
             "live", "radio", "tv", "channel", "iptv", "catchup", "timeshift" -> return M3uEntryType.LIVE
         }
-        // Token tabanlı (dosya uzantısız) sağlayıcılar genelde içeriği yol ile ayırır:
-        // /movie/..., /vod/..., /film/..., /series/... → kesin VOD sinyali.
+
         val u = url.lowercase()
-        // Canlı akış yolları — VOD sinyallerinden önce ele alınır.
+        // 1) URL path kontrolü:
         if (u.contains("/live/") || u.contains("/stream/live") || u.contains("type=live")) {
             return M3uEntryType.LIVE
         }
-        if (u.contains("type=series") || u.contains("action=series")) return M3uEntryType.SERIES
-        if (u.contains("type=movie") || u.contains("type=vod") || u.contains("action=vod")) {
-            return M3uEntryType.MOVIE
-        }
-        if (u.contains("/series/") || u.contains("/serie/") || u.contains("/dizi/") ||
-            u.contains("/serials/") || u.contains("/serial/")
-        ) {
+        if (u.contains("type=series") || u.contains("action=series") || u.contains("/series/") || u.contains("/serie/") || u.contains("/dizi/") || u.contains("/serials/") || u.contains("/serial/")) {
             return M3uEntryType.SERIES
         }
-        if (u.contains("/movie/") || u.contains("/movies/") || u.contains("/vod/") ||
-            u.contains("/film/") || u.contains("/filme/") || u.contains("/films/") ||
-            u.contains("/cinema/")
-        ) {
+        if (u.contains("type=movie") || u.contains("type=vod") || u.contains("action=vod") || u.contains("/movie/") || u.contains("/movies/") || u.contains("/vod/") || u.contains("/film/") || u.contains("/filme/") || u.contains("/films/") || u.contains("/cinema/")) {
             return M3uEntryType.MOVIE
         }
+
         val group = attrs["group-title"].orEmpty().lowercase()
             .ifBlank { attrs["group"]?.lowercase().orEmpty() }
-        // Dizi bölümü deseni ("S01E05") → kesin dizi.
-        if (EPISODE_IN_NAME.containsMatchIn(name)) return M3uEntryType.SERIES
-        // URL bir VOD dosya uzantısıyla bitiyorsa kesin olarak canlı değildir.
+        val nameLower = name.lowercase()
+
+        // 2) Dizi bölüm sinyali:
+        val hasEpisode = (nameLower.contains('s') || nameLower.contains("sezon") || nameLower.contains("season") || nameLower.contains('x')) &&
+            EPISODE_IN_NAME.containsMatchIn(name)
+        if (hasEpisode) return M3uEntryType.SERIES
+
+        // 3) Canlı kanal grup kontrolü:
+        val isExplicitLiveGroup = LIVE_GROUP_KEYWORDS.any { group.contains(it) } &&
+            !ExternalVod.SERIES_KEYWORDS.any { group.contains(it) } &&
+            !MOVIE_KEYWORDS.any { group.contains(it) }
+        if (isExplicitLiveGroup) return M3uEntryType.LIVE
+
+        // 4) VOD dosya uzantısı / yıl kontrolü:
         val fileLike = VOD_FILE_EXTENSIONS.any { u.endsWith(it) }
-        // İsimde yıl sinyali ("(1994)", " - 1994") → VOD (film/dizi).
-        val hasYear = YEAR_IN_NAME.containsMatchIn(name)
+        val hasYear = (name.contains('(') || name.contains('-') || name.contains('.')) && YEAR_IN_NAME.containsMatchIn(name)
         if (fileLike || hasYear) {
             return if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) M3uEntryType.SERIES
             else M3uEntryType.MOVIE
         }
-        // Uzantı/yıl sinyali yoksa grup adı anahtar kelimelerine bakılır —
-        // film/dizi içeriği canlı TV'ye değil Filmler/Diziler kataloğuna düşsün.
+
+        // 5) Grup adı anahtarları:
         if (ExternalVod.SERIES_KEYWORDS.any { group.contains(it) }) return M3uEntryType.SERIES
         if (MOVIE_KEYWORDS.any { group.contains(it) }) return M3uEntryType.MOVIE
-        // Tür tabanlı VOD grupları (yıl sinyali olmayan film/dizi grupları).
         if (VOD_GROUP_KEYWORDS.any { group.contains(it) }) {
             return if (VOD_SERIES_GROUP_KEYWORDS.any { group.contains(it) }) M3uEntryType.SERIES
             else M3uEntryType.MOVIE
         }
+
         return M3uEntryType.LIVE
     }
 
@@ -224,11 +218,9 @@ object M3uParser {
                     currentExtGrp = trimmed.removePrefix("#EXTGRP:").trim()
                 }
                 pending != null -> {
-                    // #EXTINF'ten sonra gelen boş olmayan, # ile başlamayan satır URL'dir.
                     if (trimmed.isNotBlank() && !trimmed.startsWith("#")) {
                         if (pending.url.isEmpty()) pending = pending.copy(url = trimmed)
                     } else if (trimmed.startsWith("#EXTINF")) {
-                        // Ardışık #EXTINF (URL'siz girdi): öncekini kapat, yenisini başlat.
                         finishEntry(pending)?.let(onEntry)
                         pending = parseExtinf(trimmed, currentExtGrp)
                     }
@@ -237,7 +229,6 @@ object M3uParser {
                     pending = parseExtinf(trimmed, currentExtGrp)
                 }
             }
-            // URL alındıysa girdiyi kapat (sonraki #EXTINF'te de kapatılır).
             if (pending != null && pending.url.isNotEmpty()) {
                 finishEntry(pending)?.let(onEntry)
                 pending = null
@@ -259,7 +250,7 @@ object M3uParser {
             logo = attrs["tvg-logo"].orEmpty(),
             group = group,
             xmltvId = attrs["tvg-id"].orEmpty(),
-            type = classifyEntry(attrs, "", name),
+            type = M3uEntryType.LIVE,
             attrs = attrs
         )
     }
@@ -351,6 +342,10 @@ object M3uParser {
 
     private fun parseM3uEpisodeName(rawName: String): ParsedM3uEpisode {
         val trimmed = rawName.trim()
+        val lower = trimmed.lowercase()
+        if (!lower.contains('s') && !lower.contains("sezon") && !lower.contains("season") && !lower.contains('x')) {
+            return ParsedM3uEpisode(trimmed, 1, 1, trimmed)
+        }
         for (rgx in listOf(S_E_REGEX_1, S_E_REGEX_2, S_E_REGEX_3, S_E_REGEX_4)) {
             val m = rgx.matchEntire(trimmed)
             if (m != null) {

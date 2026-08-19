@@ -261,8 +261,11 @@ fun HomeScreen(
                 3 -> VodScreen(profile, onOpenVod, contentModifier.statusBarsPadding(), filterIsSeries = true)
                 4 -> com.stalkerapp.ui.downloads.DownloadsScreen(
                     onPlayOffline = { entry ->
+                        val playUrl = if (entry.localPath.isNotBlank() && java.io.File(entry.localPath).exists()) {
+                            android.net.Uri.fromFile(java.io.File(entry.localPath)).toString()
+                        } else entry.url
                         com.stalkerapp.playback.PlaybackManager.playOffline(
-                            entry.url, entry.title, entry.poster, entry.episodeLabel
+                            playUrl, entry.title, entry.poster, entry.episodeLabel
                         )
                         onOpenPlayer()
                     },

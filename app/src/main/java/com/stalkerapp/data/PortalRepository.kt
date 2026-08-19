@@ -901,15 +901,9 @@ class PortalRepository(
         var pageSize = 0
         var maxPages = 2000
         val catParam = probeVodCategoryParam(profile)
-        val queryParams = mapOf(
-            catParam to catId.toString(),
-            "category" to catId.toString(),
-            "genre" to catId.toString(),
-            "category_id" to catId.toString()
-        )
         while (guard < maxPages) {
             guard++
-            val (list, total) = fetchVodPage(profile, page, perPage, queryParams)
+            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(catParam to catId.toString()))
             if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break

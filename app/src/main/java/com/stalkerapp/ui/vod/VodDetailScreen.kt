@@ -502,21 +502,33 @@ fun VodDetailScreen(
 
     /** Kaldığı yerden devam: kayıtlı konum varsa direkt oradan başlar (sormaz). */
     fun play(episode: Episode? = null) {
+        val movieEntryId = "movie_${it.id}"
+        val movieDl = allDownloads.find { d -> (d.id == movieEntryId || d.id == it.id.toString()) && (d.state == "completed" || d.localPath.isNotBlank()) }
+
         // M3U/Xtream kaynaklarında profil yoktur; URL aktif kaynağa göre çözülür.
         val externalSource = vm.enabledSourceKind() == "m3u" || vm.enabledSourceKind() == "xtream"
         val p = profile
-        if (p == null && !externalSource) {
+        if (p == null && !externalSource && (!isSeries && movieDl == null)) {
             vm.showMessage(str(lang, "Portal bağlı değil"))
             return
         }
         scope.launch {
             playing = true
             try {
+                if (!isSeries && movieDl != null) {
+                    val playUrl = if (movieDl.localPath.isNotBlank() && java.io.File(movieDl.localPath).exists()) {
+                        android.net.Uri.fromFile(java.io.File(movieDl.localPath)).toString()
+                    } else movieDl.url
+                    PlaybackManager.currentVodId = it.id
+                    PlaybackManager.currentVodItem = it
+                    PlaybackManager.playOffline(playUrl, it.name, it.poster)
+                    onOpenPlayer()
+                    return@launch
+                }
+
                 val allEps = episodes.orEmpty()
                 if (isSeries && allEps.isEmpty()) {
                     if (seasons.isEmpty()) {
-                        // Tek dosyalı "dizi" (M3U grubu): sezon/bölüm yapısı yok —
-                        // dosyayı doğrudan oynat (aksi halde hiç oynatılamazdı).
                         val url = vm.repository.vodStreamUrl(it, p, null)
                         PlaybackManager.currentVodId = it.id
                         PlaybackManager.currentVodItem = it
@@ -541,12 +553,12 @@ fun VodDetailScreen(
                 } else {
                     // Dizi: bölüm HER ZAMAN playEpisode ile oynatılır.
                     var seasonNum = selectedSeason ?: seasons.firstOrNull()?.id ?: 1
-                    var allEps = episodes.orEmpty()
-                    if (allEps.isEmpty() && seasonNum > 0) {
-                        allEps = runCatching {
+                    var curEps = episodes.orEmpty()
+                    if (curEps.isEmpty() && seasonNum > 0) {
+                        curEps = runCatching {
                             vm.repository.loadEpisodes(p, it.id, seasonNum)
                         }.getOrDefault(emptyList())
-                        episodes = allEps
+                        episodes = curEps
                     }
                     val progMap = app.store.episodeProgress()
                     val resume = app.store.settings().resumePlayback
@@ -566,33 +578,32 @@ fun VodDetailScreen(
                         val pr = getEpProg(target, seasonNum)
                         startMs = if (resume && pr != null && inRange(pr)) pr.positionMs else 0L
                     } else {
-                        // Önce en güncel ilerleme kaydına bak
                         val latest = progMap.entries
-                            .filter { k -> k.key.startsWith("${it.id}:") || allEps.any { e -> e.id.toString() == k.key } }
+                            .filter { k -> k.key.startsWith("${it.id}:") || curEps.any { e -> e.id.toString() == k.key } }
                             .maxByOrNull { e -> e.value.lastUpdated }
                         val latestSeason = latest?.key?.split(':')?.getOrNull(1)?.toLongOrNull()
                         val latestEpNum = latest?.key?.substringAfterLast(':')?.toIntOrNull()
                         if (latest != null && resume && inRange(latest.value) &&
                             latestSeason != null && latestEpNum != null
                         ) {
-                            if (latestSeason != seasonNum || allEps.none { ep -> ep.episodeNumber == latestEpNum }) {
+                            if (latestSeason != seasonNum || curEps.none { ep -> ep.episodeNumber == latestEpNum }) {
                                 seasonNum = latestSeason
                                 selectedSeason = latestSeason
-                                allEps = runCatching {
+                                curEps = runCatching {
                                     vm.repository.loadEpisodes(p, it.id, latestSeason)
                                 }.getOrDefault(emptyList())
-                                episodes = allEps
+                                episodes = curEps
                             }
-                            val fromProgress = allEps.firstOrNull { ep -> ep.episodeNumber == latestEpNum }
+                            val fromProgress = curEps.firstOrNull { ep -> ep.episodeNumber == latestEpNum }
                             if (fromProgress != null) {
                                 target = fromProgress
                                 startMs = latest.value.positionMs
                             } else {
-                                target = firstEpisodeToPlay(allEps, seasonNum)
+                                target = firstEpisodeToPlay(curEps, seasonNum)
                                 startMs = 0L
                             }
                         } else {
-                            val withProgress = allEps.firstOrNull { ep ->
+                            val withProgress = curEps.firstOrNull { ep ->
                                 val pr = getEpProg(ep, seasonNum)
                                 pr != null && inRange(pr)
                             }
@@ -600,13 +611,27 @@ fun VodDetailScreen(
                                 target = withProgress
                                 startMs = getEpProg(target, seasonNum)?.positionMs ?: 0L
                             } else {
-                                target = firstEpisodeToPlay(allEps, seasonNum)
+                                target = firstEpisodeToPlay(curEps, seasonNum)
                                 startMs = 0L
                             }
                         }
                     }
-                    val idx = allEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
-                    PlaybackManager.playEpisode(it, p, allEps, seasonNum, idx, startPositionMs = startMs)
+
+                    val epEntryId = "ep_${it.id}_${seasonNum}_${target.episodeNumber}"
+                    val epDl = allDownloads.find { d -> (d.id == epEntryId || d.id == target.id.toString()) && (d.state == "completed" || d.localPath.isNotBlank()) }
+                    if (epDl != null) {
+                        val playUrl = if (epDl.localPath.isNotBlank() && java.io.File(epDl.localPath).exists()) {
+                            android.net.Uri.fromFile(java.io.File(epDl.localPath)).toString()
+                        } else epDl.url
+                        PlaybackManager.currentVodId = it.id
+                        PlaybackManager.currentVodItem = it
+                        PlaybackManager.playOffline(playUrl, "${it.name} - S${seasonNum}B${target.episodeNumber}", it.poster, "S${seasonNum}B${target.episodeNumber}")
+                        onOpenPlayer()
+                        return@launch
+                    }
+
+                    val idx = curEps.indexOfFirst { e -> e.id == target.id }.coerceAtLeast(0)
+                    PlaybackManager.playEpisode(it, p, curEps, seasonNum, idx, startPositionMs = startMs)
                 }
                 onOpenPlayer()
             } catch (e: Exception) {

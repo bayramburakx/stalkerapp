@@ -125,13 +125,8 @@ object OfflineDownloadManager {
                 val active = current.any {
                     it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED || it.state == Download.STATE_RESTARTING
                 }
-                if (!active && current.isNotEmpty()) {
-                    delay(1500)
-                    refreshState()
-                    break
-                }
-                if (current.isEmpty()) break
-                delay(500)
+                if (!active) break
+                delay(1000)
             }
         }
     }
@@ -224,28 +219,76 @@ object OfflineDownloadManager {
     private fun refreshState() {
         if (!::downloadManager.isInitialized) return
         val currentMap = downloadManager.currentDownloads.associateBy { it.request.id }
+        var needsSave = false
         val updated = _downloads.value.map { entry ->
             val dl = currentMap[entry.id]
                 ?: runCatching { downloadManager.downloadIndex.getDownload(entry.id) }.getOrNull()
             if (dl != null) {
                 val isCompleted = dl.state == Download.STATE_COMPLETED ||
                     (dl.percentDownloaded >= 99.0f && dl.bytesDownloaded > 0)
-                entry.copy(
-                    state = when {
-                        isCompleted -> "completed"
-                        dl.state == Download.STATE_DOWNLOADING -> "downloading"
-                        dl.state == Download.STATE_FAILED -> "failed"
-                        dl.state == Download.STATE_QUEUED -> "queued"
-                        dl.state == Download.STATE_STOPPED -> "queued"
-                        else -> entry.state
-                    },
-                    progressPct = if (isCompleted) 100f else if (dl.percentDownloaded >= 0) dl.percentDownloaded else entry.progressPct,
-                    fileSizeBytes = if (dl.bytesDownloaded > 0) dl.bytesDownloaded else entry.fileSizeBytes
+                val newState = when {
+                    isCompleted -> "completed"
+                    dl.state == Download.STATE_DOWNLOADING -> "downloading"
+                    dl.state == Download.STATE_FAILED -> "failed"
+                    dl.state == Download.STATE_QUEUED -> "queued"
+                    dl.state == Download.STATE_STOPPED -> "queued"
+                    else -> entry.state
+                }
+                val newPct = if (isCompleted) 100f else if (dl.percentDownloaded >= 0) dl.percentDownloaded else entry.progressPct
+                val newBytes = if (dl.bytesDownloaded > 0) dl.bytesDownloaded else entry.fileSizeBytes
+                val changed = entry.state != newState || entry.progressPct != newPct
+                if (changed) needsSave = true
+                val newEntry = entry.copy(
+                    state = newState,
+                    progressPct = newPct,
+                    fileSizeBytes = newBytes
                 )
+                if (isCompleted && entry.localPath.isBlank()) {
+                    exportToGallery(newEntry)
+                }
+                newEntry
             } else entry
         }
-        _downloads.value = updated
-        saveMeta(updated)
+        if (needsSave) {
+            _downloads.value = updated
+            saveMeta(updated)
+        }
+    }
+
+    fun exportToGallery(entry: DownloadEntry) {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                if (!::context.isInitialized) return@launch
+                val moviesDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES), "Portio")
+                if (!moviesDir.exists()) moviesDir.mkdirs()
+                val ext = when {
+                    entry.url.contains(".mkv", ignoreCase = true) -> "mkv"
+                    entry.url.contains(".ts", ignoreCase = true) -> "ts"
+                    else -> "mp4"
+                }
+                val safeName = entry.title.replace(Regex("""[\\/:*?"<>|]"""), "_").trim() + ".$ext"
+                val destFile = File(moviesDir, safeName)
+                if (!destFile.exists() || destFile.length() < 1024L) {
+                    val cacheDataSource = cacheDataSourceFactory().createDataSource()
+                    val dataSpec = androidx.media3.datasource.DataSpec(Uri.parse(entry.url))
+                    cacheDataSource.open(dataSpec)
+                    destFile.outputStream().use { out ->
+                        val buf = ByteArray(128 * 1024)
+                        var bytesRead: Int
+                        while (cacheDataSource.read(buf, 0, buf.size).also { bytesRead = it } != -1) {
+                            out.write(buf, 0, bytesRead)
+                        }
+                    }
+                    cacheDataSource.close()
+                }
+                android.media.MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), arrayOf("video/*"), null)
+                val current = _downloads.value.map {
+                    if (it.id == entry.id) it.copy(localPath = destFile.absolutePath) else it
+                }
+                _downloads.value = current
+                saveMeta(current)
+            }
+        }
     }
 
     private fun metaFile(): File = File(context.filesDir, META_FILE)

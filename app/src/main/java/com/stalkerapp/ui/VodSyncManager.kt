@@ -318,7 +318,20 @@ class VodSyncManager(
                 lastSync = System.currentTimeMillis()
             )
         } catch (e: Exception) {
-            if (_progress.value.status != VodCatalogStatus.Ready) {
+            val cached = store.loadVodCatalog(portalId)
+            if (_progress.value.allItems.isNotEmpty()) {
+                _progress.value = state(status = VodCatalogStatus.Ready)
+            } else if (cached != null && cached.first.isNotEmpty()) {
+                _progress.value = state(
+                    status = VodCatalogStatus.Ready,
+                    doneCategories = cached.second.size,
+                    totalCategories = cached.second.size,
+                    loadedCount = cached.first.size,
+                    allItems = cached.first,
+                    categories = cached.second,
+                    lastSync = cached.third
+                )
+            } else if (_progress.value.status != VodCatalogStatus.Ready) {
                 _progress.value = state(status = VodCatalogStatus.Error)
             }
         } finally {
@@ -354,9 +367,9 @@ class VodSyncManager(
             val now = System.currentTimeMillis()
             // 80k+ öğelik listeyi her kategori bitişinde yayınlamak ana iş
             // parçacığında ağır filtreleri (ana sayfa/VOD) sürekli tetikliyordu.
-            // En fazla ~700ms'de bir tam liste yayınlanır; aradakilerde liste
+            // En fazla ~1000ms'de bir tam liste yayınlanır; aradakilerde liste
             // korunur, yalnızca ilerleme sayaçları güncellenir.
-            val publish = now - lastUiPublish >= 700
+            val publish = now - lastUiPublish >= 1000L
             if (publish) lastUiPublish = now
             return prev.copy(
                 status = status,
