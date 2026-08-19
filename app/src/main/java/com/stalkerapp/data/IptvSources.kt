@@ -1,6 +1,8 @@
 package com.stalkerapp.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -897,38 +899,38 @@ class XtreamClient {
      * hızlı yüklenir; dizi veya film kategorilerinden biri başarısız olsa bile
      * diğeri gösterilir (sağlam hata toleransı).
      */
-    suspend fun fetchVodCatalog(source: XtreamSource): Pair<List<Genre>, List<VodItem>> = kotlinx.coroutines.coroutineScope {
-        val vcatsDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+    suspend fun fetchVodCatalog(source: XtreamSource): Pair<List<Genre>, List<VodItem>> = coroutineScope {
+        val vcatsDeferred = async(Dispatchers.IO) {
             runCatching {
                 parseCategories(getJsonOrThrow("${playerApi(source)}&action=get_vod_categories"))
             }.getOrDefault(emptyList())
         }
-        val scatsDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+        val scatsDeferred = async(Dispatchers.IO) {
             runCatching {
                 parseCategories(getJsonOrThrow("${playerApi(source)}&action=get_series_categories"))
             }.getOrDefault(emptyList())
         }
-        val vodsDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+        val vodsDeferred = async(Dispatchers.IO) {
             runCatching {
                 pageAllOrThrow(source, "get_vod_streams") { o -> vodItemFrom(source, o) }
             }.getOrDefault(emptyList())
         }
-        val seriesDeferred = kotlinx.coroutines.async(Dispatchers.IO) {
+        val seriesDeferred = async(Dispatchers.IO) {
             runCatching {
                 pageAllOrThrow(source, "get_series") { o -> seriesItemFrom(o) }
             }.getOrDefault(emptyList())
         }
 
-        val vcats = vcatsDeferred.await()
-        val scats = scatsDeferred.await()
-        val vods = vodsDeferred.await()
-        val series = seriesDeferred.await()
+        val vcats: List<Genre> = vcatsDeferred.await()
+        val scats: List<Genre> = scatsDeferred.await()
+        val vods: List<VodItem> = vodsDeferred.await()
+        val series: List<VodItem> = seriesDeferred.await()
 
         if (vods.isEmpty() && series.isEmpty() && vcats.isEmpty() && scats.isEmpty()) {
             throw XtreamApiException("VOD ve Dizi içeriği alınamadı (panel boş veya erişilemiyor)")
         }
 
-        val genres = listOf(Genre(0, "Tümü")) +
+        val genres: List<Genre> = listOf(Genre(0, "Tümü")) +
             vcats +
             scats.map { it.copy(id = ExternalVod.seriesCatId(it.id)) }
         genres to (vods + series)

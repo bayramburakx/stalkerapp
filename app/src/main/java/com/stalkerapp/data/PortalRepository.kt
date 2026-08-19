@@ -136,6 +136,11 @@ class PortalRepository(
             store.xtreamSources().firstOrNull { it.id == store.activeSourceId() }
         else null
 
+    private fun activeM3uSource(): M3uSource? =
+        if (store.activeSourceKind() == "m3u")
+            store.m3uSources().firstOrNull { it.id == store.activeSourceId() }
+        else null
+
     /**
      * Harici (Xtream/M3U) kaynağı için filmin zengin bilgisini döner. Xtream'de
      * `get_vod_info` liste verisinde olmayan plot/cast/director/genre ve gerçek
@@ -1533,11 +1538,13 @@ class PortalRepository(
     suspend fun loadSeasons(profile: Profile?, vodId: Long): List<Season> {
         // M3U dizisi:
         M3uParser.getSeasons(vodId)?.let { return it }
-        activeM3uSource()?.let { src ->
-            val f = store.m3uContentFile(src.id)
+        val m3uSrc = activeM3uSource()
+        if (m3uSrc != null) {
+            val f = store.m3uContentFile(m3uSrc.id)
             if (f.exists()) {
-                M3uParser.parseVodFile(f, src.id)
-                M3uParser.getSeasons(vodId)?.let { return it }
+                M3uParser.parseVodFile(f, m3uSrc.id)
+                val m3uSeasons = M3uParser.getSeasons(vodId)
+                if (m3uSeasons != null) return m3uSeasons
             }
         }
         // Xtream dizisi: get_series_info'dan sezonlar (profil gerekmez).
@@ -1606,11 +1613,13 @@ class PortalRepository(
     suspend fun loadEpisodes(profile: Profile?, vodId: Long, seasonId: Long): List<Episode> {
         // M3U dizisi:
         M3uParser.getEpisodes(vodId, seasonId)?.let { return it }
-        activeM3uSource()?.let { src ->
-            val f = store.m3uContentFile(src.id)
+        val m3uSrc = activeM3uSource()
+        if (m3uSrc != null) {
+            val f = store.m3uContentFile(m3uSrc.id)
             if (f.exists()) {
-                M3uParser.parseVodFile(f, src.id)
-                M3uParser.getEpisodes(vodId, seasonId)?.let { return it }
+                M3uParser.parseVodFile(f, m3uSrc.id)
+                val m3uEps = M3uParser.getEpisodes(vodId, seasonId)
+                if (m3uEps != null) return m3uEps
             }
         }
         // Xtream dizisi: bölümler get_series_info'dan; her bölümün cmd'i doğrudan

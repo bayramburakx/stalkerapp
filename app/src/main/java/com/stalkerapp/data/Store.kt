@@ -92,7 +92,7 @@ class Store(private val context: Context) {
      * hem kaydetmeyi hem okumayı güvenli yapar. Eski sürümlerden gelen
      * `content` alanındaki veriler ilk okumada dosyaya taşınır (geriye dönük).
      */
-    private fun m3uContentFile(id: String): File = File(context.filesDir, "m3u_content_$id.m3u")
+    fun m3uContentFile(id: String): File = File(context.filesDir, "m3u_content_$id.m3u")
 
     /** M3U içerik dosyasının yolunu döndürür (streaming indirme/parse için). */
     fun m3uContentFileFor(id: String): File = m3uContentFile(id)
