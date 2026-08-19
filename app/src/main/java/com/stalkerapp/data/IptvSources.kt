@@ -607,14 +607,15 @@ object M3uParser {
     suspend fun fetchToFile(url: String, dest: File): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url)
-                .header("User-Agent", "StalkerPlayer/1.0")
+                .header("User-Agent", "IPTVSmartersPro/3.1.5 (Linux; Android 12)")
+                .header("Accept-Encoding", "gzip, deflate")
                 .build()
             val resp = http.newCall(req).execute()
             resp.use { r ->
                 if (!r.isSuccessful) return@use false
                 val body = r.body ?: return@use false
                 body.byteStream().use { input ->
-                    dest.outputStream().use { out -> input.copyTo(out, 1 shl 16) }
+                    dest.outputStream().use { out -> input.copyTo(out, 256 * 1024) }
                 }
                 return@use true
             }

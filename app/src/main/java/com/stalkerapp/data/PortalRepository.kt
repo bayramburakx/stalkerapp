@@ -196,20 +196,16 @@ class PortalRepository(
     }
 
     suspend fun channelStreamUrl(ch: Channel, profile: Profile?): String {
-        // M3U / Xtream kanallarında `cmd` zaten doğrudan oynatılabilir bir URL'dir
-        // (Stalker create_link gerekmez ve profil null olabilir).
-        val activeKind = store.activeSourceKind()
-        if (activeKind == "m3u" || activeKind == "xtream") {
-            val direct = ch.cmd.trim()
-            if (direct.startsWith("http://", ignoreCase = true) || direct.startsWith("https://", ignoreCase = true)) {
-                return direct
-            }
-            StalkerClient.parseCmd(direct)?.let { return it }
+        val direct = ch.cmd.trim()
+        val isDirectHttp = direct.startsWith("http://", ignoreCase = true) || direct.startsWith("https://", ignoreCase = true)
+        val isStalkerPlaceholder = direct.contains("localhost") || direct.contains("127.0.0.1")
+        if (isDirectHttp && !isStalkerPlaceholder) {
+            return direct
         }
-        StalkerClient.parseCmd(ch.cmd)?.let { u ->
-            val isDirect = u.startsWith("http://") || u.startsWith("https://")
-            val isStalkerPlaceholder = u.contains("localhost") || u.contains("127.0.0.1")
-            if (isDirect && !isStalkerPlaceholder) return u
+        StalkerClient.parseCmd(direct)?.let { u ->
+            val isDirect = u.startsWith("http://", ignoreCase = true) || u.startsWith("https://", ignoreCase = true)
+            val isPlaceholder = u.contains("localhost") || u.contains("127.0.0.1")
+            if (isDirect && !isPlaceholder) return u
         }
         val p = profile ?: throw StalkerException(l10n("Kanal akış URL'si alınamadı (profil yok)"))
         val base = p.baseUrl
@@ -1697,15 +1693,21 @@ class PortalRepository(
         profile: Profile?,
         episode: Episode? = null
     ): String {
+        val epCmd = episode?.cmd?.trim().orEmpty()
+        if (epCmd.startsWith("http://", ignoreCase = true) || epCmd.startsWith("https://", ignoreCase = true)) {
+            return epCmd
+        }
+        val itemCmd = item.cmd.trim()
+        if (itemCmd.startsWith("http://", ignoreCase = true) || itemCmd.startsWith("https://", ignoreCase = true)) {
+            return itemCmd
+        }
+
         return when (store.activeSourceKind()) {
             "m3u" -> {
-                episode?.cmd?.takeIf { it.isNotBlank() }?.let { return it }
-                item.cmd.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
+                epCmd.ifBlank { itemCmd }.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
             }
             "xtream" -> {
-                // Dizi bölümü: URL bölüm üzerinde taşınır (get_series_info'dan).
-                episode?.cmd?.takeIf { it.isNotBlank() }?.let { return it }
-                item.cmd.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
+                epCmd.ifBlank { itemCmd }.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
             }
             else -> stalkerVodStreamUrl(
                 item,

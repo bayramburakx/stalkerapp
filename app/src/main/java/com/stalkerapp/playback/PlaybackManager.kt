@@ -322,26 +322,23 @@ object PlaybackManager {
 
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
-            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
-            .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
-            .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES)
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_IGNORE_SPLICE_INFO_STREAM)
+            .setTsExtractorMode(TsExtractor.MODE_SINGLE_PMT)
+            .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 2)
 
-        val bufferMs = st.maxBufferMs.coerceAtMost(30_000)
+        val bufferMs = st.maxBufferMs.coerceIn(15_000, 60_000)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                5_000,
+                10_000,
                 bufferMs,
-                1_000,
-                2_000
+                2_000,
+                4_000
             )
             .build()
 
-        // Stalker portal akışları bazı STB portallarının beklediği MAG User-Agent'i
-        // ile açılır; ancak çoğu Xtream/M3U paneli/CDN'si MAG/STB UA'sını 401 ile
-        // reddeder. Bu yüzden dış kaynaklarda genel bir Android/browser UA kullanılır.
         val isExternalSource = store.activeSourceKind() in setOf("m3u", "xtream")
         val userAgent = if (isExternalSource)
-            "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            "IPTVSmartersPro/3.1.5 (Linux; Android 12; Pixel 7) ExoPlayerLib/2.19.1"
         else
             "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
 
@@ -356,8 +353,8 @@ object PlaybackManager {
         } else {
             androidx.media3.datasource.DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15_000)
-                .setReadTimeoutMs(30_000)
+                .setConnectTimeoutMs(20_000)
+                .setReadTimeoutMs(40_000)
                 .setUserAgent(userAgent)
         }
 

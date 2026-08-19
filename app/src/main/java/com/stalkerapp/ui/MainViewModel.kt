@@ -930,6 +930,8 @@ data class VodCatalogState(
                 if (isSeries(item)) sList.add(item) else mList.add(item)
             }
 
+            val finalSeriesCatIds = sList.map { it.categoryId }.toSet().ifEmpty { seriesCatIds }
+
             return VodCatalogState(
                 status = status,
                 doneCategories = doneCategories,
@@ -942,7 +944,7 @@ data class VodCatalogState(
                 portalTotal = portalTotal,
                 lastSync = lastSync,
                 byId = allItems.associateBy { it.id },
-                seriesCategoryIds = seriesCatIds
+                seriesCategoryIds = finalSeriesCatIds
             )
         }
     }
