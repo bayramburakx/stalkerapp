@@ -50,7 +50,9 @@ class VodSyncManager(
             listOf("ç", "ğ", "ı", "ö", "ş", "ü")
 
     fun isSeriesItem(item: VodItem): Boolean {
-        if (item.id >= PortalRepository.SERIES_ID_BASE || ExternalVod.isXtreamSeries(item.id)) return true
+        if (ExternalVod.isXtreamVod(item.id)) return false
+        if (ExternalVod.isXtreamSeries(item.id)) return true
+        if (item.id in PortalRepository.SERIES_ID_BASE until ExternalVod.XTREAM_VOD_BASE) return true
         if (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank())) return true
         if (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") return true
         val title = _progress.value.categories.find { it.id == item.categoryId }?.title
@@ -87,8 +89,11 @@ class VodSyncManager(
     }
 
     private fun stamp(item: VodItem, seriesCatIds: Set<Long>): VodItem {
+        if (ExternalVod.isXtreamVod(item.id)) return if (item.isSeries) item.copy(isSeries = false) else item
+        if (ExternalVod.isXtreamSeries(item.id)) return if (!item.isSeries) item.copy(isSeries = true) else item
         val isSeries = (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank())) ||
             (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
+            (item.id in PortalRepository.SERIES_ID_BASE until ExternalVod.XTREAM_VOD_BASE) ||
             seriesCatIds.contains(item.categoryId)
         return if (isSeries == item.isSeries) item else item.copy(isSeries = isSeries)
     }

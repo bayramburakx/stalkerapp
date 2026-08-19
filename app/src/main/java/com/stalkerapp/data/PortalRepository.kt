@@ -1240,7 +1240,7 @@ class PortalRepository(
 
     /** Real series id for a namespaced catalog id (0 if not namespaced). */
     fun realSeriesId(vodId: Long): Long =
-        if (vodId >= SERIES_ID_BASE) vodId - SERIES_ID_BASE else 0
+        if (vodId in SERIES_ID_BASE until ExternalVod.XTREAM_VOD_BASE) vodId - SERIES_ID_BASE else 0
 
     suspend fun loadVodList(
         profile: Profile,

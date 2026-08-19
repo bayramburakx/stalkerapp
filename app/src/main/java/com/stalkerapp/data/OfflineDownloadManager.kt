@@ -139,8 +139,12 @@ object OfflineDownloadManager {
     /** İndirme kuyruğuna ekler. */
     suspend fun enqueue(entry: DownloadEntry) = withContext(Dispatchers.IO) {
         val list = _downloads.value.toMutableList()
-        if (list.any { it.id == entry.id }) return@withContext
-        list.add(entry)
+        val idx = list.indexOfFirst { it.id == entry.id }
+        if (idx >= 0) {
+            list[idx] = entry.copy(state = "downloading", progressPct = 0f)
+        } else {
+            list.add(entry.copy(state = "downloading", progressPct = 0f))
+        }
         _downloads.value = list
         saveMeta(list)
 
@@ -219,20 +223,23 @@ object OfflineDownloadManager {
 
     private fun refreshState() {
         if (!::downloadManager.isInitialized) return
-        val dlMap = downloadManager.currentDownloads.associateBy { it.request.id }
+        val currentMap = downloadManager.currentDownloads.associateBy { it.request.id }
         val updated = _downloads.value.map { entry ->
-            val dl = dlMap[entry.id]
+            val dl = currentMap[entry.id]
+                ?: runCatching { downloadManager.downloadIndex.getDownload(entry.id) }.getOrNull()
             if (dl != null) {
+                val isCompleted = dl.state == Download.STATE_COMPLETED ||
+                    (dl.percentDownloaded >= 99.0f && dl.bytesDownloaded > 0)
                 entry.copy(
-                    state = when (dl.state) {
-                        Download.STATE_DOWNLOADING -> "downloading"
-                        Download.STATE_COMPLETED -> "completed"
-                        Download.STATE_FAILED -> "failed"
-                        Download.STATE_QUEUED -> "queued"
-                        Download.STATE_STOPPED -> "queued"
+                    state = when {
+                        isCompleted -> "completed"
+                        dl.state == Download.STATE_DOWNLOADING -> "downloading"
+                        dl.state == Download.STATE_FAILED -> "failed"
+                        dl.state == Download.STATE_QUEUED -> "queued"
+                        dl.state == Download.STATE_STOPPED -> "queued"
                         else -> entry.state
                     },
-                    progressPct = if (dl.percentDownloaded >= 0) dl.percentDownloaded else entry.progressPct,
+                    progressPct = if (isCompleted) 100f else if (dl.percentDownloaded >= 0) dl.percentDownloaded else entry.progressPct,
                     fileSizeBytes = if (dl.bytesDownloaded > 0) dl.bytesDownloaded else entry.fileSizeBytes
                 )
             } else entry
