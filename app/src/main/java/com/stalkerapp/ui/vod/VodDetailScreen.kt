@@ -215,24 +215,19 @@ fun VodDetailScreen(
         val settings = app.store.settings()
         val key = settings.tmdbApiKey
         if (key.isNotBlank() && resolvedTmdbId > 0) {
-            // Zenginleştirme alt-anahtarları (Ayarlar → Entegrasyonlar).
-            if (settings.tmdbPeople || settings.tmdbTrailers) {
-                val enr = app.tmdb.enrich(resolvedTmdbId, i.isSeries || isSeriesHint, key)
-                if (enr.rating > 0.0) tmdbRating = enr.rating
-                if (settings.tmdbPeople) {
-                    tmdbCast = enr.cast
-                    // Panel metni boşsa TMDB'den tamamla (Xtream filmlerinde plot/cast boş).
-                    if (i.description.isBlank()) tmdbOverview = enr.overview
-                    if (i.actors.isBlank()) tmdbActorNames = enr.actorNames
-                    if (i.director.isBlank()) tmdbDirector = enr.director
-                    // Panel yılı/afişi boşsa TMDB'den tamamla (Xtream dizileri).
-                    if (i.year.take(4).isBlank()) tmdbYear = enr.year
-                    if (i.poster.isBlank() && enr.posterPath.isNotBlank()) {
-                        tmdbPoster = TmdbClient.photoUrl(enr.posterPath, large = true)
-                    }
-                }
-                if (settings.tmdbTrailers) trailerKey = enr.trailerKey
+            val enr = app.tmdb.enrich(resolvedTmdbId, i.isSeries || isSeriesHint, key)
+            if (enr.rating > 0.0) tmdbRating = enr.rating
+            if (enr.posterPath.isNotBlank()) {
+                tmdbPoster = TmdbClient.photoUrl(enr.posterPath, large = true)
             }
+            if (i.description.isBlank() || tmdbOverview.isBlank()) tmdbOverview = enr.overview
+            if (i.actors.isBlank()) tmdbActorNames = enr.actorNames
+            if (i.director.isBlank()) tmdbDirector = enr.director
+            if (i.year.take(4).isBlank()) tmdbYear = enr.year
+            if (settings.tmdbPeople) {
+                tmdbCast = enr.cast
+            }
+            if (settings.tmdbTrailers) trailerKey = enr.trailerKey
         }
     }
 

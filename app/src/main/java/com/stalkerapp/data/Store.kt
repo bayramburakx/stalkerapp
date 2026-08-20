@@ -1063,7 +1063,7 @@ class Store(private val context: Context) {
         @Volatile var activeStore: Store? = null
 
         /** Bump to force a full re-sync of catalogs saved by older app versions. */
-        const val VOD_CATALOG_VERSION = 8
+        const val VOD_CATALOG_VERSION = 9
         private const val META_FILE = "meta.json"
 
         private const val KEY_PORTALS = "portals"

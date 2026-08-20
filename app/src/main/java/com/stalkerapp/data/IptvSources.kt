@@ -436,12 +436,15 @@ object M3uParser {
     }
 
     /**
-     * M3U içeriğinden film/dizi kataloğu üretir (canlı kanallar dahil edilmez).
+     * M3U dosyasını doğrudan disk üzerinden VOD (film + dizi) olarak ayrıştırır.
      * Dizi bölümleri dizi adı altında sezon ve bölüm olarak gruplanır (tek kart).
+     * Dizi kategorileri [ExternalVod.SERIES_CAT_BASE] ile ad alanına taşınır.
      */
     fun parseVodFile(file: File, sourceId: String): Pair<List<Genre>, List<VodItem>> {
-        val groupIds = LinkedHashMap<String, Long>()
-        var nextGroupId = 1L
+        val movieGroupIds = LinkedHashMap<String, Long>()
+        var nextMovieGroupId = 1L
+        val seriesGroupIds = LinkedHashMap<String, Long>()
+        var nextSeriesGroupId = 1L
         val movies = ArrayList<VodItem>()
 
         data class EpAcc(
@@ -459,7 +462,7 @@ object M3uParser {
             forEachEntry(reader.lineSequence()) { e ->
                 if (e.type == M3uEntryType.MOVIE) {
                     val groupName = e.group.ifBlank { "Filmler" }
-                    val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                    val gid = movieGroupIds.getOrPut(groupName) { nextMovieGroupId++ }
                     val yearFound = YEAR_IN_NAME.find(e.name)?.groupValues?.getOrNull(1) ?: ""
                     movies.add(
                         VodItem(
@@ -476,7 +479,7 @@ object M3uParser {
                     )
                 } else if (e.type == M3uEntryType.SERIES) {
                     val groupName = e.group.ifBlank { "Diziler" }
-                    val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                    val gid = seriesGroupIds.getOrPut(groupName) { ExternalVod.seriesCatId(nextSeriesGroupId++) }
                     val epInfo = parseM3uEpisodeName(e.name)
                     val key = "$gid|${epInfo.seriesTitle.lowercase()}"
                     seriesMap.getOrPut(key) { mutableListOf() }.add(
@@ -541,14 +544,17 @@ object M3uParser {
 
         val allVod = movies + seriesVodItems
         val genres = listOf(Genre(0, "Tümü")) +
-            groupIds.entries.map { Genre(it.value, it.key) }
+            movieGroupIds.entries.map { Genre(it.value, it.key) } +
+            seriesGroupIds.entries.map { Genre(it.value, it.key) }
         return genres to allVod
     }
 
     /** String tabanlı VOD kataloğu (küçük listeler / geriye dönük). */
     fun parseVod(text: String, sourceId: String): Pair<List<Genre>, List<VodItem>> {
-        val groupIds = LinkedHashMap<String, Long>()
-        var nextGroupId = 1L
+        val movieGroupIds = LinkedHashMap<String, Long>()
+        var nextMovieGroupId = 1L
+        val seriesGroupIds = LinkedHashMap<String, Long>()
+        var nextSeriesGroupId = 1L
         val movies = ArrayList<VodItem>()
 
         data class EpAcc(
@@ -565,7 +571,7 @@ object M3uParser {
         forEachEntry(text.lineSequence()) { e ->
             if (e.type == M3uEntryType.MOVIE) {
                 val groupName = e.group.ifBlank { "Filmler" }
-                val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                val gid = movieGroupIds.getOrPut(groupName) { nextMovieGroupId++ }
                 val yearFound = YEAR_IN_NAME.find(e.name)?.groupValues?.getOrNull(1) ?: ""
                 movies.add(
                     VodItem(
@@ -582,7 +588,7 @@ object M3uParser {
                 )
             } else if (e.type == M3uEntryType.SERIES) {
                 val groupName = e.group.ifBlank { "Diziler" }
-                val gid = groupIds.getOrPut(groupName) { nextGroupId++ }
+                val gid = seriesGroupIds.getOrPut(groupName) { ExternalVod.seriesCatId(nextSeriesGroupId++) }
                 val epInfo = parseM3uEpisodeName(e.name)
                 val key = "$gid|${epInfo.seriesTitle.lowercase()}"
                 seriesMap.getOrPut(key) { mutableListOf() }.add(
@@ -646,7 +652,8 @@ object M3uParser {
 
         val allVod = movies + seriesVodItems
         val genres = listOf(Genre(0, "Tümü")) +
-            groupIds.entries.map { Genre(it.value, it.key) }
+            movieGroupIds.entries.map { Genre(it.value, it.key) } +
+            seriesGroupIds.entries.map { Genre(it.value, it.key) }
         return genres to allVod
     }
 

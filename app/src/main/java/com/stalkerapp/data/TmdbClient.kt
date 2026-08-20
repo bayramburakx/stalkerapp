@@ -74,8 +74,44 @@ class TmdbClient(
         .build()
 
     private val cache = mutableMapOf<String, Any>()
+    private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun hasKey(): Boolean = keyProvider().isNotBlank()
+
+    fun getCachedPoster(name: String, isSeries: Boolean): String? {
+        val key = "${if (isSeries) "tv" else "movie"}:${name.trim().lowercase()}"
+        return posterCache[key]
+    }
+
+    /**
+     * Dizi veya film için TMDB posterini çözer. API anahtarı giriliyse TMDB araması
+     * yapar, bulunamazsa veya anahtar yoksa [fallbackPoster] döner.
+     */
+    suspend fun resolvePoster(
+        name: String,
+        year: String,
+        isSeries: Boolean,
+        fallbackPoster: String,
+        apiKey: String
+    ): String = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || name.isBlank()) return@withContext fallbackPoster
+        val key = "${if (isSeries) "tv" else "movie"}:${name.trim().lowercase()}"
+        posterCache[key]?.let { if (it.isNotBlank()) return@withContext it }
+
+        val id = searchTitle(name, year, isSeries, apiKey)
+        if (id > 0) {
+            val enr = enrich(id, isSeries, apiKey)
+            if (enr.posterPath.isNotBlank()) {
+                val fullUrl = photoUrl(enr.posterPath, large = true)
+                posterCache[key] = fullUrl
+                return@withContext fullUrl
+            }
+        }
+        if (fallbackPoster.isNotBlank()) {
+            posterCache[key] = fallbackPoster
+        }
+        return@withContext fallbackPoster
+    }
 
     /** Anahtarın geçerli olup olmadığını hafif bir istekle doğrular (Ayarlar → Entegrasyonlar). */
     suspend fun testKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
@@ -91,6 +127,7 @@ class TmdbClient(
     /** TMDB yanıt önbelleğini temizler. */
     fun clearCache() {
         cache.clear()
+        posterCache.clear()
     }
 
     private suspend fun getJson(url: String): JsonObject? = withContext(Dispatchers.IO) {

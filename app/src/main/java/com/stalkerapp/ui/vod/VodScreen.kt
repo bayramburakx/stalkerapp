@@ -407,7 +407,23 @@ fun VodPoster(
     label: String? = null,
     onLongPress: (() -> Unit)? = null
 ) {
-    val lang = (LocalContext.current.applicationContext as StalkerApp).store.settings().language
+    val app = LocalContext.current.applicationContext as StalkerApp
+    val settings = app.store.settings()
+    val lang = settings.language
+
+    var resolvedPoster by remember(item.id, item.poster) {
+        mutableStateOf(app.tmdb.getCachedPoster(item.name, isSeries) ?: item.poster)
+    }
+
+    LaunchedEffect(item.name, item.poster, item.year, isSeries, settings.tmdbApiKey) {
+        if (settings.tmdbApiKey.isNotBlank()) {
+            val p = app.tmdb.resolvePoster(item.name, item.year, isSeries, item.poster, settings.tmdbApiKey)
+            if (p.isNotBlank()) {
+                resolvedPoster = p
+            }
+        }
+    }
+
     // Gri kart arka planı yok: sadece poster + altında başlık ve yıl.
     Column(
         modifier = Modifier
@@ -422,7 +438,7 @@ fun VodPoster(
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
             AsyncImage(
-                model = resolveUrl(item.poster, baseUrl),
+                model = resolveUrl(resolvedPoster.ifBlank { item.poster }, baseUrl),
                 contentDescription = item.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))

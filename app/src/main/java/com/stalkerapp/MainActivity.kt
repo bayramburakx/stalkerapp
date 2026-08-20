@@ -236,7 +236,16 @@ private fun AppNav() {
                         vm.playChannelById(ch.id)
                         navController.navigate("player") { launchSingleTop = true }
                     },
-                    onOpenSettings = { navController.navigate("settings") }
+                    onOpenSettings = { navController.navigate("settings") },
+                    onOpenSearch = { navController.navigate("search") },
+                    onOpenGuide = { navController.navigate("epg") },
+                    onOpenProfiles = {
+                        navController.navigate("profiles") {
+                            popUpTo("home") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenPlayer = { navController.navigate("player") }
                 )
             } else {
                 HomeScreen(
