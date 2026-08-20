@@ -1,6 +1,5 @@
 package com.stalkerapp.ui.tv
 
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -60,7 +59,6 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -84,17 +82,14 @@ import com.stalkerapp.ui.vod.VodScreen
 
 /**
  * TV kumandasında OK / Seçim tuşuna basılıp basılmadığını kontrol eder.
- * Android TV DPAD_CENTER (23), ENTER (66) ve NUMPAD_ENTER (160) tuşlarını kapsar.
+ * Android TV DPAD_CENTER, ENTER ve NUMPAD_ENTER tuşlarını kapsar.
  */
 fun isTvSelectKey(ev: KeyEvent): Boolean {
-    if (ev.type != KeyEventType.KeyDown) return false
-    val code = ev.nativeKeyEvent.keyCode
-    return ev.key == Key.DirectionCenter ||
+    return ev.type == KeyEventType.KeyDown && (
+        ev.key == Key.DirectionCenter ||
         ev.key == Key.Enter ||
-        ev.key == Key.NumPadEnter ||
-        code == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
-        code == AndroidKeyEvent.KEYCODE_ENTER ||
-        code == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+        ev.key == Key.NumPadEnter
+    )
 }
 
 /**
