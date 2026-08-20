@@ -891,18 +891,25 @@ data class VodCatalogState(
         if (com.stalkerapp.data.ExternalVod.isXtreamVod(item.id)) false
         else if (com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id)) true
         else if (item.id in com.stalkerapp.data.PortalRepository.SERIES_ID_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
+        else if (item.categoryId in com.stalkerapp.data.PortalRepository.SERIES_CAT_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
         else item.isSeries ||
             (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
             (item.seriesData.isNotBlank() && item.seriesData != "[]" && item.seriesData != "0" && item.seriesData != "null") ||
             (item.selectedSeason.isNotBlank() && item.selectedSeason != "0" && item.selectedSeason != "null") ||
-            item.categoryId in seriesCategoryIds
+            (item.categoryId != 0L && item.categoryId in seriesCategoryIds)
     }
 
     companion object {
+        fun isSeriesCatTitle(title: String): Boolean {
+            val t = title.lowercase().trim()
+            if (t.contains("film") || t.contains("movie") || t.contains("sinema")) return false
+            return seriesKeywords.any { kw -> t.contains(kw) }
+        }
+
         val seriesKeywords = listOf(
-            "dizi", "series", "serial", "diziler", "show", "tv show", "season", "sezon",
-            "serien", "seriale", "telenovela", "anime", "exxen", "blutv", "gain", "tod",
-            "tabii", "netflix dizi", "yerli dizi", "yabanci dizi", "yabancı dizi"
+            "dizi", "series", "serial", "diziler", "tv show", "tv series", "season", "sezon",
+            "serien", "seriale", "telenovela", "anime", "yerli dizi", "yabanci dizi", "yabancı dizi",
+            "çizgi dizi", "cizgi dizi", "belgesel dizi"
         )
 
         fun of(
@@ -916,7 +923,11 @@ data class VodCatalogState(
             lastSync: Long = 0
         ): VodCatalogState {
             val seriesCatIds = categories
-                .filter { c -> seriesKeywords.any { kw -> c.title.contains(kw, ignoreCase = true) } }
+                .filter { c ->
+                    (c.id in com.stalkerapp.data.PortalRepository.SERIES_CAT_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) ||
+                    com.stalkerapp.data.ExternalVod.isXtreamSeriesCat(c.id) ||
+                    isSeriesCatTitle(c.title)
+                }
                 .map { it.id }
                 .toSet()
 
@@ -924,11 +935,12 @@ data class VodCatalogState(
                 if (com.stalkerapp.data.ExternalVod.isXtreamVod(item.id)) false
                 else if (com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id)) true
                 else if (item.id in com.stalkerapp.data.PortalRepository.SERIES_ID_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
+                else if (item.categoryId in com.stalkerapp.data.PortalRepository.SERIES_CAT_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) true
                 else item.isSeries ||
                     (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
                     (item.seriesData.isNotBlank() && item.seriesData != "[]" && item.seriesData != "0" && item.seriesData != "null") ||
                     (item.selectedSeason.isNotBlank() && item.selectedSeason != "0" && item.selectedSeason != "null") ||
-                    item.categoryId in seriesCatIds
+                    (item.categoryId != 0L && item.categoryId in seriesCatIds)
             }
 
             val mList = ArrayList<VodItem>(allItems.size)
@@ -936,8 +948,6 @@ data class VodCatalogState(
             for (item in allItems) {
                 if (isSeries(item)) sList.add(item) else mList.add(item)
             }
-
-            val finalSeriesCatIds = sList.map { it.categoryId }.toSet().ifEmpty { seriesCatIds }
 
             return VodCatalogState(
                 status = status,
@@ -951,7 +961,7 @@ data class VodCatalogState(
                 portalTotal = portalTotal,
                 lastSync = lastSync,
                 byId = allItems.associateBy { it.id },
-                seriesCategoryIds = finalSeriesCatIds
+                seriesCategoryIds = seriesCatIds
             )
         }
     }

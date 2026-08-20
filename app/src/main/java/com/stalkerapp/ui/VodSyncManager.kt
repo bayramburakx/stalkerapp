@@ -53,11 +53,14 @@ class VodSyncManager(
         if (ExternalVod.isXtreamVod(item.id)) return false
         if (ExternalVod.isXtreamSeries(item.id)) return true
         if (item.id in PortalRepository.SERIES_ID_BASE until ExternalVod.XTREAM_VOD_BASE) return true
+        if (item.categoryId in PortalRepository.SERIES_CAT_BASE until ExternalVod.XTREAM_VOD_BASE) return true
         if (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank())) return true
         if (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") return true
-        val title = _progress.value.categories.find { it.id == item.categoryId }?.title
-        val t = title ?: item.categoryId.toString()
-        return seriesKeywords.any { t.contains(it, ignoreCase = true) }
+        if (item.categoryId != 0L) {
+            val title = _progress.value.categories.find { it.id == item.categoryId }?.title
+            if (title != null && VodCatalogState.isSeriesCatTitle(title)) return true
+        }
+        return false
     }
 
     /** Starts (or resumes) syncing. No-op while a sync is already in progress. */
@@ -91,10 +94,11 @@ class VodSyncManager(
     private fun stamp(item: VodItem, seriesCatIds: Set<Long>): VodItem {
         if (ExternalVod.isXtreamVod(item.id)) return if (item.isSeries) item.copy(isSeries = false) else item
         if (ExternalVod.isXtreamSeries(item.id)) return if (!item.isSeries) item.copy(isSeries = true) else item
+        if (item.id in PortalRepository.SERIES_ID_BASE until ExternalVod.XTREAM_VOD_BASE) return if (!item.isSeries) item.copy(isSeries = true) else item
+        if (item.categoryId in PortalRepository.SERIES_CAT_BASE until ExternalVod.XTREAM_VOD_BASE) return if (!item.isSeries) item.copy(isSeries = true) else item
         val isSeries = (item.isSeries && (item.seriesRef.isNotBlank() || item.seriesData.isNotBlank() || item.selectedSeason.isNotBlank())) ||
             (item.seriesRef.isNotBlank() && item.seriesRef != "[]" && item.seriesRef != "0" && item.seriesRef != "null") ||
-            (item.id in PortalRepository.SERIES_ID_BASE until ExternalVod.XTREAM_VOD_BASE) ||
-            seriesCatIds.contains(item.categoryId)
+            (item.categoryId != 0L && seriesCatIds.contains(item.categoryId))
         return if (isSeries == item.isSeries) item else item.copy(isSeries = isSeries)
     }
 
@@ -109,8 +113,9 @@ class VodSyncManager(
         val doneCats = if (force) mutableSetOf() else (
             store.loadVodCatalogDoneCats(portalId) + chunks.keys
         ).toMutableSet()
-        var cats = if (cached != null && cached.second.isNotEmpty()) cached.second
-        else {
+        var vodCats = if (cached != null && cached.second.isNotEmpty()) {
+            cached.second.filter { it.id < PortalRepository.SERIES_CAT_BASE && !VodCatalogState.isSeriesCatTitle(it.title) }
+        } else {
             var loaded: List<Genre> = emptyList()
             repeat(3) {
                 if (loaded.isEmpty()) {
@@ -119,6 +124,7 @@ class VodSyncManager(
             }
             loaded
         }
+        var cats = vodCats
         if (force) {
             // Also clears done-cats internally.
             store.clearVodCatalog(portalId)
@@ -134,34 +140,21 @@ class VodSyncManager(
         )
 
         try {
-            val seriesCatIds = cats.filter { it.title.let { t -> seriesKeywords.any { kw -> t.contains(kw, true) } } }
-                .map { it.id }.toSet()
             val all = ConcurrentHashMap<Long, VodItem>()
             baseItems.forEach { all[it.id] = it }
-            // Skip the "All" pseudo-category (id 0) some panels expose: it is
-            // just the unfiltered list, so paging it would re-fetch the whole
-            // library once more for nothing.
-            val remaining = cats.filter { it.id != 0L && (force || it.id !in doneCats) }
 
             var portalTotal = 0
 
             // 0) Separate series library FIRST. Portals like this one keep series
             // in their own `type=series` namespace (thousands of titles with real
-            // season/episode structures) that the VOD passes never see — without
-            // this pass the Dizi tab only shows the handful of dated episodes in
-            // the VOD "DIZILERI" categories. It runs BEFORE the heavy VOD passes
-            // so the portal hasn't been rate-limited into a cooldown yet (a
-            // silent failure here used to leave the catalog permanently series-less
-            // because the completed meta short-circuits future syncs). Series
-            // category ids are namespaced so they can't collide with VOD
-            // categories in chunks/done-cats.
+            // season/episode structures) that the VOD passes never see.
             runCatching {
                 val seriesCats = repository.loadSeriesCategories(profile)
                 if (seriesCats.isNotEmpty()) {
-                    cats = cats + seriesCats
+                    cats = vodCats + seriesCats
                     val seriesRemaining = seriesCats.filter { it.id != 0L && (force || it.id !in doneCats) }
                     if (seriesRemaining.isNotEmpty()) {
-                        val sem = Semaphore(8)
+                        val sem = Semaphore(6)
                         coroutineScope {
                             seriesRemaining.forEach { cat ->
                                 launch {
@@ -194,15 +187,12 @@ class VodSyncManager(
                 }
             }
 
+            val seriesCatIds = cats
+                .filter { (it.id in PortalRepository.SERIES_CAT_BASE until ExternalVod.XTREAM_VOD_BASE) || VodCatalogState.isSeriesCatTitle(it.title) }
+                .map { it.id }.toSet()
+
             // 1) Fast single pass (Tivimate-style: one huge per_page request, paged
-            // until the portal stops returning items). We trust it only when it
-            // actually retrieved a substantial number of items (and got close to
-            // the portal-reported total when one is available) — the portal's
-            // `total_items` is often wrong, so it must not gate completion.
-            // Portals that ignore `per_page` (hard ~14-item pages) would need
-            // thousands of sequential requests for this pass, so we skip it and
-            // go straight to the parallel per-category enumeration (step 2),
-            // which is complete on such portals.
+            // until the portal stops returning items).
             var singleOk = false
             val tinyPages = runCatching {
                 repository.probeVodPageParam(profile)
@@ -213,91 +203,81 @@ class VodSyncManager(
                 runCatching {
                     val (items, allTotal) = repository.fetchAllVod(profile, 100000)
                     if (allTotal > 0) portalTotal = allTotal
-                    items.forEach { all[it.id] = stamp(it, seriesCatIds) }
-                    singleOk = items.size >= 5000 &&
-                        if (allTotal > 0) items.size >= allTotal * 0.95
-                        else items.size >= 10000
-                    _progress.value = state(
-                        loadedCount = all.size,
-                        doneCategories = cats.size,
-                        totalCategories = cats.size,
-                        allItems = all.values.toList(),
-                        portalTotal = portalTotal
-                    )
-                    if (singleOk) {
-                        store.saveVodCatalog(portalId, all.values.toList(), cats)
-                        store.clearVodCatalogDoneCats(portalId)
+                    if (items.isNotEmpty()) {
+                        items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                        singleOk = items.size >= 5000 &&
+                            if (allTotal > 0) items.size >= allTotal * 0.95
+                            else items.size >= 10000
+                        _progress.value = state(
+                            loadedCount = all.size,
+                            doneCategories = cats.size,
+                            totalCategories = cats.size,
+                            allItems = all.values.toList(),
+                            categories = cats,
+                            portalTotal = portalTotal
+                        )
                     }
                 }
             }
 
-            if (!singleOk) {
-                val saneTotal = if (portalTotal in 1..300_000) portalTotal else 0
-                val target = if (saneTotal > 0) (saneTotal * 0.98).toInt() else Int.MAX_VALUE
-                val complete = all.size >= target || (saneTotal <= 0 && all.size >= 10000)
-
-                // 2) Parallel per-category fetch for any gaps (Tivimate fetches per
-                // category), using the filter parameter this portal actually accepts.
-                // Modest concurrency: too many parallel requests can trip the portal's
-                // rate limiter and stall the whole sync on cooldowns.
-                if (!complete) {
-                    val categoryParam = repository.probeVodCategoryParam(profile)
-                    val sem = Semaphore(8)
-                    coroutineScope {
-                        remaining.forEach { cat ->
-                            launch {
-                                sem.acquire()
-                                try {
-                                    val items = repository.fetchVodCategory(profile, cat.id, 5000, categoryParam)
-                                    items.forEach { all[it.id] = stamp(it, seriesCatIds) }
-                                    // Persist this category immediately (small chunk
-                                    // file) so a process kill mid-sync only loses the
-                                    // in-flight category, never the whole library.
-                                    store.saveVodCategoryChunk(portalId, cat.id, items)
-                                    mutex.withLock {
-                                        val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
-                                            store.saveVodCatalogDoneCats(portalId, it.toList())
-                                        }
-                                        _progress.value = state(
-                                            doneCategories = doneNow.size,
-                                            loadedCount = all.size,
-                                            allItems = all.values.toList(),
-                                            portalTotal = portalTotal
-                                        )
+            // 2) Per-category fetch for all remaining movie/VOD categories.
+            val vodRemaining = vodCats.filter { it.id != 0L && (force || it.id !in doneCats) }
+            if (!singleOk && vodRemaining.isNotEmpty()) {
+                val sem = Semaphore(6)
+                coroutineScope {
+                    vodRemaining.forEach { cat ->
+                        launch {
+                            sem.acquire()
+                            try {
+                                val items = repository.fetchVodCategory(profile, cat.id, 5000)
+                                items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                                // Persist this category chunk immediately
+                                store.saveVodCategoryChunk(portalId, cat.id, items)
+                                mutex.withLock {
+                                    val doneNow = (store.loadVodCatalogDoneCats(portalId) + cat.id).toMutableSet().also {
+                                        store.saveVodCatalogDoneCats(portalId, it.toList())
                                     }
-                                } catch (_: Exception) {
-                                } finally {
-                                    sem.release()
+                                    _progress.value = state(
+                                        doneCategories = doneNow.size,
+                                        loadedCount = all.size,
+                                        allItems = all.values.toList(),
+                                        categories = cats,
+                                        totalCategories = cats.size,
+                                        portalTotal = portalTotal
+                                    )
                                 }
+                            } catch (_: Exception) {
+                            } finally {
+                                sem.release()
                             }
                         }
                     }
                 }
+            }
 
-                // 3) Letter/digit search enumeration as a last resort — catches
-                // portals whose plain list paging is capped or whose category
-                // filter is ignored (both return the same tiny subset forever).
-                val target3 = if (saneTotal > 0) target else Int.MAX_VALUE
-                if (all.size < target3 && (saneTotal > 0 || all.size < 5000)) {
-                    val sem = Semaphore(6)
-                    coroutineScope {
-                        searchTokens.forEach { token ->
-                            launch {
-                                sem.acquire()
-                                try {
-                                    val items = repository.fetchVodSearch(profile, token, 5000)
-                                    items.forEach { all[it.id] = stamp(it, seriesCatIds) }
-                                    mutex.withLock {
-                                        _progress.value = state(
-                                            loadedCount = all.size,
-                                            allItems = all.values.toList(),
-                                            portalTotal = portalTotal
-                                        )
-                                    }
-                                } catch (_: Exception) {
-                                } finally {
-                                    sem.release()
+            // 3) Letter/digit search enumeration fallback if movie library is empty
+            val movieCount = all.values.count { !isSeriesItem(it) }
+            if (movieCount < 200) {
+                val sem = Semaphore(6)
+                coroutineScope {
+                    searchTokens.forEach { token ->
+                        launch {
+                            sem.acquire()
+                            try {
+                                val items = repository.fetchVodSearch(profile, token, 5000)
+                                items.forEach { all[it.id] = stamp(it, seriesCatIds) }
+                                mutex.withLock {
+                                    _progress.value = state(
+                                        loadedCount = all.size,
+                                        allItems = all.values.toList(),
+                                        categories = cats,
+                                        totalCategories = cats.size,
+                                        portalTotal = portalTotal
+                                    )
                                 }
+                            } catch (_: Exception) {
+                            } finally {
+                                sem.release()
                             }
                         }
                     }

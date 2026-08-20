@@ -902,9 +902,16 @@ class PortalRepository(
         var pageSize = 0
         var maxPages = 2000
         val catParam = probeVodCategoryParam(profile)
+        val queryParams = mapOf(
+            catParam to catId.toString(),
+            "category" to catId.toString(),
+            "genre" to catId.toString(),
+            "category_id" to catId.toString(),
+            "cat_id" to catId.toString()
+        )
         while (guard < maxPages) {
             guard++
-            val (list, total) = fetchVodPage(profile, page, perPage, mapOf(catParam to catId.toString()))
+            val (list, total) = fetchVodPage(profile, page, perPage, queryParams)
             if (pageSize == 0 && list.isNotEmpty()) pageSize = list.size
             if (list.isEmpty()) {
                 if (page > 1) break
@@ -1834,25 +1841,56 @@ class PortalRepository(
     }
 
     private fun parseDataArray(el: JsonElement): List<JsonObject> {
-        return when (el) {
-            is JsonObject -> (el["data"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
-            is JsonArray -> el.mapNotNull { it as? JsonObject }
-            else -> emptyList()
+        when (el) {
+            is JsonArray -> return el.mapNotNull { it as? JsonObject }
+            is JsonObject -> {
+                val data = el["data"] ?: el["js"] ?: el["results"] ?: el["items"]
+                when (data) {
+                    is JsonArray -> return data.mapNotNull { it as? JsonObject }
+                    is JsonObject -> {
+                        val inner = data["data"] ?: data["js"] ?: data["results"] ?: data["items"]
+                        if (inner is JsonArray) return inner.mapNotNull { it as? JsonObject }
+                        if (inner is JsonObject) {
+                            val items = inner.values.mapNotNull { it as? JsonObject }
+                            if (items.isNotEmpty()) return items
+                        }
+                        val items = data.values.mapNotNull { it as? JsonObject }
+                        if (items.isNotEmpty()) return items
+                    }
+                    else -> {}
+                }
+                val direct = el.values.mapNotNull { it as? JsonObject }
+                if (direct.isNotEmpty() && direct.any { it.containsKey("id") || it.containsKey("name") || it.containsKey("title") }) {
+                    return direct
+                }
+            }
+            else -> {}
         }
+        return emptyList()
     }
 
     private fun parseTotal(el: JsonElement): Int {
         val obj = el as? JsonObject ?: return 0
         val t = obj["total_items"]?.asJsonPrimitiveOrNull()?.contentOrNull
             ?: obj["total"]?.asJsonPrimitiveOrNull()?.contentOrNull
+            ?: (obj["data"] as? JsonObject)?.get("total_items")?.asJsonPrimitiveOrNull()?.contentOrNull
+            ?: (obj["data"] as? JsonObject)?.get("total")?.asJsonPrimitiveOrNull()?.contentOrNull
+            ?: (obj["js"] as? JsonObject)?.get("total_items")?.asJsonPrimitiveOrNull()?.contentOrNull
         return t?.toIntOrNull() ?: 0
     }
 
     private fun parseGenres(el: JsonElement): List<Genre> {
         return parseDataArray(el).mapNotNull { o ->
-            Genre(
-                id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
-                title = o["title"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—",
+            val id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
+                ?: o["category_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
+                ?: o["cat_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0
+            val title = o["title"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                ?: o["category_name"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                ?: o["name"]?.asJsonPrimitiveOrNull()?.contentOrNull ?: "—"
+            if (id <= 0 && title == "—") null
+            else Genre(
+                id = id,
+                title = title,
                 censored = o["censored"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toBooleanStrictOrNull() == true,
                 number = o["number"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toIntOrNull() ?: 0
             )
@@ -1919,13 +1957,16 @@ class PortalRepository(
 
     private fun parseVodList(el: JsonElement): List<VodItem> {
         return parseDataArray(el).mapNotNull { o ->
-            val rawSeries = o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty().trim()
+            val rawSeries = (o["series"]?.asJsonPrimitiveOrNull()?.contentOrNull
+                ?: (o["series"] as? JsonArray)?.takeIf { it.isNotEmpty() }?.toString()).orEmpty().trim()
             val isSeriesValid = rawSeries.isNotBlank() && rawSeries != "[]" && rawSeries != "0" && rawSeries != "null" && rawSeries != "{}"
             val seriesRef = if (isSeriesValid) rawSeries else ""
             val selectedSeason = o["selected_season"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty().trim()
                 .takeIf { it.isNotBlank() && it != "0" && it != "null" }.orEmpty()
             val seriesData = o["series_data"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty().trim()
                 .takeIf { it.isNotBlank() && it != "[]" && it != "0" && it != "null" && it != "{}" }.orEmpty()
+            val isSerial = o["is_series"]?.asJsonPrimitiveOrNull()?.contentOrNull == "1" ||
+                o["is_serial"]?.asJsonPrimitiveOrNull()?.contentOrNull == "1"
             VodItem(
                 id = o["id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull() ?: 0,
                 categoryId = o["cat_id"]?.asJsonPrimitiveOrNull()?.contentOrNull?.toLongOrNull()
@@ -1949,7 +1990,7 @@ class PortalRepository(
                 writers = o["writers"]?.asJsonPrimitiveOrNull()?.contentOrNull
                     ?: o["writer"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 seriesRef = seriesRef,
-                isSeries = seriesRef.isNotBlank() || selectedSeason.isNotBlank() || seriesData.isNotBlank(),
+                isSeries = seriesRef.isNotBlank() || selectedSeason.isNotBlank() || seriesData.isNotBlank() || isSerial,
                 cmd = o["cmd"]?.asJsonPrimitiveOrNull()?.contentOrNull.orEmpty(),
                 selectedSeason = selectedSeason,
                 seriesData = seriesData,
