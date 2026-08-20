@@ -804,6 +804,7 @@ fun PlayerScreen(navController: NavHostController) {
 
     // Kumanda tuşları: kanal +/- ve medya sonraki/önceki ile zapping (Android TV).
     val rootFocusRequester = remember { FocusRequester() }
+    val centerPlayFocusRequester = remember { FocusRequester() }
     val isTvDevice = remember(context) { isTvDevice(context) }
 
     LaunchedEffect(Unit) {
