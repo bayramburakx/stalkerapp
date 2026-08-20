@@ -72,7 +72,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
@@ -240,17 +242,30 @@ private fun PlayerTvIconButton(
     focusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.25f else 1.0f,
+        label = "btn_scale"
+    )
+    val glowColor = Color(0xFF00E5FF)
+
     Box(
         modifier = modifier
+            .scale(scale)
             .clip(CircleShape)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusable()
             .onFocusChanged { isFocused = it.isFocused }
-            .background(if (isFocused) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.15f))
-            .border(if (isFocused) 2.5.dp else 0.dp, Color.White, CircleShape)
+            .background(if (isFocused) glowColor else Color.White.copy(alpha = 0.18f))
+            .border(
+                width = if (isFocused) 3.dp else 1.dp,
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.25f),
+                shape = CircleShape
+            )
             .clickable(onClick = onClick)
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
-                    onClick(); true
+                    onClick()
+                    true
                 } else false
             },
         contentAlignment = Alignment.Center
@@ -713,9 +728,12 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     LaunchedEffect(overlayVisible) {
-        if (overlayVisible && !isLive) {
-            kotlinx.coroutines.delay(120)
+        if (overlayVisible) {
+            kotlinx.coroutines.delay(100)
             runCatching { centerPlayFocusRequester.requestFocus() }
+        } else {
+            kotlinx.coroutines.delay(50)
+            runCatching { rootFocusRequester.requestFocus() }
         }
     }
 
@@ -1137,15 +1155,17 @@ fun PlayerScreen(navController: NavHostController) {
                         modifier = Modifier.size(42.dp)
                     )
                     if (isLive) {
+                        Spacer(modifier = Modifier.width(16.dp))
                         ChannelLogo(
                             logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(38.dp)
                         )
+                        Spacer(modifier = Modifier.width(12.dp))
                         // Canlı TV: kanal adı + tür + numara üst barda gösterilir.
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(start = 6.dp)
+                                .padding(end = 8.dp)
                         ) {
                             Text(
                                 text = currentChannel?.name ?: PlaybackManager.currentTitle,
@@ -1831,6 +1851,38 @@ private fun SleepTimerDialog(
     )
 }
 
+@Composable
+private fun TvFocusableSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(12.dp),
+    backgroundColor: Color = Color(0xFF222226),
+    content: @Composable () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    Surface(
+        shape = shape,
+        color = if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else backgroundColor,
+        modifier = modifier
+            .focusable()
+            .onFocusChanged { isFocused = it.isFocused }
+            .border(
+                width = if (isFocused) 2.5.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                shape = shape
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick()
+                    true
+                } else false
+            }
+    ) {
+        content()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) -> Unit) {
@@ -1879,10 +1931,9 @@ fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) ->
             }
 
             // Varsayılan
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF222226),
-                modifier = Modifier.fillMaxWidth().clickable { onSelect(null) }
+            TvFocusableSurface(
+                onClick = { onSelect(null) },
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1906,10 +1957,9 @@ fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) ->
             }
 
             tracks.forEach { (tLang, label) ->
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF222226),
-                    modifier = Modifier.fillMaxWidth().clickable { onSelect(tLang) }
+                TvFocusableSurface(
+                    onClick = { onSelect(tLang) },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1991,9 +2041,8 @@ fun SubtitleSheet(
             )
 
             // Aç / Kapat Kartı
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF222226),
+            TvFocusableSurface(
+                onClick = { onToggle(!enabled) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -2022,15 +2071,12 @@ fun SubtitleSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF27272A),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onDismiss()
-                            onPickFile()
-                        }
+                TvFocusableSurface(
+                    onClick = {
+                        onDismiss()
+                        onPickFile()
+                    },
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -2047,12 +2093,9 @@ fun SubtitleSheet(
                     }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF27272A),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onSelect(null) }
+                TvFocusableSurface(
+                    onClick = { onSelect(null) },
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -2078,10 +2121,9 @@ fun SubtitleSheet(
             )
 
             tracks.forEach { (tLang, label) ->
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF222226),
-                    modifier = Modifier.fillMaxWidth().clickable { onSelect(tLang) }
+                TvFocusableSurface(
+                    onClick = { onSelect(tLang) },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -2506,12 +2548,11 @@ fun PlayerSettingsSheet(
                 ) {
                     speeds.forEach { s ->
                         val selected = s == currentSpeed
-                        Surface(
+                        TvFocusableSurface(
+                            onClick = { onSpeed(s) },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onSpeed(s) }
+                            backgroundColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                                 Text(
@@ -2535,12 +2576,11 @@ fun PlayerSettingsSheet(
                 ) {
                     aspects.forEach { (label, mode) ->
                         val selected = mode == currentAspect
-                        Surface(
+                        TvFocusableSurface(
+                            onClick = { onAspect(mode) },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onAspect(mode) }
+                            backgroundColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                                 Text(
@@ -2573,10 +2613,10 @@ fun PlayerSettingsSheet(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Surface(
+                        TvFocusableSurface(
+                            onClick = { onDelay((audioDelayMs - 50).coerceIn(-500, 500)) },
                             shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF2E2E34),
-                            modifier = Modifier.clickable { onDelay((audioDelayMs - 50).coerceIn(-500, 500)) }
+                            backgroundColor = Color(0xFF2E2E34)
                         ) {
                             Text("−50 ms", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = Color.White)
                         }
@@ -2586,10 +2626,10 @@ fun PlayerSettingsSheet(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Surface(
+                        TvFocusableSurface(
+                            onClick = { onDelay((audioDelayMs + 50).coerceIn(-500, 500)) },
                             shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF2E2E34),
-                            modifier = Modifier.clickable { onDelay((audioDelayMs + 50).coerceIn(-500, 500)) }
+                            backgroundColor = Color(0xFF2E2E34)
                         ) {
                             Text("+50 ms", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = Color.White)
                         }

@@ -56,11 +56,7 @@ class SyncRenderersFactory(
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
     ): AudioSink {
-        val audioCapabilities = if (passthrough) {
-            AudioCapabilities.getCapabilities(context)
-        } else {
-            AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES
-        }
+        val audioCapabilities = AudioCapabilities.getCapabilities(context)
         val builder = DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)

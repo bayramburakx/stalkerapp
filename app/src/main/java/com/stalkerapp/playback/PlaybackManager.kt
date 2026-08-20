@@ -387,12 +387,16 @@ object PlaybackManager {
         )
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             // Android TV'de donanım ses/video çözücü hatası durumunda yazılım çözücüye geri düş (sessizliği önler).
-            .setEnableDecoderFallback(true)
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
 
         return ExoPlayer.Builder(appContext)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .setRenderersFactory(renderers)
+            .setAudioAttributes(audioAttributes, true)
             .build()
             .apply {
                 playWhenReady = true
@@ -1223,6 +1227,29 @@ object PlaybackManager {
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 updateNotification()
+            }
+
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                // TV'de bazı IPTV akışlarında ilk ses kanalı otomatik bağlanamayabilir.
+                // Seçili ses parçası yoksa desteklenen ilk ses parçasını aktif et.
+                val hasSelectedAudio = tracks.groups.any { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+                if (!hasSelectedAudio) {
+                    val firstAudioGroup = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSupported }
+                    if (firstAudioGroup != null && firstAudioGroup.length > 0) {
+                        runCatching {
+                            p.trackSelectionParameters = p.trackSelectionParameters
+                                .buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                                .setOverrideForType(
+                                    androidx.media3.common.TrackSelectionOverride(
+                                        firstAudioGroup.mediaTrackGroup,
+                                        0
+                                    )
+                                )
+                                .build()
+                        }
+                    }
+                }
             }
         })
     }

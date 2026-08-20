@@ -544,18 +544,19 @@ private fun TvNavTab(
             .clip(RoundedCornerShape(8.dp))
             .background(
                 when {
-                    focused -> Color(0xFF38BDF8)
+                    focused -> Color(0xFF00E5FF)
                     selected -> Color(0xFF1E293B)
                     else -> Color.Transparent
                 }
             )
             .border(
-                width = if (focused) 2.dp else 0.dp,
+                width = if (focused) 2.5.dp else 0.dp,
                 color = if (focused) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 14.dp, vertical = 8.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusable()
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -620,9 +621,10 @@ private fun TvChannelCard(
             .background(if (focused) Color(0xFF1E293B) else Color(0xFF131722))
             .border(
                 width = if (focused) 3.dp else 1.dp,
-                color = if (focused) Color(0xFF38BDF8) else Color.White.copy(0.08f),
+                color = if (focused) Color(0xFF00E5FF) else Color.White.copy(0.08f),
                 shape = RoundedCornerShape(12.dp)
             )
+            .focusable()
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -651,8 +653,8 @@ private fun TvChannelCard(
             Text(
                 channel.name,
                 color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -696,9 +698,10 @@ private fun TvVodCard(
                 .background(Color(0xFF131722))
                 .border(
                     width = if (focused) 3.dp else 0.dp,
-                    color = if (focused) Color(0xFF38BDF8) else Color.Transparent,
+                    color = if (focused) Color(0xFF00E5FF) else Color.Transparent,
                     shape = RoundedCornerShape(10.dp)
                 )
+                .focusable()
                 .onFocusChanged { focused = it.isFocused }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
