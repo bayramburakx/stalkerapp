@@ -282,8 +282,8 @@ private fun ProfileCard(
         modifier = Modifier
             .scale(scale)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .focusable()
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .clickable(onClick = onClick)
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
@@ -326,18 +326,6 @@ private fun ProfileCard(
                     )
                 }
             }
-            if (editing) {
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
-                ) {
-                    Icon(Icons.Filled.Create, contentDescription = t("Düzenle"), modifier = Modifier.size(16.dp))
-                }
-            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -370,8 +358,8 @@ private fun AddProfileCard(lang: String, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .scale(scale)
-            .focusable()
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .clickable(onClick = onClick)
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {

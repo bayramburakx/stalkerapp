@@ -243,7 +243,7 @@ private fun PlayerTvIconButton(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.25f else 1.0f,
+        targetValue = if (isFocused) 1.22f else 1.0f,
         label = "btn_scale"
     )
     val glowColor = Color(0xFF00E5FF)
@@ -253,11 +253,11 @@ private fun PlayerTvIconButton(
             .scale(scale)
             .clip(CircleShape)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .focusable()
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .background(if (isFocused) glowColor else Color.White.copy(alpha = 0.18f))
             .border(
-                width = if (isFocused) 3.dp else 1.dp,
+                width = if (isFocused) 3.5.dp else 1.dp,
                 color = if (isFocused) Color.White else Color.White.copy(alpha = 0.25f),
                 shape = CircleShape
             )
@@ -276,6 +276,59 @@ private fun PlayerTvIconButton(
             tint = if (isFocused) Color.Black else tint,
             modifier = Modifier.size(iconSize)
         )
+    }
+}
+
+@Composable
+private fun PlayerTvActionChip(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.15f else 1.0f,
+        label = "chip_scale"
+    )
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .background(if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f))
+            .border(
+                width = if (isFocused) 3.dp else 1.dp,
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick()
+                    true
+                } else false
+            }
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isFocused) Color.Black else Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                label,
+                color = if (isFocused) Color.Black else Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal
+            )
+        }
     }
 }
 
@@ -1474,64 +1527,28 @@ fun PlayerScreen(navController: NavHostController) {
                             )
                         }
 
-                        // Right side: Rehber and Kanallar only for Live TV
+                        // Right side: Rehber, Geçmiş, Kanallar for Live TV
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .clickable { showEpg = true }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.Tv,
-                                        contentDescription = str(lang, "Rehber"),
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Text(str(lang, "Rehber"), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                            // Geçmiş yayın (catch-up): kanal arşivi varsa takvim açılır.
+                            PlayerTvActionChip(
+                                onClick = { showEpg = true },
+                                icon = Icons.Default.Tv,
+                                label = str(lang, "Rehber")
+                            )
                             if (currentChannel?.isTvArchive == true && (currentChannel?.archiveDuration ?: 0) > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .clickable { showCatchupCalendar = true }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                            contentDescription = str(lang, "Geçmiş Yayın"),
-                                            tint = Color.White,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                        Text(str(lang, "Geçmiş"), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
+                                PlayerTvActionChip(
+                                    onClick = { showCatchupCalendar = true },
+                                    icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    label = str(lang, "Geçmiş")
+                                )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .clickable { showChannels = true }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.List,
-                                        contentDescription = str(lang, "Kanallar"),
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Text(str(lang, "Kanallar"), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
+                            PlayerTvActionChip(
+                                onClick = { showChannels = true },
+                                icon = Icons.Default.List,
+                                label = str(lang, "Kanallar")
+                            )
                         }
                     }
                 }
@@ -1860,14 +1877,20 @@ private fun TvFocusableSurface(
     content: @Composable () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.04f else 1.0f,
+        label = "surface_scale"
+    )
+
     Surface(
         shape = shape,
-        color = if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else backgroundColor,
+        color = if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.28f) else backgroundColor,
         modifier = modifier
-            .focusable()
+            .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .border(
-                width = if (isFocused) 2.5.dp else 0.dp,
+                width = if (isFocused) 3.dp else 0.dp,
                 color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
                 shape = shape
             )

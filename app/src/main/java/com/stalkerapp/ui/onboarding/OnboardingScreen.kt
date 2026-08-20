@@ -277,13 +277,33 @@ private fun LanguageCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.05f else 1.0f,
+        label = "lang_card_scale"
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(scale)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .border(
+                width = if (isFocused) 3.dp else if (selected) 1.5.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else if (selected) Color(0xFF38BDF8) else Color.Transparent,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
         shape = RoundedCornerShape(16.dp),
-        color = if (selected) Color.White.copy(alpha = 0.16f)
+        color = if (isFocused) Color(0xFF1E293B)
+        else if (selected) Color.White.copy(alpha = 0.16f)
         else Color.White.copy(alpha = 0.06f)
     ) {
         Row(
@@ -291,14 +311,19 @@ private fun LanguageCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
             }
             Box(
                 modifier = Modifier
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(if (selected) Color.White else Color.White.copy(alpha = 0.2f)),
+                    .background(if (selected) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 if (selected) {
@@ -336,7 +361,7 @@ private fun WelcomePage(lang: String, onStart: () -> Unit) {
             color = Color.White
         )
         Text(
-            t("Tüm IPTV içeriğin tek uygulamada — kurulum bir dakika sürer."),
+            t("Tüm IPTV kaynakların tek bir akıllı arayüzde"),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
@@ -350,16 +375,16 @@ private fun WelcomePage(lang: String, onStart: () -> Unit) {
                     .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF1E3A8A).copy(alpha = 0.35f),
-                    modifier = Modifier.size(44.dp)
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(f.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                    }
+                    Icon(f.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
                 }
-                Spacer(Modifier.width(14.dp))
+                Spacer(Modifier.width(16.dp))
                 Column {
                     Text(t(f.title), style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
                     Text(t(f.desc), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
@@ -367,9 +392,18 @@ private fun WelcomePage(lang: String, onStart: () -> Unit) {
             }
         }
         Spacer(Modifier.height(24.dp))
+        var isStartFocused by remember { mutableStateOf(false) }
         Button(
             onClick = onStart,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .onFocusChanged { isStartFocused = it.isFocused }
+                .border(
+                    width = if (isStartFocused) 3.dp else 0.dp,
+                    color = if (isStartFocused) Color(0xFF00E5FF) else Color.Transparent,
+                    shape = RoundedCornerShape(14.dp)
+                ),
             shape = RoundedCornerShape(14.dp)
         ) {
             Text(t("Başla"), fontWeight = FontWeight.Bold)
@@ -619,28 +653,58 @@ private fun SourceChoiceCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isFocused) 1.05f else 1.0f,
+        label = "choice_card_scale"
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(scale)
             .padding(vertical = 5.dp)
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .border(
+                width = if (isFocused) 3.dp else if (selected) 1.5.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else if (selected) Color(0xFF38BDF8) else Color.Transparent,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
         shape = RoundedCornerShape(14.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+        color = if (isFocused) Color(0xFF1E293B)
+        else if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
         else Color.White.copy(alpha = 0.06f)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                modifier = Modifier.size(26.dp)
+            )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(desc, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
             }
             if (selected) {
-                Text("✓", color = MaterialTheme.colorScheme.primary)
+                Text("✓", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
             }
         }
     }

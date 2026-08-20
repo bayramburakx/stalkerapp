@@ -796,17 +796,24 @@ fun VodDetailScreen(
                                 }
                             }
                             // Favori: Oynat'ın hemen sağında, yuvarlak içinde kalp.
+                            var isFavFocused by remember { mutableStateOf(false) }
+                            val favScale by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (isFavFocused) 1.2f else 1.0f,
+                                label = "fav_scale"
+                            )
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
+                                    .scale(favScale)
                                     .clip(CircleShape)
-                                    .background(if (isFavFocused) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.20f))
+                                    .onFocusChanged { isFavFocused = it.isFocused }
+                                    .focusable()
+                                    .background(if (isFavFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.20f))
                                     .border(
-                                        width = if (isFavFocused) 3.dp else 0.dp,
-                                        color = if (isFavFocused) Color.White else Color.Transparent,
+                                        width = if (isFavFocused) 3.dp else 1.dp,
+                                        color = if (isFavFocused) Color.White else Color.White.copy(alpha = 0.25f),
                                         shape = CircleShape
                                     )
-                                    .onFocusChanged { isFavFocused = it.isFocused }
                                     .clickable { vm.toggleFavoriteVod(it) }
                                     .onKeyEvent { ev ->
                                         if (isTvSelectKey(ev)) {
@@ -824,17 +831,24 @@ fun VodDetailScreen(
                             }
                             // Sonra İzle: Oynat'ın sağında, yuvarlak içinde saat simgesi.
                             val inWatchLater = remember(watchLater, it) { watchLater.any { w -> w.id == it.id } }
+                            var isWatchLaterFocused by remember { mutableStateOf(false) }
+                            val watchLaterScale by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (isWatchLaterFocused) 1.2f else 1.0f,
+                                label = "wl_scale"
+                            )
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
+                                    .scale(watchLaterScale)
                                     .clip(CircleShape)
-                                    .background(if (isWatchLaterFocused) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.20f))
+                                    .onFocusChanged { isWatchLaterFocused = it.isFocused }
+                                    .focusable()
+                                    .background(if (isWatchLaterFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.20f))
                                     .border(
-                                        width = if (isWatchLaterFocused) 3.dp else 0.dp,
-                                        color = if (isWatchLaterFocused) Color.White else Color.Transparent,
+                                        width = if (isWatchLaterFocused) 3.dp else 1.dp,
+                                        color = if (isWatchLaterFocused) Color.White else Color.White.copy(alpha = 0.25f),
                                         shape = CircleShape
                                     )
-                                    .onFocusChanged { isWatchLaterFocused = it.isFocused }
                                     .clickable { vm.toggleWatchLater(it) }
                                     .onKeyEvent { ev ->
                                         if (isTvSelectKey(ev)) {
@@ -855,24 +869,31 @@ fun VodDetailScreen(
                                 val movieDl = allDownloads.find { d -> d.id == movieEntryId || d.title == it.name }
                                 val isCompleted = movieDl?.state == "completed"
                                 val isDownloading = movieDl?.state == "downloading" || movieDl?.state == "queued"
+                                var isDlFocused by remember { mutableStateOf(false) }
+                                val dlScale by androidx.compose.animation.core.animateFloatAsState(
+                                    targetValue = if (isDlFocused) 1.2f else 1.0f,
+                                    label = "dl_scale"
+                                )
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
+                                        .scale(dlScale)
                                         .clip(CircleShape)
+                                        .onFocusChanged { isDlFocused = it.isFocused }
+                                        .focusable()
                                         .background(
                                             when {
-                                                isDlFocused -> Color(0xFF38BDF8)
+                                                isDlFocused -> Color(0xFF00E5FF)
                                                 isCompleted -> Color(0xFF2E7D32).copy(alpha = 0.9f)
                                                 isDownloading -> Color(0xFF1565C0).copy(alpha = 0.9f)
                                                 else -> Color.White.copy(alpha = 0.20f)
                                             }
                                         )
                                         .border(
-                                            width = if (isDlFocused) 3.dp else 0.dp,
-                                            color = if (isDlFocused) Color.White else Color.Transparent,
+                                            width = if (isDlFocused) 3.dp else 1.dp,
+                                            color = if (isDlFocused) Color.White else Color.White.copy(alpha = 0.25f),
                                             shape = CircleShape
                                         )
-                                        .onFocusChanged { isDlFocused = it.isFocused }
                                         .clickable {
                                             if (isCompleted) {
                                                 vm.showMessage("✓ " + str(lang, "Bu film zaten indirildi"))
@@ -1105,11 +1126,17 @@ fun VodDetailScreen(
                                 val fullyWatched = s.id in fullyWatchedSeasons
                                 val poster = seasonPosters[s.id].orEmpty().ifBlank { tmdbPoster }
                                 var isSeasonFocused by remember { mutableStateOf(false) }
+                                val seasonScale by androidx.compose.animation.core.animateFloatAsState(
+                                    targetValue = if (isSeasonFocused) 1.12f else 1.0f,
+                                    label = "season_scale"
+                                )
 
                                 Column(
                                     modifier = Modifier
                                         .width(96.dp)
+                                        .scale(seasonScale)
                                         .onFocusChanged { isSeasonFocused = it.isFocused }
+                                        .focusable()
                                         .combinedClickable(
                                             onClick = { selectedSeason = s.id },
                                             onLongClick = { seasonConfirm = s }
@@ -1126,9 +1153,10 @@ fun VodDetailScreen(
                                             .aspectRatio(2f / 3f)
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .then(
-                                                if (sel) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                                                else Modifier
+                                            .border(
+                                                width = if (isSeasonFocused) 3.5.dp else if (sel) 2.dp else 0.dp,
+                                                color = if (isSeasonFocused) Color(0xFF00E5FF) else if (sel) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                                shape = RoundedCornerShape(12.dp)
                                             )
                                     ) {
                                         if (poster.isNotBlank()) {
@@ -1175,11 +1203,11 @@ fun VodDetailScreen(
                                     Text(
                                         seasonLabel(s),
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                        fontWeight = if (sel || isSeasonFocused) FontWeight.Bold else FontWeight.Normal,
                                         textAlign = TextAlign.Center,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isSeasonFocused) Color(0xFF00E5FF) else if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -1211,22 +1239,28 @@ fun VodDetailScreen(
                                         .ifBlank { ep.name }
                                         .ifBlank { "${str(lang, "Bölüm ")}$ep.episodeNumber" }
                                     var isEpFocused by remember { mutableStateOf(false) }
+                                    val epScale by androidx.compose.animation.core.animateFloatAsState(
+                                        targetValue = if (isEpFocused) 1.08f else 1.0f,
+                                        label = "ep_scale"
+                                    )
 
                                     Box(
                                         modifier = Modifier
                                             .width(196.dp)
+                                            .scale(epScale)
                                             .clip(RoundedCornerShape(14.dp))
+                                            .onFocusChanged { isEpFocused = it.isFocused }
+                                            .focusable()
                                             .background(
                                                 if (isEpFocused) Color(0xFF1E293B)
                                                 else if (watched) MaterialTheme.colorScheme.primaryContainer
                                                 else MaterialTheme.colorScheme.surfaceVariant
                                             )
                                             .border(
-                                                width = if (isEpFocused) 3.dp else 0.dp,
-                                                color = if (isEpFocused) Color(0xFF38BDF8) else Color.Transparent,
+                                                width = if (isEpFocused) 3.5.dp else 0.dp,
+                                                color = if (isEpFocused) Color(0xFF00E5FF) else Color.Transparent,
                                                 shape = RoundedCornerShape(14.dp)
                                             )
-                                            .onFocusChanged { isEpFocused = it.isFocused }
                                             .combinedClickable(
                                                 onClick = { onPlayPressed(ep) },
                                                 onLongClick = { toggleEpisodeWatched(ep, seasonNum) }

@@ -185,10 +185,31 @@ fun ChannelRow(
     onLongClick: ((Channel) -> Unit)? = null,
     onClick: (Channel) -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.03f else 1.0f,
+        label = "channel_row_scale"
+    )
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (highlight) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+            .scale(scale)
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                when {
+                    isFocused -> Color(0xFF00E5FF).copy(alpha = 0.28f)
+                    highlight -> MaterialTheme.colorScheme.primaryContainer
+                    else -> Color.Transparent
+                }
+            )
+            .border(
+                width = if (isFocused) 2.5.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .then(
                 if (onLongClick != null) {
                     Modifier.combinedClickable(
@@ -199,6 +220,12 @@ fun ChannelRow(
                     Modifier.clickable { onClick(channel) }
                 }
             )
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(channel)
+                    true
+                } else false
+            }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

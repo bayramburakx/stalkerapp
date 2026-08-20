@@ -289,12 +289,19 @@ fun LoginScreen(
                 }
 
                 Spacer(Modifier.height(20.dp))
+                var isSubmitFocused by remember { mutableStateOf(false) }
                 Button(
                     onClick = { submit() },
                     enabled = !busy,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
+                        .onFocusChanged { isSubmitFocused = it.isFocused }
+                        .border(
+                            width = if (isSubmitFocused) 3.dp else 0.dp,
+                            color = if (isSubmitFocused) Color(0xFF00E5FF) else Color.Transparent,
+                            shape = RoundedCornerShape(24.dp)
+                        )
                 ) {
                     if (busy) {
                         CircularProgressIndicator(
@@ -331,12 +338,19 @@ fun LoginScreen(
                     HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
                 }
 
+                var isGoogleFocused by remember { mutableStateOf(false) }
                 Button(
                     onClick = { launchGoogle() },
                     enabled = googleAvailable && !busy,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(52.dp)
+                        .onFocusChanged { isGoogleFocused = it.isFocused }
+                        .border(
+                            width = if (isGoogleFocused) 3.dp else 0.dp,
+                            color = if (isGoogleFocused) Color(0xFF00E5FF) else Color.Transparent,
+                            shape = RoundedCornerShape(24.dp)
+                        ),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface
@@ -366,7 +380,17 @@ fun LoginScreen(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { onSignedIn() }) {
+                var isGuestFocused by remember { mutableStateOf(false) }
+                TextButton(
+                    onClick = { onSignedIn() },
+                    modifier = Modifier
+                        .onFocusChanged { isGuestFocused = it.isFocused }
+                        .border(
+                            width = if (isGuestFocused) 2.dp else 0.dp,
+                            color = if (isGuestFocused) Color(0xFF00E5FF) else Color.Transparent,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                ) {
                     Text(
                         t("Giriş Yapmadan Devam Et (Misafir)"),
                         color = MaterialTheme.colorScheme.primary,

@@ -454,6 +454,10 @@ fun VodPoster(
     val settings = app.store.settings()
     val lang = settings.language
     var isFocused by remember { mutableStateOf(false) }
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isFocused) 1.10f else 1.0f,
+        label = "poster_scale"
+    )
 
     var resolvedPoster by remember(item.id, item.poster) {
         mutableStateOf(app.tmdb.getCachedPoster(item.name, isSeries) ?: item.poster)
@@ -471,12 +475,14 @@ fun VodPoster(
     Column(
         modifier = Modifier
             .then(if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth())
-            .clip(RoundedCornerShape(10.dp))
+            .scale(scale)
+            .clip(RoundedCornerShape(12.dp))
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .border(
-                width = if (isFocused) 3.dp else 0.dp,
-                color = if (isFocused) Color(0xFF38BDF8) else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
+                width = if (isFocused) 3.5.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
             )
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
