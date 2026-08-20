@@ -53,8 +53,8 @@ data class UserList(
 @Serializable
 data class Settings(
     val timezoneOffset: Int = 0,
-    val requestIntervalMs: Long = 100,
-    val cooldownMs: Long = 300_000L,
+    val requestIntervalMs: Long = 30,
+    val cooldownMs: Long = 60_000L,
     val maxBufferMs: Int = 60_000,
     /** Bölüm bitince sıradaki bölüm otomatik oynatılsın mı (binge mod). */
     val bingeMode: Boolean = false,

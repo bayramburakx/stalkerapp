@@ -345,7 +345,7 @@ class VodSyncManager(
         // son hazır kataloğun haritası kullanılır (yarım liste için de faydalı).
         if (status == VodCatalogStatus.Syncing) {
             val now = System.currentTimeMillis()
-            val publish = now - lastUiPublish >= 1000L
+            val publish = now - lastUiPublish >= 500L
             if (publish) {
                 lastUiPublish = now
                 return VodCatalogState.of(

@@ -699,9 +699,11 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamChannels(it) }
             else -> {
                 val p = profile ?: return null
-                val cats = runCatching { repository.loadGenres(p) }.getOrDefault(emptyList())
-                val channels = runCatching { repository.loadChannels(p, 0) }.getOrDefault(emptyList())
-                listOf(Genre(0, "Tümü")) + cats to channels
+                kotlinx.coroutines.coroutineScope {
+                    val catsDeferred = async { runCatching { repository.loadGenres(p) }.getOrDefault(emptyList()) }
+                    val channelsDeferred = async { runCatching { repository.loadChannels(p, 0) }.getOrDefault(emptyList()) }
+                    listOf(Genre(0, "Tümü")) + catsDeferred.await() to channelsDeferred.await()
+                }
             }
         }
     }

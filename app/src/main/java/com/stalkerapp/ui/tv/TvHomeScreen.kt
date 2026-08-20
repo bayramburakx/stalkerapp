@@ -58,6 +58,7 @@ import coil.compose.AsyncImage
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.resolveUrl
 
@@ -121,6 +122,62 @@ fun TvHomeScreen(
                         Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(28.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Ayarlar", color = Color.White, fontSize = 18.sp)
+                    }
+                }
+            }
+
+            // ---- Kaynak Yükleme İlerleme Çubuğu (TV) ----
+            if (catalog.status == VodCatalogStatus.Syncing) {
+                val ratio = if (catalog.totalCategories > 0)
+                    catalog.doneCategories.toFloat() / catalog.totalCategories
+                else if (catalog.portalTotal > 0)
+                    catalog.loadedCount.toFloat() / catalog.portalTotal
+                else 0f
+                val pct = (ratio * 100).toInt().coerceIn(0, 100)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 48.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1A1A2E))
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Kaynaklar yükleniyor…",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                "%$pct",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4FC3F7)
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { ratio.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = Color(0xFF4FC3F7),
+                            trackColor = Color(0xFF2A2A3E)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${catalog.loadedCount} içerik yüklendi • ${catalog.doneCategories}/${catalog.totalCategories} kategori",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
                     }
                 }
             }

@@ -95,7 +95,10 @@ private val L10nLocal: Map<String, String> = mapOf(
     "DİZİ" to "SERIES",
     "FİLM" to "MOVIE",
     "Detayları Gör" to "View Details",
-    "Tümü" to "All"
+    "Tümü" to "All",
+    "Kaynaklar yükleniyor" to "Loading sources",
+    "içerik yüklendi" to "items loaded",
+    "kategori" to "categories"
 )
 private fun str(lang: String, text: String): String =
     if (lang == "en") L10nLocal[text] ?: text else text
@@ -327,6 +330,79 @@ fun HomeDashboardScreen(
             )
             // Hero'nun altına nefes payı: içerik hero'ya çok yapışık durmasın.
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // ---- Kaynak Yükleme İlerleme Çubuğu ----
+        if (catalog.status == VodCatalogStatus.Syncing) {
+            val sourceLabel = when (activeKind) {
+                "m3u" -> "M3U"
+                "xtream" -> "Xtream"
+                else -> "Stalker Portal"
+            }
+            val ratio = if (catalog.totalCategories > 0)
+                catalog.doneCategories.toFloat() / catalog.totalCategories
+            else if (catalog.portalTotal > 0)
+                catalog.loadedCount.toFloat() / catalog.portalTotal
+            else 0f
+            val pct = (ratio * 100).toInt().coerceIn(0, 100)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.10f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "$sourceLabel — ${str(lang, "Kaynaklar yükleniyor")}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "%$pct",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { ratio.coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${catalog.loadedCount} ${str(lang, "içerik yüklendi")} • ${catalog.doneCategories}/${catalog.totalCategories} ${str(lang, "kategori")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
         }
 
         sectionOrder.forEach { key ->
