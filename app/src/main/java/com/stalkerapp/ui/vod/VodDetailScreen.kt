@@ -10,6 +10,11 @@ import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -737,20 +742,46 @@ fun VodDetailScreen(
                             }
                         }
                         Spacer(Modifier.height(16.dp))
+                        val playButtonFocusRequester = remember { FocusRequester() }
+                        var isPlayFocused by remember { mutableStateOf(false) }
+                        var isFavFocused by remember { mutableStateOf(false) }
+                        var isWatchLaterFocused by remember { mutableStateOf(false) }
+                        var isDlFocused by remember { mutableStateOf(false) }
+
+                        LaunchedEffect(item?.id) {
+                            if (item != null) {
+                                kotlinx.coroutines.delay(150)
+                                runCatching { playButtonFocusRequester.requestFocus() }
+                            }
+                        }
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Oynat: beyaz zemin, siyah kalın yazı.
+                            // Oynat: beyaz zemin, siyah kalın yazı (TV kumandasıyla odaklanabilir ve seçilebilir).
                             Button(
                                 onClick = { onPlayPressed() },
                                 enabled = !playing,
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.White,
+                                    containerColor = if (isPlayFocused) Color(0xFF38BDF8) else Color.White,
                                     contentColor = Color.Black
                                 ),
-                                modifier = Modifier.height(48.dp)
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .focusRequester(playButtonFocusRequester)
+                                    .onFocusChanged { isPlayFocused = it.isFocused }
+                                    .border(
+                                        width = if (isPlayFocused) 3.dp else 0.dp,
+                                        color = if (isPlayFocused) Color.White else Color.Transparent,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .onKeyEvent { ev ->
+                                        if (isTvSelectKey(ev)) {
+                                            onPlayPressed(); true
+                                        } else false
+                                    }
                             ) {
                                 if (playing) {
                                     CircularProgressIndicator(
@@ -769,14 +800,25 @@ fun VodDetailScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.20f))
-                                    .clickable { vm.toggleFavoriteVod(it) },
+                                    .background(if (isFavFocused) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.20f))
+                                    .border(
+                                        width = if (isFavFocused) 3.dp else 0.dp,
+                                        color = if (isFavFocused) Color.White else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .onFocusChanged { isFavFocused = it.isFocused }
+                                    .clickable { vm.toggleFavoriteVod(it) }
+                                    .onKeyEvent { ev ->
+                                        if (isTvSelectKey(ev)) {
+                                            vm.toggleFavoriteVod(it); true
+                                        } else false
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = str(lang, "Favori"),
-                                    tint = if (isFavorite) Color(0xFFFF5252) else Color.White,
+                                    tint = if (isFavFocused) Color.Black else if (isFavorite) Color(0xFFFF5252) else Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -786,14 +828,25 @@ fun VodDetailScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.20f))
-                                    .clickable { vm.toggleWatchLater(it) },
+                                    .background(if (isWatchLaterFocused) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.20f))
+                                    .border(
+                                        width = if (isWatchLaterFocused) 3.dp else 0.dp,
+                                        color = if (isWatchLaterFocused) Color.White else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .onFocusChanged { isWatchLaterFocused = it.isFocused }
+                                    .clickable { vm.toggleWatchLater(it) }
+                                    .onKeyEvent { ev ->
+                                        if (isTvSelectKey(ev)) {
+                                            vm.toggleWatchLater(it); true
+                                        } else false
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = if (inWatchLater) Icons.Default.Schedule else Icons.Default.Schedule,
                                     contentDescription = str(lang, "Sonra İzle"),
-                                    tint = if (inWatchLater) Color(0xFF64B5F6) else Color.White,
+                                    tint = if (isWatchLaterFocused) Color.Black else if (inWatchLater) Color(0xFF64B5F6) else Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -808,11 +861,18 @@ fun VodDetailScreen(
                                         .clip(CircleShape)
                                         .background(
                                             when {
+                                                isDlFocused -> Color(0xFF38BDF8)
                                                 isCompleted -> Color(0xFF2E7D32).copy(alpha = 0.9f)
                                                 isDownloading -> Color(0xFF1565C0).copy(alpha = 0.9f)
                                                 else -> Color.White.copy(alpha = 0.20f)
                                             }
                                         )
+                                        .border(
+                                            width = if (isDlFocused) 3.dp else 0.dp,
+                                            color = if (isDlFocused) Color.White else Color.Transparent,
+                                            shape = CircleShape
+                                        )
+                                        .onFocusChanged { isDlFocused = it.isFocused }
                                         .clickable {
                                             if (isCompleted) {
                                                 vm.showMessage("✓ " + str(lang, "Bu film zaten indirildi"))
@@ -839,6 +899,34 @@ fun VodDetailScreen(
                                                     vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
                                                 }
                                             }
+                                        }
+                                        .onKeyEvent { ev ->
+                                            if (isTvSelectKey(ev)) {
+                                                if (isCompleted) {
+                                                    vm.showMessage("✓ " + str(lang, "Bu film zaten indirildi"))
+                                                } else if (isDownloading) {
+                                                    vm.showMessage(str(lang, "İndirme devam ediyor..."))
+                                                } else {
+                                                    requestDownloadPermission()
+                                                    scope.launch {
+                                                        try {
+                                                            val url = vm.repository.vodStreamUrl(it, profile, null)
+                                                            com.stalkerapp.data.OfflineDownloadManager.enqueue(
+                                                                com.stalkerapp.data.OfflineDownloadManager.DownloadEntry(
+                                                                    id = movieEntryId,
+                                                                    title = it.name,
+                                                                    poster = it.poster,
+                                                                    url = url
+                                                                )
+                                                            )
+                                                            vm.showMessage("✓ " + str(lang, "İndirme sıraya eklendi: ") + it.name)
+                                                        } catch (e: Exception) {
+                                                            vm.showMessage(str(lang, "İndirme başlatılamadı: ") + e.message)
+                                                        }
+                                                    }
+                                                }
+                                                true
+                                            } else false
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -847,21 +935,19 @@ fun VodDetailScreen(
                                         Text(
                                             text = "%$pct",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White,
+                                            color = if (isDlFocused) Color.Black else Color.White,
                                             fontWeight = FontWeight.Bold
                                         )
                                     } else {
                                         Icon(
                                             imageVector = if (isCompleted) Icons.Default.Check else Icons.Default.Download,
                                             contentDescription = str(lang, "İndir"),
-                                            tint = Color.White,
+                                            tint = if (isDlFocused) Color.Black else Color.White,
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
                                 }
                             }
-                            // Fragman butonu kaldırıldı: sinopsisin altındaki gömülü
-                            // fragman oynatıcısı zaten mevcut (TrailerPlayer).
                         }
                     }
                 }
@@ -1018,14 +1104,21 @@ fun VodDetailScreen(
                                 val sel = selectedSeason == s.id
                                 val fullyWatched = s.id in fullyWatchedSeasons
                                 val poster = seasonPosters[s.id].orEmpty().ifBlank { tmdbPoster }
+                                var isSeasonFocused by remember { mutableStateOf(false) }
+
                                 Column(
                                     modifier = Modifier
                                         .width(96.dp)
+                                        .onFocusChanged { isSeasonFocused = it.isFocused }
                                         .combinedClickable(
                                             onClick = { selectedSeason = s.id },
-                                            // Uzun basma: izlendi işaretlemeden önce onay sorulur.
                                             onLongClick = { seasonConfirm = s }
                                         )
+                                        .onKeyEvent { ev ->
+                                            if (isTvSelectKey(ev)) {
+                                                selectedSeason = s.id; true
+                                            } else false
+                                        }
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -1117,18 +1210,32 @@ fun VodDetailScreen(
                                     val name = episodeNames[ep.id].orEmpty()
                                         .ifBlank { ep.name }
                                         .ifBlank { "${str(lang, "Bölüm ")}$ep.episodeNumber" }
+                                    var isEpFocused by remember { mutableStateOf(false) }
+
                                     Box(
                                         modifier = Modifier
                                             .width(196.dp)
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(
-                                                if (watched) MaterialTheme.colorScheme.primaryContainer
+                                                if (isEpFocused) Color(0xFF1E293B)
+                                                else if (watched) MaterialTheme.colorScheme.primaryContainer
                                                 else MaterialTheme.colorScheme.surfaceVariant
                                             )
+                                            .border(
+                                                width = if (isEpFocused) 3.dp else 0.dp,
+                                                color = if (isEpFocused) Color(0xFF38BDF8) else Color.Transparent,
+                                                shape = RoundedCornerShape(14.dp)
+                                            )
+                                            .onFocusChanged { isEpFocused = it.isFocused }
                                             .combinedClickable(
                                                 onClick = { onPlayPressed(ep) },
                                                 onLongClick = { toggleEpisodeWatched(ep, seasonNum) }
                                             )
+                                            .onKeyEvent { ev ->
+                                                if (isTvSelectKey(ev)) {
+                                                    onPlayPressed(ep); true
+                                                } else false
+                                            }
                                     ) {
                                         Column(modifier = Modifier.fillMaxWidth()) {
                                             // Bölüm küçük resmi (varsa) + S#B# rozeti.

@@ -679,23 +679,90 @@ fun PlayerScreen(navController: NavHostController) {
             .focusRequester(focusRequester)
             .focusable()
             .onKeyEvent { ev ->
-                if (ev.type != KeyEventType.KeyDown || !settings.remoteChannelKeys) return@onKeyEvent false
+                if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (ev.key) {
-                    Key.ChannelUp -> {
-                        if (ChannelQueue.index > 0) switchTo(ChannelQueue.index - 1)
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        if (!overlayVisible) {
+                            overlayVisible = true
+                        } else {
+                            PlaybackManager.togglePlayPause()
+                        }
                         true
                     }
-                    Key.ChannelDown -> {
-                        if (ChannelQueue.index + 1 < ChannelQueue.channels.size) switchTo(ChannelQueue.index + 1)
+                    Key.DirectionLeft -> {
+                        if (!isLive) {
+                            val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
+                            PlaybackManager.seekBack(seekMs)
+                            overlayVisible = true
+                            true
+                        } else if (settings.remoteChannelKeys && ChannelQueue.index > 0) {
+                            switchTo(ChannelQueue.index - 1)
+                            true
+                        } else false
+                    }
+                    Key.DirectionRight -> {
+                        if (!isLive) {
+                            val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
+                            PlaybackManager.seekForward(seekMs)
+                            overlayVisible = true
+                            true
+                        } else if (settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
+                            switchTo(ChannelQueue.index + 1)
+                            true
+                        } else false
+                    }
+                    Key.DirectionUp, Key.ChannelUp, Key.MediaPrevious -> {
+                        if (isLive && settings.remoteChannelKeys && ChannelQueue.index > 0) {
+                            switchTo(ChannelQueue.index - 1)
+                            true
+                        } else {
+                            overlayVisible = true
+                            true
+                        }
+                    }
+                    Key.DirectionDown, Key.ChannelDown, Key.MediaNext -> {
+                        if (isLive && settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
+                            switchTo(ChannelQueue.index + 1)
+                            true
+                        } else {
+                            overlayVisible = true
+                            true
+                        }
+                    }
+                    Key.MediaPlayPause -> {
+                        PlaybackManager.togglePlayPause()
+                        overlayVisible = true
                         true
                     }
-                    Key.MediaPrevious -> {
-                        if (ChannelQueue.index > 0) switchTo(ChannelQueue.index - 1)
+                    Key.MediaPlay -> {
+                        PlaybackManager.displayPlayer()?.play()
+                        overlayVisible = true
                         true
                     }
-                    Key.MediaNext -> {
-                        if (ChannelQueue.index + 1 < ChannelQueue.channels.size) switchTo(ChannelQueue.index + 1)
+                    Key.MediaPause -> {
+                        PlaybackManager.displayPlayer()?.pause()
+                        overlayVisible = true
                         true
+                    }
+                    Key.MediaFastForward -> {
+                        if (!isLive) {
+                            PlaybackManager.seekForward(15000L)
+                            overlayVisible = true
+                            true
+                        } else false
+                    }
+                    Key.MediaRewind -> {
+                        if (!isLive) {
+                            PlaybackManager.seekBack(15000L)
+                            overlayVisible = true
+                            true
+                        } else false
+                    }
+                    Key.Back, Key.Escape -> {
+                        if (overlayVisible) {
+                            overlayVisible = false
+                            true
+                        } else false
                     }
                     // Numara tuşları ile kanal girişi (Android TV uzaktan kumanda)
                     Key.Zero, Key.One, Key.Two, Key.Three, Key.Four,

@@ -948,14 +948,24 @@ data class VodCatalogState(
                     (item.categoryId != 0L && item.categoryId in seriesCatIds)
             }
 
-            val mList = ArrayList<VodItem>(allItems.size)
-            val sList = ArrayList<VodItem>(allItems.size / 4)
-            for (item in allItems) {
-                if (isSeries(item)) sList.add(item) else mList.add(item)
-            }
+            val mList: List<VodItem>
+            val sList: List<VodItem>
+            val byIdMap: Map<Long, VodItem>
 
-            val byIdMap = if (status == VodCatalogStatus.Syncing) emptyMap()
-            else allItems.associateBy { it.id }
+            if (status == VodCatalogStatus.Syncing) {
+                mList = emptyList()
+                sList = emptyList()
+                byIdMap = emptyMap()
+            } else {
+                val movies = ArrayList<VodItem>(allItems.size)
+                val series = ArrayList<VodItem>(allItems.size / 4)
+                for (item in allItems) {
+                    if (isSeries(item)) series.add(item) else movies.add(item)
+                }
+                mList = movies
+                sList = series
+                byIdMap = allItems.associateBy { it.id }
+            }
 
             return VodCatalogState(
                 status = status,

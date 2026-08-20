@@ -57,6 +57,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import com.stalkerapp.data.ExternalVod
+import com.stalkerapp.data.Genre
+import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -232,11 +237,37 @@ fun VodScreen(
 
     val catList = catalog.categories
     val seriesCatIds = catalog.seriesCategoryIds
-    val shownCats = when (filterIsSeries) {
-        true -> catList.filter { it.id in seriesCatIds }
-        false -> catList.filter { it.id !in seriesCatIds }
-        else -> catList
-    }.filter { it.id !in blockedCategoryIds }
+    val shownCats = remember(catList, seriesCatIds, filterIsSeries, blockedCategoryIds, catalog.movies.size, catalog.series.size) {
+        val raw = when (filterIsSeries) {
+            true -> catList.filter {
+                it.id in seriesCatIds || ExternalVod.isSeriesCat(it.id) ||
+                (it.id in com.stalkerapp.data.PortalRepository.SERIES_CAT_BASE until ExternalVod.XTREAM_VOD_BASE) ||
+                VodCatalogState.isSeriesCatTitle(it.title)
+            }
+            false -> catList.filter {
+                it.id !in seriesCatIds && !ExternalVod.isSeriesCat(it.id) &&
+                it.id < com.stalkerapp.data.PortalRepository.SERIES_CAT_BASE &&
+                !VodCatalogState.isSeriesCatTitle(it.title)
+            }
+            else -> catList
+        }.filter { it.id !in blockedCategoryIds }
+
+        if (raw.isNotEmpty()) raw
+        else if (catList.isNotEmpty()) {
+            catList.filter { it.id !in blockedCategoryIds }
+        } else {
+            // Yedek: içeriklerden dinamik kategori üret
+            val items = when (filterIsSeries) {
+                true -> if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
+                false -> if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
+                else -> catalog.allItems
+            }
+            items.mapNotNull { it.genres.takeIf { g -> g.isNotBlank() } ?: it.country.takeIf { c -> c.isNotBlank() } }
+                .distinct()
+                .take(30)
+                .mapIndexed { idx, name -> Genre(id = -(idx + 100L), title = name) }
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         if (catalog.status == VodCatalogStatus.Error) {
@@ -333,12 +364,10 @@ fun VodScreen(
                 val pageItems = filtered.take(visibleCount)
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Fixed(3),
-                    // Alt boşluk: içerik yüzen cam pill'in arkasından akıyor, son
-                    // posterin pill altında kaybolmaması için.
+                    columns = GridCells.Adaptive(minSize = 135.dp),
                     contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 96.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(pageItems, key = { it.id }) { item ->
@@ -410,6 +439,7 @@ fun VodPoster(
     val app = LocalContext.current.applicationContext as StalkerApp
     val settings = app.store.settings()
     val lang = settings.language
+    var isFocused by remember { mutableStateOf(false) }
 
     var resolvedPoster by remember(item.id, item.poster) {
         mutableStateOf(app.tmdb.getCachedPoster(item.name, isSeries) ?: item.poster)
@@ -424,10 +454,21 @@ fun VodPoster(
         }
     }
 
-    // Gri kart arka planı yok: sadece poster + altında başlık ve yıl.
     Column(
         modifier = Modifier
             .then(if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth())
+            .clip(RoundedCornerShape(10.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .border(
+                width = if (isFocused) 3.dp else 0.dp,
+                color = if (isFocused) Color(0xFF38BDF8) else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            }
             .let { mod ->
                 if (onLongPress != null) {
                     mod.combinedClickable(onClick = onClick, onLongClick = onLongPress)

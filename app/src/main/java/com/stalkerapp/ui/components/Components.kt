@@ -32,10 +32,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.UpdateInfo
+import com.stalkerapp.ui.tv.isTvSelectKey
 import com.stalkerapp.util.L10n
 
 @Composable
@@ -345,7 +352,7 @@ fun SectionTitle(
     }
 }
 
-/** Anasayfa diliyle seçilebilir filtre çipi: cam pill görünümü. */
+/** Anasayfa diliyle seçilebilir filtre çipi: cam pill görünümü (Android TV D-pad uyumlu). */
 @Composable
 fun GlassChip(
     selected: Boolean,
@@ -353,29 +360,45 @@ fun GlassChip(
     label: String,
     modifier: Modifier = Modifier
 ) {
+    var isFocused by remember { mutableStateOf(false) }
     val pillShape = RoundedCornerShape(50)
     Box(
         modifier = modifier
             .clip(pillShape)
             .background(
-                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
+                when {
+                    isFocused -> Color(0xFF38BDF8)
+                    selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                    else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
+                }
             )
             .border(
-                1.dp,
-                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                if (isFocused) 2.dp else 1.dp,
+                when {
+                    isFocused -> Color.White
+                    selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+                },
                 pillShape
             )
+            .onFocusChanged { isFocused = it.isFocused }
             .clickable { onClick() }
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            }
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (selected || isFocused) FontWeight.Bold else FontWeight.Normal,
+            color = when {
+                isFocused -> Color.Black
+                selected -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
             maxLines = 1
         )
     }
