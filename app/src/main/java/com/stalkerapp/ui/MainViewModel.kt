@@ -890,9 +890,19 @@ data class VodCatalogState(
     val categories: List<Genre> = emptyList(),
     val portalTotal: Int = 0,
     val lastSync: Long = 0,
-    val byId: Map<Long, VodItem> = emptyMap(),
     val seriesCategoryIds: Set<Long> = emptySet()
 ) {
+    val byId: Map<Long, VodItem> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        if (allItems.isEmpty()) emptyMap()
+        else {
+            val map = HashMap<Long, VodItem>(minOf(allItems.size, 150_000))
+            for (item in allItems) {
+                map[item.id] = item
+            }
+            map
+        }
+    }
+
     val isSeriesItem: (VodItem) -> Boolean = { item ->
         if (com.stalkerapp.data.ExternalVod.isXtreamVod(item.id)) false
         else if (com.stalkerapp.data.ExternalVod.isXtreamSeries(item.id)) true
@@ -950,12 +960,10 @@ data class VodCatalogState(
 
             val mList: List<VodItem>
             val sList: List<VodItem>
-            val byIdMap: Map<Long, VodItem>
 
             if (status == VodCatalogStatus.Syncing) {
                 mList = emptyList()
                 sList = emptyList()
-                byIdMap = emptyMap()
             } else {
                 val movies = ArrayList<VodItem>(allItems.size)
                 val series = ArrayList<VodItem>(allItems.size / 4)
@@ -964,7 +972,6 @@ data class VodCatalogState(
                 }
                 mList = movies
                 sList = series
-                byIdMap = allItems.associateBy { it.id }
             }
 
             return VodCatalogState(
@@ -978,7 +985,6 @@ data class VodCatalogState(
                 categories = categories,
                 portalTotal = portalTotal,
                 lastSync = lastSync,
-                byId = byIdMap,
                 seriesCategoryIds = seriesCatIds
             )
         }

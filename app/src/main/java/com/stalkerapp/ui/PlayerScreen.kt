@@ -88,6 +88,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import com.stalkerapp.ui.tv.isTvSelectKey
+import com.stalkerapp.ui.tv.isTvDevice
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -345,6 +346,7 @@ fun PlayerScreen(navController: NavHostController) {
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var overlayVisible by remember { mutableStateOf(true) }
+    var lastUserInteraction by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentChannel by remember { mutableStateOf(ChannelQueue.current) }
     val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -654,10 +656,33 @@ fun PlayerScreen(navController: NavHostController) {
     val controlsTimeoutMs = remember {
         app.store.settings().controlsTimeoutSec.coerceIn(3, 10) * 1000L
     }
-    LaunchedEffect(overlayVisible) {
+    LaunchedEffect(
+        overlayVisible,
+        lastUserInteraction,
+        showTracks,
+        showSubs,
+        showEpg,
+        showChannels,
+        showPlayerSettings,
+        showCatchupCalendar,
+        showSubtitleSearch,
+        showSleepDialog,
+        showInfo
+    ) {
         if (overlayVisible && !locked) {
-            delay(controlsTimeoutMs)
-            overlayVisible = false
+            // Açık bir alt menü veya diyalog varken overlay ASLA kapanmaz
+            if (showTracks || showSubs || showEpg || showChannels || showPlayerSettings ||
+                showCatchupCalendar || showSubtitleSearch || showSleepDialog || showInfo) {
+                return@LaunchedEffect
+            }
+            while (true) {
+                val elapsed = System.currentTimeMillis() - lastUserInteraction
+                if (elapsed >= controlsTimeoutMs) {
+                    overlayVisible = false
+                    break
+                }
+                delay(controlsTimeoutMs - elapsed)
+            }
         }
     }
 
@@ -798,6 +823,7 @@ fun PlayerScreen(navController: NavHostController) {
             .focusable()
             .onKeyEvent { ev ->
                 if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                lastUserInteraction = System.currentTimeMillis()
                 when (ev.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (!overlayVisible) {
@@ -1247,12 +1273,16 @@ fun PlayerScreen(navController: NavHostController) {
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(clock, color = Color.White, style = MaterialTheme.typography.labelMedium)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("${battery}%", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        val isTv = isTvDevice(context)
+                        if (!isTv) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${battery}%", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        }
                         Spacer(modifier = Modifier.width(4.dp))
                         if (isLive) {
                             PlayerTvIconButton(
                                 onClick = {
+                                    lastUserInteraction = System.currentTimeMillis()
                                     currentChannel?.let { vm.toggleFavoriteChannel(it) }
                                 },
                                 icon = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -1262,61 +1292,81 @@ fun PlayerScreen(navController: NavHostController) {
                                 modifier = Modifier.size(40.dp)
                             )
                         }
-                        PlayerTvIconButton(
-                            onClick = { castDialogVisible = true },
-                            icon = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
-                            contentDescription = "Chromecast",
-                            tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
-                            iconSize = 22.dp,
-                            modifier = Modifier.size(40.dp)
-                        )
+                        if (!isTv) {
+                            PlayerTvIconButton(
+                                onClick = {
+                                    lastUserInteraction = System.currentTimeMillis()
+                                    castDialogVisible = true
+                                },
+                                icon = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
+                                contentDescription = "Chromecast",
+                                tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
+                                iconSize = 22.dp,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
                         // Uyku zamanlayıcısı
                         PlayerTvIconButton(
-                            onClick = { showSleepDialog = true },
+                            onClick = {
+                                lastUserInteraction = System.currentTimeMillis()
+                                showSleepDialog = true
+                            },
                             icon = Icons.Default.Bedtime,
                             contentDescription = str(lang, "Uyku zamanlayıcısı"),
                             tint = if (sleepRemaining != 0L) Color(0xFFFFB74D) else Color.White,
                             iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
                         )
+                        if (!isTv) {
+                            PlayerTvIconButton(
+                                onClick = {
+                                    lastUserInteraction = System.currentTimeMillis()
+                                    val url = PlaybackManager.currentStreamUrl
+                                    if (url.isNotBlank()) {
+                                        runCatching {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setType("video/*") }
+                                            context.startActivity(Intent.createChooser(intent, str(lang, "Oynatıcı seç")))
+                                        }
+                                    }
+                                },
+                                icon = Icons.Default.OpenInNew,
+                                contentDescription = str(lang, "Harici oynatıcı"),
+                                iconSize = 22.dp,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            PlayerTvIconButton(
+                                onClick = {
+                                    locked = true
+                                    overlayVisible = false
+                                },
+                                icon = Icons.Default.Lock,
+                                contentDescription = str(lang, "Kilit"),
+                                iconSize = 22.dp,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            PlayerTvIconButton(
+                                onClick = { PlaybackManager.enterPip(activity) },
+                                icon = Icons.Default.PictureInPictureAlt,
+                                contentDescription = str(lang, "PiP (Resim içinde resim)"),
+                                iconSize = 22.dp,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
                         PlayerTvIconButton(
                             onClick = {
-                                val url = PlaybackManager.currentStreamUrl
-                                if (url.isNotBlank()) {
-                                    runCatching {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setType("video/*") }
-                                        context.startActivity(Intent.createChooser(intent, str(lang, "Oynatıcı seç")))
-                                    }
-                                }
+                                lastUserInteraction = System.currentTimeMillis()
+                                showInfo = true
                             },
-                            icon = Icons.Default.OpenInNew,
-                            contentDescription = str(lang, "Harici oynatıcı"),
-                            iconSize = 22.dp,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        PlayerTvIconButton(
-                            onClick = { locked = true; overlayVisible = false },
-                            icon = Icons.Default.Lock,
-                            contentDescription = str(lang, "Kilit"),
-                            iconSize = 22.dp,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        PlayerTvIconButton(
-                            onClick = { PlaybackManager.enterPip(activity) },
-                            icon = Icons.Default.PictureInPictureAlt,
-                            contentDescription = str(lang, "PiP (Resim içinde resim)"),
-                            iconSize = 22.dp,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        PlayerTvIconButton(
-                            onClick = { showInfo = true },
                             icon = Icons.Default.Info,
                             contentDescription = str(lang, "Bilgi"),
                             iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
                         )
                         PlayerTvIconButton(
-                            onClick = { showPlayerSettings = true },
+                            onClick = {
+                                lastUserInteraction = System.currentTimeMillis()
+                                showPlayerSettings = true
+                            },
                             icon = Icons.Default.Settings,
                             contentDescription = str(lang, "Ayarlar"),
                             iconSize = 22.dp,

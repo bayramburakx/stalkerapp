@@ -98,6 +98,17 @@ fun isTvSelectKey(ev: KeyEvent): Boolean {
 }
 
 /**
+ * Cihazın Android TV / Leanback televizyon cihazı olup olmadığını kontrol eder.
+ */
+fun isTvDevice(context: android.content.Context): Boolean {
+    val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK
+    val pm = context.packageManager
+    return uiMode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
+        pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
+        pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION)
+}
+
+/**
  * Android TV 10-foot UI ana ekranı.
  * D-Pad gezinme, büyük odak göstergeleri, üst sekme çubuğu, otomatik içerik yükleme
  * ve TMDB kapak entegrasyonu ile televizyonlar için özel optimize edilmiştir.
@@ -150,10 +161,13 @@ fun TvHomeScreen(
             else catalog.allItems.filter { !catalog.isSeriesItem(it) }
             list.filter { it.id > 0 }
                 .distinctBy { it.id }
-                .sortedByDescending {
-                    it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
-                }
-                .take(30)
+                .sortedWith(
+                    compareByDescending<VodItem> {
+                        it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+                    }.thenByDescending { it.year.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
+                     .thenByDescending { it.id }
+                )
+                .take(40)
         }
     }
 
@@ -168,10 +182,13 @@ fun TvHomeScreen(
             else catalog.allItems.filter { catalog.isSeriesItem(it) }
             list.filter { it.id > 0 }
                 .distinctBy { it.id }
-                .sortedByDescending {
-                    it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
-                }
-                .take(30)
+                .sortedWith(
+                    compareByDescending<VodItem> {
+                        it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+                    }.thenByDescending { it.year.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
+                     .thenByDescending { it.id }
+                )
+                .take(40)
         }
     }
 
@@ -461,7 +478,7 @@ fun TvHomeScreen(
                         // Popüler Filmler
                         if (popularMovies.isNotEmpty()) {
                             item(key = "section_movies") {
-                                TvSection(title = "Filmler") {
+                                TvSection(title = "Popüler Filmler") {
                                     LazyRow(
                                         contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -481,7 +498,7 @@ fun TvHomeScreen(
                         // Popüler Diziler
                         if (popularSeries.isNotEmpty()) {
                             item(key = "section_series") {
-                                TvSection(title = "Diziler") {
+                                TvSection(title = "Popüler Diziler") {
                                     LazyRow(
                                         contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)

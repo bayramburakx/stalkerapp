@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -216,13 +218,19 @@ private fun LanguagePage(
     onSelect: (String) -> Unit,
     onContinue: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         Spacer(Modifier.height(24.dp))
         Image(
             painter = painterResource(R.drawable.portio_logo),
@@ -272,6 +280,7 @@ private fun LanguagePage(
             Text(if (current == "en") "Continue" else "Devam Et", fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(16.dp))
+        }
     }
 }
 
@@ -344,77 +353,84 @@ private fun LanguageCard(
 @Composable
 private fun WelcomePage(lang: String, onStart: () -> Unit) {
     fun t(text: String) = L10n.t(lang, text)
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Spacer(Modifier.height(16.dp))
-        Image(
-            painter = painterResource(R.drawable.portio_logo),
-            contentDescription = null,
+        Column(
             modifier = Modifier
-                .size(96.dp)
-                .clip(RoundedCornerShape(24.dp))
-        )
-        Spacer(Modifier.height(20.dp))
-        Text(
-            t("Hoş Geldin"),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Text(
-            t("Tüm IPTV kaynakların tek bir akıllı arayüzde"),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Spacer(Modifier.height(28.dp))
-        FEATURES.forEach { f ->
-            Row(
+                .fillMaxHeight()
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(16.dp))
+            Image(
+                painter = painterResource(R.drawable.portio_logo),
+                contentDescription = null,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(24.dp))
+            )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                t("Hoş Geldin"),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                t("Tüm IPTV kaynakların tek bir akıllı arayüzde"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Spacer(Modifier.height(28.dp))
+            FEATURES.forEach { f ->
+                Row(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.08f)),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(f.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text(t(f.title), style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text(t(f.desc), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(f.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(t(f.title), style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(t(f.desc), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    }
                 }
             }
+            Spacer(Modifier.height(24.dp))
+            var isStartFocused by remember { mutableStateOf(false) }
+            Button(
+                onClick = onStart,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .onFocusChanged { isStartFocused = it.isFocused }
+                    .border(
+                        width = if (isStartFocused) 3.dp else 0.dp,
+                        color = if (isStartFocused) Color(0xFF00E5FF) else Color.Transparent,
+                        shape = RoundedCornerShape(14.dp)
+                    ),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(t("Başla"), fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(24.dp))
-        var isStartFocused by remember { mutableStateOf(false) }
-        Button(
-            onClick = onStart,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .onFocusChanged { isStartFocused = it.isFocused }
-                .border(
-                    width = if (isStartFocused) 3.dp else 0.dp,
-                    color = if (isStartFocused) Color(0xFF00E5FF) else Color.Transparent,
-                    shape = RoundedCornerShape(14.dp)
-                ),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text(t("Başla"), fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -516,12 +532,18 @@ private fun SourcePage(
         onDone()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+        ) {
         Spacer(Modifier.height(16.dp))
         Text(
             t("İlk Kaynağını Ekle"),
@@ -648,6 +670,7 @@ private fun SourcePage(
             Text(t("Şimdilik atla"), color = Color.White.copy(alpha = 0.7f))
         }
         Spacer(Modifier.height(16.dp))
+        }
     }
 }
 

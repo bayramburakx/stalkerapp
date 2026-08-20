@@ -812,17 +812,18 @@ class Store(private val context: Context) {
     fun loadVodCatalogChunks(portalId: String): Map<Long, List<VodItem>> = runCatching {
         val dir = catalogDir(portalId)
         if (!dir.exists()) return@runCatching emptyMap()
+        val result = HashMap<Long, List<VodItem>>()
         dir.listFiles().orEmpty()
             .filter { it.isFile && it.extension == "json" && it.name != META_FILE }
-            .mapNotNull { f ->
+            .forEach { f ->
                 f.nameWithoutExtension.toLongOrNull()?.let { catId ->
-                    val items = runCatching {
-                        json.decodeFromString(ListSerializer(VodItem.serializer()), f.readText())
-                    }.getOrDefault(emptyList())
-                    catId to items
+                    try {
+                        val items = json.decodeFromString(ListSerializer(VodItem.serializer()), f.readText())
+                        result[catId] = items
+                    } catch (_: Throwable) {}
                 }
             }
-            .toMap()
+        result
     }.getOrDefault(emptyMap())
 
     /** Writes the completion meta (categories, item count, version, timestamp). */
@@ -865,14 +866,28 @@ class Store(private val context: Context) {
     fun loadVodCatalogVersion(portalId: String): Int =
         loadVodCatalogMeta(portalId)?.version ?: 0
 
-    /** Merged catalog (items from all chunks, categories + timestamp from meta). */
-    fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? {
-        val meta = loadVodCatalogMeta(portalId) ?: return null
-        val items = loadVodCatalogChunks(portalId).values
-            .flatten()
-            .distinctBy { it.id }
-        return Triple(items, meta.categories, meta.ts)
-    }
+    /** Merged catalog (items streamed from chunks into single list to prevent OOM). */
+    fun loadVodCatalog(portalId: String): Triple<List<VodItem>, List<Genre>, Long>? = runCatching {
+        val meta = loadVodCatalogMeta(portalId) ?: return@runCatching null
+        val dir = catalogDir(portalId)
+        if (!dir.exists()) return@runCatching null
+        val capacity = minOf(meta.count.coerceAtLeast(100), 200_000)
+        val seen = HashSet<Long>(capacity)
+        val items = ArrayList<VodItem>(capacity)
+        dir.listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "json" && it.name != META_FILE }
+            .forEach { f ->
+                try {
+                    val list = json.decodeFromString(ListSerializer(VodItem.serializer()), f.readText())
+                    for (item in list) {
+                        if (seen.add(item.id)) {
+                            items.add(item)
+                        }
+                    }
+                } catch (_: Throwable) {}
+            }
+        Triple(items, meta.categories, meta.ts)
+    }.getOrNull()
 
     // Tamamlanan kategoriler portala (ve profile) göre ayrı tutulur — aksi halde
     // ikinci bir portala geçilince ilk portalın "tamam" listesi kendi kategorileriyle

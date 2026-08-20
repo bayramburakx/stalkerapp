@@ -73,16 +73,18 @@ class VodSyncManager(
     /** Publishes an already-complete cached catalog to the UI without any network. */
     fun publishCached(profile: Profile) {
         val portalId = profile.portal?.id ?: return
-        val cached = store.loadVodCatalog(portalId) ?: return
-        _progress.value = VodCatalogState.of(
-            status = VodCatalogStatus.Ready,
-            doneCategories = cached.second.size,
-            totalCategories = cached.second.size,
-            loadedCount = cached.first.size,
-            allItems = cached.first,
-            categories = cached.second,
-            lastSync = cached.third
-        )
+        try {
+            val cached = store.loadVodCatalog(portalId) ?: return
+            _progress.value = VodCatalogState.of(
+                status = VodCatalogStatus.Ready,
+                doneCategories = cached.second.size,
+                totalCategories = cached.second.size,
+                loadedCount = cached.first.size,
+                allItems = cached.first,
+                categories = cached.second,
+                lastSync = cached.third
+            )
+        } catch (_: Throwable) {}
     }
 
     /** Cancels any running sync and clears the in-memory progress. */
@@ -154,7 +156,7 @@ class VodSyncManager(
                     cats = vodCats + seriesCats
                     val seriesRemaining = seriesCats.filter { it.id != 0L && (force || it.id !in doneCats) }
                     if (seriesRemaining.isNotEmpty()) {
-                        val sem = Semaphore(4)
+                        val sem = Semaphore(2)
                         coroutineScope {
                             seriesRemaining.forEach { cat ->
                                 launch {
@@ -176,7 +178,7 @@ class VodSyncManager(
                                                 portalTotal = portalTotal
                                             )
                                         }
-                                    } catch (_: Exception) {
+                                    } catch (_: Throwable) {
                                     } finally {
                                         sem.release()
                                     }
@@ -223,7 +225,7 @@ class VodSyncManager(
             // 2) Per-category fetch for all remaining movie/VOD categories.
             val vodRemaining = vodCats.filter { it.id != 0L && (force || it.id !in doneCats) }
             if (!singleOk && vodRemaining.isNotEmpty()) {
-                val sem = Semaphore(4)
+                val sem = Semaphore(2)
                 coroutineScope {
                     vodRemaining.forEach { cat ->
                         launch {
@@ -246,7 +248,7 @@ class VodSyncManager(
                                         portalTotal = portalTotal
                                     )
                                 }
-                            } catch (_: Exception) {
+                            } catch (_: Throwable) {
                             } finally {
                                 sem.release()
                             }
@@ -258,7 +260,7 @@ class VodSyncManager(
             // 3) Letter/digit search enumeration fallback if movie library is empty
             val movieCount = all.values.count { !isSeriesItem(it) }
             if (movieCount < 200) {
-                val sem = Semaphore(4)
+                val sem = Semaphore(2)
                 coroutineScope {
                     searchTokens.forEach { token ->
                         launch {
@@ -275,7 +277,7 @@ class VodSyncManager(
                                         portalTotal = portalTotal
                                     )
                                 }
-                            } catch (_: Exception) {
+                            } catch (_: Throwable) {
                             } finally {
                                 sem.release()
                             }
@@ -297,8 +299,8 @@ class VodSyncManager(
                 portalTotal = portalTotal,
                 lastSync = System.currentTimeMillis()
             )
-        } catch (e: Exception) {
-            val cached = store.loadVodCatalog(portalId)
+        } catch (e: Throwable) {
+            val cached = runCatching { store.loadVodCatalog(portalId) }.getOrNull()
             if (_progress.value.allItems.isNotEmpty()) {
                 _progress.value = state(status = VodCatalogStatus.Ready)
             } else if (cached != null && cached.first.isNotEmpty()) {
