@@ -31,6 +31,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -699,10 +701,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamChannels(it) }
             else -> {
                 val p = profile ?: return null
-                kotlinx.coroutines.coroutineScope {
+                coroutineScope {
                     val catsDeferred = async { runCatching { repository.loadGenres(p) }.getOrDefault(emptyList()) }
                     val channelsDeferred = async { runCatching { repository.loadChannels(p, 0) }.getOrDefault(emptyList()) }
-                    listOf(Genre(0, "Tümü")) + catsDeferred.await() to channelsDeferred.await()
+                    val cats = catsDeferred.await()
+                    val channels = channelsDeferred.await()
+                    listOf(Genre(0, "Tümü")) + cats to channels
                 }
             }
         }
