@@ -75,6 +75,7 @@ class TmdbClient(
 
     private val cache = mutableMapOf<String, Any>()
     private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val resolveSemaphore = kotlinx.coroutines.sync.Semaphore(3)
 
     fun hasKey(): Boolean = keyProvider().isNotBlank()
 
@@ -98,19 +99,22 @@ class TmdbClient(
         val key = "${if (isSeries) "tv" else "movie"}:${name.trim().lowercase()}"
         posterCache[key]?.let { if (it.isNotBlank()) return@withContext it }
 
-        val id = searchTitle(name, year, isSeries, apiKey)
-        if (id > 0) {
-            val enr = enrich(id, isSeries, apiKey)
-            if (enr.posterPath.isNotBlank()) {
-                val fullUrl = photoUrl(enr.posterPath, large = true)
-                posterCache[key] = fullUrl
-                return@withContext fullUrl
+        resolveSemaphore.withPermit {
+            posterCache[key]?.let { if (it.isNotBlank()) return@withPermit it }
+            val id = searchTitle(name, year, isSeries, apiKey)
+            if (id > 0) {
+                val enr = enrich(id, isSeries, apiKey)
+                if (enr.posterPath.isNotBlank()) {
+                    val fullUrl = photoUrl(enr.posterPath, large = false)
+                    posterCache[key] = fullUrl
+                    return@withPermit fullUrl
+                }
             }
+            if (fallbackPoster.isNotBlank()) {
+                posterCache[key] = fallbackPoster
+            }
+            fallbackPoster
         }
-        if (fallbackPoster.isNotBlank()) {
-            posterCache[key] = fallbackPoster
-        }
-        return@withContext fallbackPoster
     }
 
     /** Anahtarın geçerli olup olmadığını hafif bir istekle doğrular (Ayarlar → Entegrasyonlar). */

@@ -158,6 +158,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
 
         HorizontalPager(
             state = pagerState,
+            userScrollEnabled = false,
             modifier = Modifier.weight(1f)
         ) { page ->
             when (page) {

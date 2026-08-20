@@ -242,9 +242,12 @@ private fun PlayerTvIconButton(
     iconSize: androidx.compose.ui.unit.Dp = 24.dp,
     focusRequester: FocusRequester? = null
 ) {
+    val context = LocalContext.current
+    val isTv = remember(context) { isTvDevice(context) }
     var isFocused by remember { mutableStateOf(false) }
+    val isTvFocused = isTv && isFocused
     val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.22f else 1.0f,
+        targetValue = if (isTvFocused) 1.22f else 1.0f,
         label = "btn_scale"
     )
     val glowColor = Color(0xFF00E5FF)
@@ -253,13 +256,13 @@ private fun PlayerTvIconButton(
         modifier = modifier
             .scale(scale)
             .clip(CircleShape)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .background(if (isFocused) glowColor else Color.White.copy(alpha = 0.18f))
+            .then(if (focusRequester != null && isTv) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { if (isTv) isFocused = it.isFocused }
+            .then(if (isTv) Modifier.focusable() else Modifier)
+            .background(if (isTvFocused) glowColor else Color.White.copy(alpha = 0.18f))
             .border(
-                width = if (isFocused) 3.5.dp else 1.dp,
-                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.25f),
+                width = if (isTvFocused) 3.5.dp else 1.dp,
+                color = if (isTvFocused) Color.White else Color.White.copy(alpha = 0.25f),
                 shape = CircleShape
             )
             .clickable(onClick = onClick)
@@ -274,7 +277,7 @@ private fun PlayerTvIconButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (isFocused) Color.Black else tint,
+            tint = if (isTvFocused) Color.Black else tint,
             modifier = Modifier.size(iconSize)
         )
     }
@@ -676,12 +679,14 @@ fun PlayerScreen(navController: NavHostController) {
                 return@LaunchedEffect
             }
             while (true) {
-                val elapsed = System.currentTimeMillis() - lastUserInteraction
+                val now = System.currentTimeMillis()
+                val elapsed = now - lastUserInteraction
                 if (elapsed >= controlsTimeoutMs) {
                     overlayVisible = false
                     break
                 }
-                delay(controlsTimeoutMs - elapsed)
+                val waitTime = (controlsTimeoutMs - elapsed).coerceAtLeast(100L)
+                delay(waitTime)
             }
         }
     }
@@ -799,19 +804,26 @@ fun PlayerScreen(navController: NavHostController) {
 
     // Kumanda tuşları: kanal +/- ve medya sonraki/önceki ile zapping (Android TV).
     val rootFocusRequester = remember { FocusRequester() }
-    val centerPlayFocusRequester = remember { FocusRequester() }
+    val isTvDevice = remember(context) { isTvDevice(context) }
 
     LaunchedEffect(Unit) {
-        rootFocusRequester.requestFocus()
+        if (isTvDevice) {
+            rootFocusRequester.requestFocus()
+        }
     }
 
     LaunchedEffect(overlayVisible) {
         if (overlayVisible) {
-            kotlinx.coroutines.delay(100)
-            runCatching { centerPlayFocusRequester.requestFocus() }
+            lastUserInteraction = System.currentTimeMillis()
+            if (isTvDevice) {
+                kotlinx.coroutines.delay(100)
+                runCatching { centerPlayFocusRequester.requestFocus() }
+            }
         } else {
-            kotlinx.coroutines.delay(50)
-            runCatching { rootFocusRequester.requestFocus() }
+            if (isTvDevice) {
+                kotlinx.coroutines.delay(50)
+                runCatching { rootFocusRequester.requestFocus() }
+            }
         }
     }
 
@@ -961,7 +973,12 @@ fun PlayerScreen(navController: NavHostController) {
             }
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { if (!locked) overlayVisible = !overlayVisible },
+                    onTap = {
+                        if (!locked) {
+                            lastUserInteraction = System.currentTimeMillis()
+                            overlayVisible = !overlayVisible
+                        }
+                    },
                     onDoubleTap = { offset ->
                         if (!locked && !isLive && settings.gesturesEnabled) {
                             val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
@@ -2756,15 +2773,22 @@ fun ChannelListPanel(
     onClose: () -> Unit,
     onSelect: (Int) -> Unit
 ) {
+    val context = LocalContext.current
+    val isTv = remember(context) { isTvDevice(context) }
     val channels = ChannelQueue.channels
     val profile = ChannelQueue.profile
     var query by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val listFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(visible) {
         if (visible) {
             val idx = channels.indexOfFirst { it.id == currentId }
             if (idx >= 0) listState.scrollToItem(idx)
+            if (isTv) {
+                kotlinx.coroutines.delay(150)
+                runCatching { listFocusRequester.requestFocus() }
+            }
         }
     }
 
@@ -2778,7 +2802,7 @@ fun ChannelListPanel(
             Surface(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(340.dp)
+                    .width(360.dp)
                     .align(Alignment.CenterStart),
                 color = Color(0xFF141414)
             ) {
@@ -2797,21 +2821,25 @@ fun ChannelListPanel(
                             Icon(Icons.Default.Close, contentDescription = str(lang, "Kapat"), tint = Color.White)
                         }
                     }
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = { Text(str(lang, "Kanal ara…")) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
+                    if (!isTv) {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            placeholder = { Text(str(lang, "Kanal ara…")) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
                     val filtered = if (query.isBlank()) channels else channels.filter {
                         it.name.contains(query.trim(), ignoreCase = true)
                     }
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .focusRequester(listFocusRequester)
                     ) {
                         items(filtered, key = { it.id }) { ch ->
                             ChannelRow(
