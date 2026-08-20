@@ -73,9 +73,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -83,6 +85,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -225,6 +228,41 @@ private fun str(lang: String, text: String): String =
     if (lang == "en") L10nLocal[text] ?: text else text
 
 private enum class GestureMode { BRIGHTNESS, VOLUME, SEEK }
+
+@Composable
+private fun PlayerTvIconButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White,
+    iconSize: androidx.compose.ui.unit.Dp = 24.dp,
+    focusRequester: FocusRequester? = null
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { isFocused = it.isFocused }
+            .background(if (isFocused) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.15f))
+            .border(if (isFocused) 2.5.dp else 0.dp, Color.White, CircleShape)
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (isFocused) Color.Black else tint,
+            modifier = Modifier.size(iconSize)
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -667,16 +705,25 @@ fun PlayerScreen(navController: NavHostController) {
     }
 
     // Kumanda tuşları: kanal +/- ve medya sonraki/önceki ile zapping (Android TV).
-    val focusRequester = remember { FocusRequester() }
+    val rootFocusRequester = remember { FocusRequester() }
+    val centerPlayFocusRequester = remember { FocusRequester() }
+
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        rootFocusRequester.requestFocus()
+    }
+
+    LaunchedEffect(overlayVisible) {
+        if (overlayVisible && !isLive) {
+            kotlinx.coroutines.delay(120)
+            runCatching { centerPlayFocusRequester.requestFocus() }
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .focusRequester(focusRequester)
+            .focusRequester(rootFocusRequester)
             .focusable()
             .onKeyEvent { ev ->
                 if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -684,77 +731,110 @@ fun PlayerScreen(navController: NavHostController) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (!overlayVisible) {
                             overlayVisible = true
+                            true
                         } else {
-                            PlaybackManager.togglePlayPause()
+                            false // Overlay açıkken odaklanan butona tıklansın
                         }
-                        true
                     }
                     Key.DirectionLeft -> {
-                        if (!isLive) {
-                            val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
-                            PlaybackManager.seekBack(seekMs)
-                            overlayVisible = true
-                            true
-                        } else if (settings.remoteChannelKeys && ChannelQueue.index > 0) {
-                            switchTo(ChannelQueue.index - 1)
-                            true
-                        } else false
+                        if (!overlayVisible) {
+                            if (!isLive) {
+                                val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
+                                PlaybackManager.seekBack(seekMs)
+                                true
+                            } else if (settings.remoteChannelKeys && ChannelQueue.index > 0) {
+                                switchTo(ChannelQueue.index - 1)
+                                true
+                            } else false
+                        } else {
+                            false // Overlay açıkken kumanda ile butonlar arasında sola geçiş
+                        }
                     }
                     Key.DirectionRight -> {
-                        if (!isLive) {
-                            val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
-                            PlaybackManager.seekForward(seekMs)
-                            overlayVisible = true
+                        if (!overlayVisible) {
+                            if (!isLive) {
+                                val seekMs = app.store.settings().doubleTapSeekSec.coerceIn(5, 60) * 1000L
+                                PlaybackManager.seekForward(seekMs)
+                                true
+                            } else if (settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
+                                switchTo(ChannelQueue.index + 1)
+                                true
+                            } else false
+                        } else {
+                            false // Overlay açıkken kumanda ile butonlar arasında sağa geçiş
+                        }
+                    }
+                    Key.DirectionUp -> {
+                        if (!overlayVisible) {
+                            if (isLive && settings.remoteChannelKeys && ChannelQueue.index > 0) {
+                                switchTo(ChannelQueue.index - 1)
+                                true
+                            } else {
+                                overlayVisible = true
+                                true
+                            }
+                        } else {
+                            false // Overlay açıkken üst bara odaklanma
+                        }
+                    }
+                    Key.DirectionDown -> {
+                        if (!overlayVisible) {
+                            if (isLive && settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
+                                switchTo(ChannelQueue.index + 1)
+                                true
+                            } else {
+                                overlayVisible = true
+                                true
+                            }
+                        } else {
+                            false // Overlay açıkken alt bara odaklanma
+                        }
+                    }
+                    Key.ChannelUp -> {
+                        if (isLive && ChannelQueue.index > 0) {
+                            switchTo(ChannelQueue.index - 1)
                             true
-                        } else if (settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
+                        } else false
+                    }
+                    Key.ChannelDown -> {
+                        if (isLive && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
                             switchTo(ChannelQueue.index + 1)
                             true
                         } else false
                     }
-                    Key.DirectionUp, Key.ChannelUp, Key.MediaPrevious -> {
-                        if (isLive && settings.remoteChannelKeys && ChannelQueue.index > 0) {
+                    Key.MediaPrevious -> {
+                        if (isLive && ChannelQueue.index > 0) {
                             switchTo(ChannelQueue.index - 1)
                             true
-                        } else {
-                            overlayVisible = true
-                            true
-                        }
+                        } else false
                     }
-                    Key.DirectionDown, Key.ChannelDown, Key.MediaNext -> {
-                        if (isLive && settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
+                    Key.MediaNext -> {
+                        if (isLive && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
                             switchTo(ChannelQueue.index + 1)
                             true
-                        } else {
-                            overlayVisible = true
-                            true
-                        }
+                        } else false
                     }
                     Key.MediaPlayPause -> {
                         PlaybackManager.togglePlayPause()
-                        overlayVisible = true
                         true
                     }
                     Key.MediaPlay -> {
                         PlaybackManager.displayPlayer()?.play()
-                        overlayVisible = true
                         true
                     }
                     Key.MediaPause -> {
                         PlaybackManager.displayPlayer()?.pause()
-                        overlayVisible = true
                         true
                     }
                     Key.MediaFastForward -> {
                         if (!isLive) {
                             PlaybackManager.seekForward(15000L)
-                            overlayVisible = true
                             true
                         } else false
                     }
                     Key.MediaRewind -> {
                         if (!isLive) {
                             PlaybackManager.seekBack(15000L)
-                            overlayVisible = true
                             true
                         } else false
                     }
@@ -992,61 +1072,44 @@ fun PlayerScreen(navController: NavHostController) {
         }
 
         // ---------- CENTER CONTROLS (Film/Dizi) ----------
-        // Durdur / geri sar / ileri sar ikonları altta değil ekranın ortasında
-        // gösterilir (Netflix tarzı); altta yalnızca ses + altyazı kalır.
         if (overlayVisible && !isLive && !isBuffering) {
             Row(
                 modifier = Modifier.align(Alignment.Center),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                IconButton(
+                PlayerTvIconButton(
                     onClick = { PlaybackManager.seekBack(10_000L) },
+                    icon = Icons.Default.Replay10,
+                    contentDescription = str(lang, "10 sn Geri"),
+                    iconSize = 36.dp,
                     modifier = Modifier.size(64.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Replay10,
-                        contentDescription = str(lang, "10 sn Geri"),
-                        tint = Color.White,
-                        modifier = Modifier.size(44.dp)
-                    )
-                }
-                IconButton(
+                )
+                PlayerTvIconButton(
                     onClick = { PlaybackManager.togglePlayPause() },
-                    modifier = Modifier.size(88.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = str(lang, "Oynat/Duraklat"),
-                        tint = Color.White,
-                        modifier = Modifier.size(64.dp)
-                    )
-                }
-                IconButton(
+                    icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = str(lang, "Oynat/Duraklat"),
+                    iconSize = 48.dp,
+                    focusRequester = centerPlayFocusRequester,
+                    modifier = Modifier.size(80.dp)
+                )
+                PlayerTvIconButton(
                     onClick = { PlaybackManager.seekForward(10_000L) },
+                    icon = Icons.Default.Forward10,
+                    contentDescription = str(lang, "10 sn İleri"),
+                    iconSize = 36.dp,
                     modifier = Modifier.size(64.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Forward10,
-                        contentDescription = str(lang, "10 sn İleri"),
-                        tint = Color.White,
-                        modifier = Modifier.size(44.dp)
-                    )
-                }
+                )
                 // Sonraki Bölüm: yalnızca dizilerde gösterilir.
                 val queueIsSeries = VodQueue.item?.isSeries == true || (VodQueue.item?.seriesId ?: 0L) > 0
                 if (VodQueue.hasNext && queueIsSeries) {
-                    IconButton(
+                    PlayerTvIconButton(
                         onClick = { PlaybackManager.playNextEpisode() },
+                        icon = Icons.Default.SkipNext,
+                        contentDescription = str(lang, "Sonraki Bölüm"),
+                        iconSize = 36.dp,
                         modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.SkipNext,
-                            contentDescription = str(lang, "Sonraki Bölüm"),
-                            tint = Color.White,
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -1066,17 +1129,13 @@ fun PlayerScreen(navController: NavHostController) {
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
+                    PlayerTvIconButton(
                         onClick = { exitPlayer() },
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = str(lang, "Geri"),
+                        iconSize = 24.dp,
                         modifier = Modifier.size(42.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = str(lang, "Geri"),
-                            tint = Color.White,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
+                    )
                     if (isLive) {
                         ChannelLogo(
                             logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
@@ -1110,60 +1169,44 @@ fun PlayerScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(clock, color = Color.White, style = MaterialTheme.typography.labelMedium)
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text("${battery}%", color = Color.White, style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.width(4.dp))
                         if (isLive) {
-                            IconButton(
+                            PlayerTvIconButton(
                                 onClick = {
                                     currentChannel?.let { vm.toggleFavoriteChannel(it) }
                                 },
+                                icon = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = str(lang, "Favori"),
+                                tint = if (isFav) Color(0xFFFF5252) else Color.White,
+                                iconSize = 22.dp,
                                 modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                    contentDescription = str(lang, "Favori"),
-                                    tint = if (isFav) Color(0xFFFF5252) else Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = { castDialogVisible = true },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
-                                contentDescription = "Chromecast",
-                                tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
-                                modifier = Modifier.size(24.dp)
                             )
                         }
-                        // Uyku zamanlayıcısı: aktifken kalan süre ikonun altında görünür.
-                        IconButton(
-                            onClick = { showSleepDialog = true },
+                        PlayerTvIconButton(
+                            onClick = { castDialogVisible = true },
+                            icon = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
+                            contentDescription = "Chromecast",
+                            tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
+                            iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Bedtime,
-                                    contentDescription = str(lang, "Uyku zamanlayıcısı"),
-                                    tint = if (sleepRemaining != 0L) Color(0xFFFFB74D) else Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                if (sleepRemaining != 0L) {
-                                    Text(
-                                        sleepLabel(sleepRemaining, lang),
-                                        color = Color(0xFFFFB74D),
-                                        fontSize = 9.sp,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(
+                        )
+                        // Uyku zamanlayıcısı
+                        PlayerTvIconButton(
+                            onClick = { showSleepDialog = true },
+                            icon = Icons.Default.Bedtime,
+                            contentDescription = str(lang, "Uyku zamanlayıcısı"),
+                            tint = if (sleepRemaining != 0L) Color(0xFFFFB74D) else Color.White,
+                            iconSize = 22.dp,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        PlayerTvIconButton(
                             onClick = {
                                 val url = PlaybackManager.currentStreamUrl
                                 if (url.isNotBlank()) {
@@ -1173,35 +1216,39 @@ fun PlayerScreen(navController: NavHostController) {
                                     }
                                 }
                             },
+                            icon = Icons.Default.OpenInNew,
+                            contentDescription = str(lang, "Harici oynatıcı"),
+                            iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = str(lang, "Harici oynatıcı"), tint = Color.White, modifier = Modifier.size(24.dp))
-                        }
-                        // Lock icon and PiP icon side-by-side
-                        IconButton(
+                        )
+                        PlayerTvIconButton(
                             onClick = { locked = true; overlayVisible = false },
+                            icon = Icons.Default.Lock,
+                            contentDescription = str(lang, "Kilit"),
+                            iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(Icons.Default.Lock, contentDescription = str(lang, "Kilit"), tint = Color.White, modifier = Modifier.size(24.dp))
-                        }
-                        IconButton(
+                        )
+                        PlayerTvIconButton(
                             onClick = { PlaybackManager.enterPip(activity) },
+                            icon = Icons.Default.PictureInPictureAlt,
+                            contentDescription = str(lang, "PiP (Resim içinde resim)"),
+                            iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(Icons.Default.PictureInPictureAlt, contentDescription = str(lang, "PiP (Resim içinde resim)"), tint = Color.White, modifier = Modifier.size(24.dp))
-                        }
-                        IconButton(
+                        )
+                        PlayerTvIconButton(
                             onClick = { showInfo = true },
+                            icon = Icons.Default.Info,
+                            contentDescription = str(lang, "Bilgi"),
+                            iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = str(lang, "Bilgi"), tint = Color.White, modifier = Modifier.size(24.dp))
-                        }
-                        IconButton(
+                        )
+                        PlayerTvIconButton(
                             onClick = { showPlayerSettings = true },
+                            icon = Icons.Default.Settings,
+                            contentDescription = str(lang, "Ayarlar"),
+                            iconSize = 22.dp,
                             modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = str(lang, "Ayarlar"), tint = Color.White, modifier = Modifier.size(24.dp))
-                        }
+                        )
                     }
                 }
             }
@@ -1220,8 +1267,6 @@ fun PlayerScreen(navController: NavHostController) {
             ) {
                 if (!isLive) {
                     // Film/Dizi alt barı: solda süre, sağda yalnızca ses + altyazı
-                    // (oynat/durdur, geri/ileri sar ikonları ekranın ORTASINDA —
-                    // Netflix tarzı). En altta ince, dokunulabilir progress çizgisi.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1232,29 +1277,24 @@ fun PlayerScreen(navController: NavHostController) {
                             color = Color.White.copy(alpha = 0.85f),
                             style = MaterialTheme.typography.labelMedium
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PlayerTvIconButton(
                                 onClick = { showTracks = true },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = str(lang, "Ses Dili"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                            IconButton(
+                                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = str(lang, "Ses Dili"),
+                                iconSize = 24.dp,
+                                modifier = Modifier.size(46.dp)
+                            )
+                            PlayerTvIconButton(
                                 onClick = { showSubs = true },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Subtitles,
-                                    contentDescription = str(lang, "Altyazı"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
+                                icon = Icons.Default.Subtitles,
+                                contentDescription = str(lang, "Altyazı"),
+                                iconSize = 24.dp,
+                                modifier = Modifier.size(46.dp)
+                            )
                         }
                     }
 
@@ -1356,82 +1396,62 @@ fun PlayerScreen(navController: NavHostController) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PlayerTvIconButton(
                                 onClick = {
                                     val idx = ChannelQueue.index - 1
                                     if (idx >= 0) switchTo(idx)
                                 },
-                                modifier = Modifier.size(56.dp)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                    contentDescription = str(lang, "Önceki"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(44.dp)
-                                )
-                            }
-                            IconButton(
+                                icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = str(lang, "Önceki"),
+                                iconSize = 32.dp,
+                                modifier = Modifier.size(52.dp)
+                            )
+                            PlayerTvIconButton(
                                 onClick = { PlaybackManager.togglePlayPause() },
-                                modifier = Modifier.size(64.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = str(lang, "Oynat/Duraklat"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(56.dp)
+                                icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = str(lang, "Oynat/Duraklat"),
+                                iconSize = 36.dp,
+                                focusRequester = centerPlayFocusRequester,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            // Timeshift: canlı yayında 30 sn geri sar
+                            if (liveSeekable) {
+                                PlayerTvIconButton(
+                                    onClick = { PlaybackManager.seekBack(30_000L) },
+                                    icon = Icons.Default.Replay10,
+                                    contentDescription = str(lang, "30 sn geri sar"),
+                                    iconSize = 28.dp,
+                                    modifier = Modifier.size(48.dp)
                                 )
                             }
-                            // Timeshift: canlı yayında 30 sn geri sar (sunucu destekliyorsa).
-                            if (liveSeekable) {
-                                IconButton(
-                                    onClick = { PlaybackManager.seekBack(30_000L) },
-                                    modifier = Modifier.size(52.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Replay10,
-                                        contentDescription = str(lang, "30 sn geri sar"),
-                                        tint = Color.White,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-                            }
-                            IconButton(
+                            PlayerTvIconButton(
                                 onClick = {
                                     val idx = ChannelQueue.index + 1
                                     if (idx < ChannelQueue.channels.size) switchTo(idx)
                                 },
-                                modifier = Modifier.size(56.dp)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = str(lang, "Sonraki"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(44.dp)
-                                )
-                            }
-                            IconButton(
+                                icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = str(lang, "Sonraki"),
+                                iconSize = 32.dp,
+                                modifier = Modifier.size(52.dp)
+                            )
+                            PlayerTvIconButton(
                                 onClick = { showTracks = true },
-                                modifier = Modifier.size(52.dp)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = str(lang, "Ses"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
-                            IconButton(
+                                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = str(lang, "Ses"),
+                                iconSize = 26.dp,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            PlayerTvIconButton(
                                 onClick = { showSubs = true },
-                                modifier = Modifier.size(52.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Subtitles,
-                                    contentDescription = str(lang, "Altyazı"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
+                                icon = Icons.Default.Subtitles,
+                                contentDescription = str(lang, "Altyazı"),
+                                iconSize = 26.dp,
+                                modifier = Modifier.size(48.dp)
+                            )
                         }
 
                         // Right side: Rehber and Kanallar only for Live TV

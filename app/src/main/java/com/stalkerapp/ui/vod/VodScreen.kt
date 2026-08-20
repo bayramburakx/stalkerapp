@@ -175,49 +175,62 @@ fun VodScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var filterState by remember { mutableStateOf(com.stalkerapp.data.VodFilterState()) }
 
-    val filtered = remember(catalog, selectedCategory, query, filterIsSeries, filterState, blockedCategoryIds) {
-        val q = query.trim()
-        var list = when (filterIsSeries) {
-            true -> if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
-            false -> if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
-            else -> catalog.allItems
-        }
-        if (selectedCategory != 0L) {
-            list = list.filter { it.categoryId == selectedCategory }
-        }
-        if (blockedCategoryIds.isNotEmpty()) {
-            list = list.filter { it.categoryId !in blockedCategoryIds }
-        }
-
-        if (q.isNotBlank()) {
-            list = list.filter {
-                it.name.contains(q, ignoreCase = true) ||
-                it.originalName.contains(q, ignoreCase = true)
+    val filtered by androidx.compose.runtime.produceState(
+        initialValue = emptyList<VodItem>(),
+        catalog.movies.size,
+        catalog.series.size,
+        catalog.allItems.size,
+        catalog.status,
+        selectedCategory,
+        query,
+        filterIsSeries,
+        filterState,
+        blockedCategoryIds
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val q = query.trim()
+            var list = when (filterIsSeries) {
+                true -> if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
+                false -> if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
+                else -> catalog.allItems
             }
-        }
-
-        if (filterState.isActive) {
-            list = list.filter { item ->
-                filterState.matches(
-                    name = item.name,
-                    year = item.year,
-                    rating = item.rating,
-                    language = item.country
-                )
+            if (selectedCategory != 0L) {
+                list = list.filter { it.categoryId == selectedCategory }
             }
-            list = when (filterState.sortMode) {
-                com.stalkerapp.data.SortMode.DEFAULT -> list
-                com.stalkerapp.data.SortMode.A_Z -> list.sortedBy { it.name.lowercase() }
-                com.stalkerapp.data.SortMode.Z_A -> list.sortedByDescending { it.name.lowercase() }
-                com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending {
-                    it.year.take(4).toIntOrNull() ?: it.addedTimestamp.toInt()
-                }
-                com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending {
-                    it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+            if (blockedCategoryIds.isNotEmpty()) {
+                list = list.filter { it.categoryId !in blockedCategoryIds }
+            }
+
+            if (q.isNotBlank()) {
+                list = list.filter {
+                    it.name.contains(q, ignoreCase = true) ||
+                    it.originalName.contains(q, ignoreCase = true)
                 }
             }
+
+            if (filterState.isActive) {
+                list = list.filter { item ->
+                    filterState.matches(
+                        name = item.name,
+                        year = item.year,
+                        rating = item.rating,
+                        language = item.country
+                    )
+                }
+                list = when (filterState.sortMode) {
+                    com.stalkerapp.data.SortMode.DEFAULT -> list
+                    com.stalkerapp.data.SortMode.A_Z -> list.sortedBy { it.name.lowercase() }
+                    com.stalkerapp.data.SortMode.Z_A -> list.sortedByDescending { it.name.lowercase() }
+                    com.stalkerapp.data.SortMode.NEWEST -> list.sortedByDescending {
+                        it.year.take(4).toIntOrNull() ?: it.addedTimestamp.toInt()
+                    }
+                    com.stalkerapp.data.SortMode.HIGHEST_RATED -> list.sortedByDescending {
+                        it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+                    }
+                }
+            }
+            list.filter { it.id > 0 }.distinctBy { it.id }
         }
-        list.filter { it.id > 0 }.distinctBy { it.id }
     }
 
     // Aşağı scroll ettikçe yükle: son satıra yaklaşınca bir sonraki sayfayı ekle.

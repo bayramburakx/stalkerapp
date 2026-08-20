@@ -56,14 +56,15 @@ class SyncRenderersFactory(
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
     ): AudioSink {
-        val builder = DefaultAudioSink.Builder(context)
-            .setEnableFloatOutput(enableFloatOutput)
-            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-        if (!passthrough) {
-            // Cihaz desteklese bile ham bitstream geçilmez (uyumsuz AV alıcılarda
-            // sessiz sesi önler; ses cihazda çözülür).
-            builder.setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+        val audioCapabilities = if (passthrough) {
+            AudioCapabilities.getCapabilities(context)
+        } else {
+            AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES
         }
+        val builder = DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(false)
+            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .setAudioCapabilities(audioCapabilities)
         return AudioSyncSink(builder.build())
     }
 

@@ -322,9 +322,13 @@ object PlaybackManager {
 
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
-            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_IGNORE_SPLICE_INFO_STREAM)
+            .setTsExtractorFlags(
+                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+                DefaultTsPayloadReaderFactory.FLAG_IGNORE_SPLICE_INFO_STREAM or
+                DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS
+            )
             .setTsExtractorMode(TsExtractor.MODE_MULTI_PMT)
-            .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 2)
+            .setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 3)
 
         val bufferMs = st.maxBufferMs.coerceIn(15_000, 60_000)
         val loadControl = DefaultLoadControl.Builder()
@@ -382,9 +386,8 @@ object PlaybackManager {
             subtitleTypes = st.subtitleTypes
         )
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-            // "hardware" sıkı modda HW başarısızsa yazılıma düşmez; auto/yazılımda
-            // HW çökmesini önlemek için yazılım çözücüye geri düşülür (beyaz/kara ekran).
-            .setEnableDecoderFallback(st.decoder != "hardware")
+            // Android TV'de donanım ses/video çözücü hatası durumunda yazılım çözücüye geri düş (sessizliği önler).
+            .setEnableDecoderFallback(true)
 
         return ExoPlayer.Builder(appContext)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -396,6 +399,11 @@ object PlaybackManager {
                 // A/V senkron: oyuncu kurulurken son ayardan başlatılır; oynatıcı
                 // içinden de değiştirilebilir (anında uygulanır).
                 AudioSyncState.delayUs = st.audioDelayMs * 1000L
+                // Ses her zaman etkin olsun
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .build()
                 // Varsayılan kalite (Ayarlar → Oynatıcı): çözünürlük üst sınırı olarak uygulanır.
                 val maxRes = when (st.defaultQuality) {
                     "1080p" -> 1920 to 1080

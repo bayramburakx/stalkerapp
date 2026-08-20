@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -385,27 +386,27 @@ fun TvHomeScreen(
                     )
                 }
                 else -> {
-                    // Ana Sayfa Dashboard (D-Pad kaydırılabilir)
-                    val scrollState = rememberScrollState()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(bottom = 32.dp)
+                    // Ana Sayfa Dashboard (TV D-Pad optimize edilmiş LazyColumn)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 48.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // İzlemeye Devam
                         if (continueWatching.isNotEmpty()) {
-                            TvSection(title = "İzlemeye Devam Et") {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 36.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    items(continueWatching, key = { "cw_${it.id}" }) { item ->
-                                        TvVodCard(
-                                            item = item,
-                                            tmdbApiKey = settings.tmdbApiKey,
-                                            onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
-                                        )
+                            item(key = "section_cw") {
+                                TvSection(title = "İzlemeye Devam Et") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        items(continueWatching, key = { "cw_${it.id}" }) { item ->
+                                            TvVodCard(
+                                                item = item,
+                                                tmdbApiKey = settings.tmdbApiKey,
+                                                onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -413,16 +414,18 @@ fun TvHomeScreen(
 
                         // Canlı TV Kanalları
                         if (liveChannels.isNotEmpty()) {
-                            TvSection(title = "Canlı TV Kanalları") {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 36.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    items(liveChannels, key = { "live_${it.id}" }) { channel ->
-                                        TvChannelCard(
-                                            channel = channel,
-                                            onClick = { onOpenChannel(channel) }
-                                        )
+                            item(key = "section_live") {
+                                TvSection(title = "Canlı TV Kanalları") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        items(liveChannels, key = { "live_${it.id}" }) { channel ->
+                                            TvChannelCard(
+                                                channel = channel,
+                                                onClick = { onOpenChannel(channel) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -430,17 +433,19 @@ fun TvHomeScreen(
 
                         // Popüler Filmler
                         if (popularMovies.isNotEmpty()) {
-                            TvSection(title = "Filmler") {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 36.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    items(popularMovies, key = { "movie_${it.id}" }) { movie ->
-                                        TvVodCard(
-                                            item = movie,
-                                            tmdbApiKey = settings.tmdbApiKey,
-                                            onClick = { onOpenVod(movie.id, false) }
-                                        )
+                            item(key = "section_movies") {
+                                TvSection(title = "Filmler") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        items(popularMovies, key = { "movie_${it.id}" }) { movie ->
+                                            TvVodCard(
+                                                item = movie,
+                                                tmdbApiKey = settings.tmdbApiKey,
+                                                onClick = { onOpenVod(movie.id, false) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -448,17 +453,19 @@ fun TvHomeScreen(
 
                         // Popüler Diziler
                         if (popularSeries.isNotEmpty()) {
-                            TvSection(title = "Diziler") {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 36.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    items(popularSeries, key = { "series_${it.id}" }) { series ->
-                                        TvVodCard(
-                                            item = series,
-                                            tmdbApiKey = settings.tmdbApiKey,
-                                            onClick = { onOpenVod(series.id, true) }
-                                        )
+                            item(key = "section_series") {
+                                TvSection(title = "Diziler") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        items(popularSeries, key = { "series_${it.id}" }) { series ->
+                                            TvVodCard(
+                                                item = series,
+                                                tmdbApiKey = settings.tmdbApiKey,
+                                                onClick = { onOpenVod(series.id, true) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -466,16 +473,18 @@ fun TvHomeScreen(
 
                         // Son İzlenen Kanallar
                         if (recentChannelList.isNotEmpty()) {
-                            TvSection(title = "Son İzlenen Kanallar") {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 36.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    items(recentChannelList, key = { "recent_${it.id}" }) { channel ->
-                                        TvChannelCard(
-                                            channel = channel,
-                                            onClick = { onOpenChannel(channel) }
-                                        )
+                            item(key = "section_recent") {
+                                TvSection(title = "Son İzlenen Kanallar") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        items(recentChannelList, key = { "recent_${it.id}" }) { channel ->
+                                            TvChannelCard(
+                                                channel = channel,
+                                                onClick = { onOpenChannel(channel) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -483,26 +492,28 @@ fun TvHomeScreen(
 
                         // Henüz içerik yoksa veya yükleniyorsa bilgilendirme
                         if (popularMovies.isEmpty() && popularSeries.isEmpty() && liveChannels.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 48.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.Tv,
-                                        contentDescription = null,
-                                        tint = Color.White.copy(alpha = 0.4f),
-                                        modifier = Modifier.size(48.dp)
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(
-                                        if (catalog.status == VodCatalogStatus.Syncing) "İçerikler yükleniyor, lütfen bekleyin…"
-                                        else "İçerik bulunamadı. Ayarlar bölümünden kaynak ekleyin.",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 16.sp
-                                    )
+                            item(key = "section_empty") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 48.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            Icons.Default.Tv,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(48.dp)
+                                        )
+                                        Spacer(Modifier.height(12.dp))
+                                        Text(
+                                            if (catalog.status == VodCatalogStatus.Syncing) "İçerikler yükleniyor, lütfen bekleyin…"
+                                            else "İçerik bulunamadı. Ayarlar bölümünden kaynak ekleyin.",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 16.sp
+                                        )
+                                    }
                                 }
                             }
                         }
