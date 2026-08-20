@@ -1,7 +1,10 @@
 package com.stalkerapp.ui.account
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,14 +47,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.stalkerapp.data.FirebaseSyncManager
 import com.stalkerapp.data.UserProfile
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.tv.isTvSelectKey
+import kotlinx.coroutines.delay
 
 private val AVATARS = listOf(
     "😀", "😎", "🦊", "🐼", "🐸", "🐙", "🦁", "🐯",
@@ -77,6 +88,13 @@ fun ProfilePickerScreen(
     var editing by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<UserProfile?>(null) }
+
+    val firstCardFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { firstCardFocusRequester.requestFocus() }
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -125,12 +143,13 @@ fun ProfilePickerScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    profiles.take(2).forEach { p ->
+                    profiles.take(2).forEachIndexed { index, p ->
                         ProfileCard(
                             lang = lang,
                             p = p,
                             isActive = p.id == activeId.id,
                             editing = editing,
+                            focusRequester = if (index == 0) firstCardFocusRequester else null,
                             onClick = {
                                 if (p.id != activeId.id) vm.switchProfile(p.id)
                                 onProfileSelected()
@@ -246,22 +265,46 @@ private fun ProfileCard(
     p: UserProfile,
     isActive: Boolean,
     editing: Boolean,
+    focusRequester: FocusRequester? = null,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.18f else 1.0f,
+        label = "profile_scale"
+    )
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier
+            .scale(scale)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusable()
+            .onFocusChanged { isFocused = it.isFocused }
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick()
+                    true
+                } else false
+            }
     ) {
         Box(
             modifier = Modifier
                 .size(96.dp)
                 .clip(CircleShape)
                 .background(
-                    if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.35f)
+                    else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     else Color.White.copy(alpha = 0.08f)
+                )
+                .border(
+                    width = if (isFocused) 3.5.dp else if (isActive) 2.dp else 0.dp,
+                    color = if (isFocused) Color(0xFF00E5FF) else if (isActive) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -300,7 +343,8 @@ private fun ProfileCard(
         Text(
             p.name.ifBlank { t("İzleyici") },
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (isFocused || isActive) FontWeight.Bold else FontWeight.Normal,
+            color = if (isFocused) Color(0xFF00E5FF) else Color.Unspecified,
             textAlign = TextAlign.Center
         )
         if (isActive) {
@@ -316,23 +360,55 @@ private fun ProfileCard(
 @Composable
 private fun AddProfileCard(lang: String, onClick: () -> Unit) {
     fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick() }) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.18f else 1.0f,
+        label = "add_profile_scale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .scale(scale)
+            .focusable()
+            .onFocusChanged { isFocused = it.isFocused }
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick()
+                    true
+                } else false
+            }
+    ) {
         Box(
             modifier = Modifier
                 .size(96.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.06f)),
+                .background(
+                    if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.35f)
+                    else Color.White.copy(alpha = 0.06f)
+                )
+                .border(
+                    width = if (isFocused) 3.5.dp else 0.dp,
+                    color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                    shape = CircleShape
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 Icons.Filled.Add,
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text(t("Profil Ekle"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            t("Profil Ekle"),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
+            color = if (isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

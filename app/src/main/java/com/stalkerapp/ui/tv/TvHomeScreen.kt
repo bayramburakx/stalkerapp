@@ -184,21 +184,28 @@ fun TvHomeScreen(
     // İzlemeye devam listesi
     val watchedVersion by vm.watchedVersion.collectAsStateWithLifecycle()
     val curSourceKey = app.store.activeSourceKey()
-    val continueWatching = remember(catalog, watchedVersion, curSourceKey) {
-        val vodProg = app.store.loadVodProgress().mapNotNull { (id, p) ->
-            if (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey) null
-            else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85) {
-                catalog.byId[id] ?: p.toVodItem(id)
-            } else null
+    val continueWatching by androidx.compose.runtime.produceState(
+        initialValue = emptyList<VodItem>(),
+        catalog.byId.size,
+        watchedVersion,
+        curSourceKey
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val vodProg = app.store.loadVodProgress().mapNotNull { (id, p) ->
+                if (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey) null
+                else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85) {
+                    catalog.byId[id] ?: p.toVodItem(id)
+                } else null
+            }
+            val epProg = app.store.episodeProgress().mapNotNull { (key, p) ->
+                val id = key.substringBefore(':').toLongOrNull() ?: return@mapNotNull null
+                if (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey) null
+                else if (p.positionMs > 0 && (p.durationMs <= 0 || (p.durationMs > 0 && p.positionMs < p.durationMs * 0.85))) {
+                    catalog.byId[id] ?: p.toVodItem(id)
+                } else null
+            }
+            (vodProg + epProg).filter { it.id > 0 }.distinctBy { it.id }.take(20)
         }
-        val epProg = app.store.episodeProgress().mapNotNull { (key, p) ->
-            val id = key.substringBefore(':').toLongOrNull() ?: return@mapNotNull null
-            if (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey) null
-            else if (p.positionMs > 0 && (p.durationMs <= 0 || (p.durationMs > 0 && p.positionMs < p.durationMs * 0.85))) {
-                catalog.byId[id] ?: p.toVodItem(id)
-            } else null
-        }
-        (vodProg + epProg).filter { it.id > 0 }.distinctBy { it.id }.take(20)
     }
 
     val firstItemFocusRequester = remember { FocusRequester() }
@@ -524,8 +531,9 @@ fun TvHomeScreen(
         }
     }
 
-    // İlk odak
+    // İlk odak (TV kumandasının anında çalışması için gecikmeli odak isteği)
     LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(120)
         runCatching { firstItemFocusRequester.requestFocus() }
     }
 }

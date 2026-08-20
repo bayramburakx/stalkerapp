@@ -40,8 +40,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -201,51 +204,75 @@ fun HomeDashboardScreen(
         }
     }
 
-    // İzlemeye Devam: filmler + dizi bölümleri, EN YENİ İZLENEN BAŞTA.
-    val continueWatching = remember(catalog, watchedVersion, hiddenFromHome, curSourceKey) {
-        val movies = app.store.loadVodProgress().mapNotNull { (id, p) ->
-            if (id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
-            else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85)
-                itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated) }
-            else null
+    // İzlemeye Devam: filmler + dizi bölümleri, EN YENİ İZLENEN BAŞTA (Arka plan iş parçacığı).
+    val continueWatching by produceState(
+        initialValue = emptyList<HomeEntry>(),
+        catalog.byId.size,
+        catalog.allItems.size,
+        watchedVersion,
+        hiddenFromHome,
+        curSourceKey
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val vodProg = app.store.loadVodProgress()
+            val epProg = app.store.episodeProgress()
+            val movies = vodProg.mapNotNull { (id, p) ->
+                if (id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+                else if (p.durationMs > 0 && p.positionMs > 0 && p.positionMs < p.durationMs * 0.85)
+                    itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated) }
+                else null
+            }
+            val eps = epProg.mapNotNull { (key, p) ->
+                val id = key.substringBefore(':').toLongOrNull()
+                if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+                else if (p.positionMs > 0 &&
+                    (p.durationMs <= 0 || (p.durationMs > 0 && p.positionMs < p.durationMs * 0.85))
+                )
+                    itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
+                else null
+            }
+            (movies + eps)
+                .sortedByDescending { it.lastUpdated }
+                .distinctBy { it.item.id }
         }
-        val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
-            val id = key.substringBefore(':').toLongOrNull()
-            if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
-            else if (p.positionMs > 0 &&
-                (p.durationMs <= 0 || (p.durationMs > 0 && p.positionMs < p.durationMs * 0.85))
-            )
-                itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
-            else null
-        }
-        (movies + eps)
-            .sortedByDescending { it.lastUpdated }
-            .distinctBy { it.item.id }
     }
 
     // Son İzlenenler: film + bölüm ilerlemeleri, son izlenme zamanına göre
     // sıralanır (tamamlanmışlar da dahil). En yeni başta.
-    val recentlyWatched = remember(catalog, watchedVersion, hiddenFromHome, curSourceKey) {
-        val vod = app.store.loadVodProgress().mapNotNull { (id, p) ->
-            if (id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
-            else itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated) }
+    val recentlyWatched by produceState(
+        initialValue = emptyList<HomeEntry>(),
+        catalog.byId.size,
+        catalog.allItems.size,
+        watchedVersion,
+        hiddenFromHome,
+        curSourceKey
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val vodProg = app.store.loadVodProgress()
+            val epProg = app.store.episodeProgress()
+            val vod = vodProg.mapNotNull { (id, p) ->
+                if (id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+                else itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated) }
+            }
+            val eps = epProg.mapNotNull { (key, p) ->
+                val id = key.substringBefore(':').toLongOrNull()
+                if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
+                else itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
+            }
+            (vod + eps)
+                .sortedByDescending { it.lastUpdated }
+                .distinctBy { it.item.id }
+                .take(20)
         }
-        val eps = app.store.episodeProgress().mapNotNull { (key, p) ->
-            val id = key.substringBefore(':').toLongOrNull()
-            if (id == null || id in hiddenFromHome || (p.sourceKey.isNotBlank() && p.sourceKey != curSourceKey)) null
-            else itemFor(id, p)?.let { HomeEntry(it, p.positionMs, p.durationMs, p.lastUpdated, episodeLabelOf(key, p)) }
-        }
-        (vod + eps)
-            .sortedByDescending { it.lastUpdated }
-            .distinctBy { it.item.id }
-            .take(20)
     }
 
     // Senin İçin (Öneriler): RecommendationEngine ile
     var recommendations by remember { mutableStateOf<List<VodItem>>(emptyList()) }
-    LaunchedEffect(catalog.allItems, watchedVersion, settings.tmdbApiKey) {
-        val storeWatchHistory = app.store.loadVodProgress().map { it.key } +
-            app.store.episodeProgress().mapNotNull { it.key.substringBefore(':').toLongOrNull() }
+    LaunchedEffect(catalog.allItems.size, watchedVersion, settings.tmdbApiKey) {
+        val storeWatchHistory = withContext(Dispatchers.Default) {
+            app.store.loadVodProgress().map { it.key } +
+                app.store.episodeProgress().mapNotNull { it.key.substringBefore(':').toLongOrNull() }
+        }
         val recommendationsList = com.stalkerapp.data.generateRecommendations(
             catalog.allItems,
             storeWatchHistory.distinct().toSet(),
@@ -282,16 +309,41 @@ fun HomeDashboardScreen(
 
     // Bölüm başına öğe sayısı (Kütüphane & İçerik → Ana Sayfa ayarları).
     val sectionSize = settings.homeSectionSize.coerceIn(5, 50)
-    val mList = if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
-    val sList = if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
-    val movies = remember(mList, blockedCategoryIds, sectionSize) {
-        mList.filter { it.id > 0 && it.categoryId !in blockedCategoryIds }.distinctBy { it.id }.take(sectionSize)
+
+    val movies by produceState(
+        initialValue = emptyList<VodItem>(),
+        catalog.movies.size,
+        catalog.allItems.size,
+        blockedCategoryIds,
+        sectionSize
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val mList = if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
+            mList.filter { it.id > 0 && it.categoryId !in blockedCategoryIds }.distinctBy { it.id }.take(sectionSize)
+        }
     }
-    val series = remember(sList, blockedCategoryIds, sectionSize) {
-        sList.filter { it.id > 0 && it.categoryId !in blockedCategoryIds }.distinctBy { it.id }.take(sectionSize)
+
+    val series by produceState(
+        initialValue = emptyList<VodItem>(),
+        catalog.series.size,
+        catalog.allItems.size,
+        blockedCategoryIds,
+        sectionSize
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val sList = if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
+            sList.filter { it.id > 0 && it.categoryId !in blockedCategoryIds }.distinctBy { it.id }.take(sectionSize)
+        }
     }
-    val featured = remember(series, movies) {
-        (series.take(6) + movies.take(6)).shuffled()
+
+    val featured by produceState(
+        initialValue = emptyList<VodItem>(),
+        movies,
+        series
+    ) {
+        value = withContext(Dispatchers.Default) {
+            (series.take(6) + movies.take(6)).shuffled()
+        }
     }
 
     // Ana sayfa düzeni: poster genişliği (Ayarlar → Kütüphane & İçerik → Ana Sayfa Düzeni).

@@ -164,17 +164,15 @@ suspend fun generateRecommendations(
     watchedIds: Set<Long>,
     apiKey: String,
     language: String = "tr"
-): List<VodItem> {
-    if (apiKey.isBlank() || catalogItems.isEmpty()) return emptyList()
+): List<VodItem> = withContext(Dispatchers.Default) {
+    if (apiKey.isBlank() || catalogItems.isEmpty()) return@withContext emptyList()
     val watched = catalogItems.filter { it.id in watchedIds }
-    if (watched.isEmpty()) return emptyList()
+    if (watched.isEmpty()) return@withContext emptyList()
     val watchedTmdb = watched.mapNotNull { it.tmdbId.takeIf { t -> t > 0 } }.toSet()
     val recs = RecommendationEngine(apiKey, language).getRecommendations(watched, watchedTmdb)
-    return recs.mapNotNull { r ->
-        catalogItems.firstOrNull { it.tmdbId == r.tmdbId }
-            ?: catalogItems.firstOrNull {
-                it.name.contains(r.title, ignoreCase = true) ||
-                    r.title.contains(it.name, ignoreCase = true)
-            }
+    val byTmdb = catalogItems.filter { it.tmdbId > 0 }.associateBy { it.tmdbId }
+    val byNormalizedName = catalogItems.take(5000).associateBy { it.name.lowercase().trim() }
+    recs.mapNotNull { r ->
+        byTmdb[r.tmdbId] ?: byNormalizedName[r.title.lowercase().trim()]
     }.distinctBy { it.id }
 }

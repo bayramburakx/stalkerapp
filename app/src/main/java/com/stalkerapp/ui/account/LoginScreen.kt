@@ -364,6 +364,15 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
+
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { onSignedIn() }) {
+                    Text(
+                        t("Giriş Yapmadan Devam Et (Misafir)"),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
     }
