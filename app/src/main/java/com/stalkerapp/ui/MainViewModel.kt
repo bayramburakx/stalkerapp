@@ -924,8 +924,7 @@ data class VodCatalogState(
         ): VodCatalogState {
             val seriesCatIds = categories
                 .filter { c ->
-                    (c.id in com.stalkerapp.data.PortalRepository.SERIES_CAT_BASE until com.stalkerapp.data.ExternalVod.XTREAM_VOD_BASE) ||
-                    com.stalkerapp.data.ExternalVod.isXtreamSeriesCat(c.id) ||
+                    com.stalkerapp.data.ExternalVod.isSeriesCat(c.id) ||
                     isSeriesCatTitle(c.title)
                 }
                 .map { it.id }

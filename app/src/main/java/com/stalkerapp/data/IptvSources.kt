@@ -40,6 +40,8 @@ object ExternalVod {
         else -> id
     }
 
+    fun isSeriesCat(catId: Long): Boolean = catId in SERIES_CAT_BASE until XTREAM_VOD_BASE
+
     /** Dizi kategori id'sini ad alanına taşır (film kategorileriyle çakışmasın). */
     fun seriesCatId(realCatId: Long): Long = SERIES_CAT_BASE + realCatId
     fun realSeriesCatId(catId: Long): Long =
