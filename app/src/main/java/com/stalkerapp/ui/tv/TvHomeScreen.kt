@@ -6,7 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -135,12 +135,14 @@ fun TvHomeScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
 
     val moviesList = remember(catalog) {
-        if (catalog.movies.isNotEmpty()) catalog.movies
+        val list = if (catalog.movies.isNotEmpty()) catalog.movies
         else catalog.allItems.filter { !catalog.isSeriesItem(it) }
+        list.filter { it.id > 0 }.distinctBy { it.id }
     }
     val seriesList = remember(catalog) {
-        if (catalog.series.isNotEmpty()) catalog.series
+        val list = if (catalog.series.isNotEmpty()) catalog.series
         else catalog.allItems.filter { catalog.isSeriesItem(it) }
+        list.filter { it.id > 0 }.distinctBy { it.id }
     }
 
     val popularMovies = remember(moviesList) {
@@ -155,8 +157,12 @@ fun TvHomeScreen(
     }
 
     val liveChannels = remember(homeChannels, favChannels) {
-        val all = (favChannels + (homeChannels ?: emptyList())).distinctBy { it.id }
+        val all = (favChannels + (homeChannels ?: emptyList())).filter { it.id > 0 }.distinctBy { it.id }
         all.take(40)
+    }
+
+    val recentChannelList = remember(recentChannels) {
+        recentChannels.filter { it.id > 0 }.distinctBy { it.id }.take(20)
     }
 
     // İzlemeye devam listesi
@@ -176,7 +182,7 @@ fun TvHomeScreen(
                 catalog.byId[id] ?: p.toVodItem(id)
             } else null
         }
-        (vodProg + epProg).distinctBy { it.id }.take(20)
+        (vodProg + epProg).filter { it.id > 0 }.distinctBy { it.id }.take(20)
     }
 
     val firstItemFocusRequester = remember { FocusRequester() }
@@ -380,7 +386,7 @@ fun TvHomeScreen(
                                     contentPadding = PaddingValues(horizontal = 36.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    items(continueWatching, key = { it.id }) { item ->
+                                    items(continueWatching, key = { "cw_${it.id}" }) { item ->
                                         TvVodCard(
                                             item = item,
                                             tmdbApiKey = settings.tmdbApiKey,
@@ -398,7 +404,7 @@ fun TvHomeScreen(
                                     contentPadding = PaddingValues(horizontal = 36.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    items(liveChannels, key = { it.id }) { channel ->
+                                    items(liveChannels, key = { "live_${it.id}" }) { channel ->
                                         TvChannelCard(
                                             channel = channel,
                                             onClick = { onOpenChannel(channel) }
@@ -415,7 +421,7 @@ fun TvHomeScreen(
                                     contentPadding = PaddingValues(horizontal = 36.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    items(popularMovies, key = { it.id }) { movie ->
+                                    items(popularMovies, key = { "movie_${it.id}" }) { movie ->
                                         TvVodCard(
                                             item = movie,
                                             tmdbApiKey = settings.tmdbApiKey,
@@ -433,7 +439,7 @@ fun TvHomeScreen(
                                     contentPadding = PaddingValues(horizontal = 36.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    items(popularSeries, key = { it.id }) { series ->
+                                    items(popularSeries, key = { "series_${it.id}" }) { series ->
                                         TvVodCard(
                                             item = series,
                                             tmdbApiKey = settings.tmdbApiKey,
@@ -445,13 +451,13 @@ fun TvHomeScreen(
                         }
 
                         // Son İzlenen Kanallar
-                        if (recentChannels.isNotEmpty()) {
+                        if (recentChannelList.isNotEmpty()) {
                             TvSection(title = "Son İzlenen Kanallar") {
                                 LazyRow(
                                     contentPadding = PaddingValues(horizontal = 36.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    items(recentChannels, key = { it.id }) { channel ->
+                                    items(recentChannelList, key = { "recent_${it.id}" }) { channel ->
                                         TvChannelCard(
                                             channel = channel,
                                             onClick = { onOpenChannel(channel) }
@@ -526,8 +532,11 @@ private fun TvNavTab(
             .padding(horizontal = 14.dp, vertical = 8.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
                     onClick(); true
@@ -590,8 +599,11 @@ private fun TvChannelCard(
                 shape = RoundedCornerShape(12.dp)
             )
             .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
                     onClick(); true
@@ -663,8 +675,11 @@ private fun TvVodCard(
                     shape = RoundedCornerShape(10.dp)
                 )
                 .onFocusChanged { focused = it.isFocused }
-                .focusable()
-                .clickable(onClick = onClick)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick
+                )
                 .onKeyEvent { ev ->
                     if (isTvSelectKey(ev)) {
                         onClick(); true

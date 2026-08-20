@@ -285,10 +285,10 @@ fun HomeDashboardScreen(
     val mList = if (catalog.movies.isNotEmpty()) catalog.movies else catalog.allItems.filter { !catalog.isSeriesItem(it) }
     val sList = if (catalog.series.isNotEmpty()) catalog.series else catalog.allItems.filter { catalog.isSeriesItem(it) }
     val movies = remember(mList, blockedCategoryIds, sectionSize) {
-        mList.filter { it.categoryId !in blockedCategoryIds }.take(sectionSize)
+        mList.filter { it.id > 0 && it.categoryId !in blockedCategoryIds }.distinctBy { it.id }.take(sectionSize)
     }
     val series = remember(sList, blockedCategoryIds, sectionSize) {
-        sList.filter { it.categoryId !in blockedCategoryIds }.take(sectionSize)
+        sList.filter { it.id > 0 && it.categoryId !in blockedCategoryIds }.distinctBy { it.id }.take(sectionSize)
     }
     val featured = remember(series, movies) {
         (series.take(6) + movies.take(6)).shuffled()

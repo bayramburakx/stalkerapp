@@ -211,7 +211,7 @@ fun VodScreen(
                 }
             }
         }
-        list
+        list.filter { it.id > 0 }.distinctBy { it.id }
     }
 
     // Aşağı scroll ettikçe yükle: son satıra yaklaşınca bir sonraki sayfayı ekle.
