@@ -71,6 +71,7 @@ import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.VodCatalogState
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.GlassChip
