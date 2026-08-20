@@ -31,6 +31,8 @@
     <application
         android:name=".StalkerApp"
         android:allowBackup="true"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true"
         android:banner="@drawable/ic_launcher_foreground"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"

@@ -212,104 +212,130 @@ fun TvHomeScreen(
 
     val firstItemFocusRequester = remember { FocusRequester() }
 
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0C0D14))
             .statusBarsPadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-
-            // ---------- TV Üst Gezinme Çubuğu ----------
+        // ==========================================
+        // 1. SOL DİKEY MENÜ (TV NAVIGATION RAIL)
+        // ==========================================
+        Column(
+            modifier = Modifier
+                .width(210.dp)
+                .fillMaxHeight()
+                .background(Color(0xFF0F111A))
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFF1E293B).copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            // Portio Logo + Aktif Kaynak Etiketi
             Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 36.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
             ) {
-                // Portio Logo + Aktif Kaynak Etiketi
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Portio",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        fontSize = 28.sp
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    val sourceBadge = when (activeKind) {
-                        "m3u" -> "M3U"
-                        "xtream" -> "Xtream"
-                        else -> "Stalker"
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF1E293B))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            sourceBadge,
-                            color = Color(0xFF38BDF8),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                Text(
+                    "Portio",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.width(8.dp))
+                val sourceBadge = when (activeKind) {
+                    "m3u" -> "M3U"
+                    "xtream" -> "Xtream"
+                    else -> "Stalker"
                 }
-
-                // TV Sekmeleri
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1E293B))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    TvNavTab(
-                        icon = Icons.Default.Home,
-                        label = "Ana Sayfa",
-                        selected = selectedTab == 0,
-                        focusRequester = if (selectedTab == 0) firstItemFocusRequester else null,
-                        onClick = { selectedTab = 0 }
-                    )
-                    TvNavTab(
-                        icon = Icons.Default.LiveTv,
-                        label = "Canlı TV",
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 }
-                    )
-                    TvNavTab(
-                        icon = Icons.Default.Movie,
-                        label = "Filmler",
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 }
-                    )
-                    TvNavTab(
-                        icon = Icons.Default.VideoLibrary,
-                        label = "Diziler",
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 }
-                    )
-                    TvNavTab(
-                        icon = Icons.Default.Search,
-                        label = "Ara",
-                        selected = false,
-                        onClick = onOpenSearch
-                    )
-                    TvNavTab(
-                        icon = Icons.Default.AccountCircle,
-                        label = "Profil",
-                        selected = false,
-                        onClick = onOpenProfiles
-                    )
-                    TvNavTab(
-                        icon = Icons.Default.Settings,
-                        label = "Ayarlar",
-                        selected = false,
-                        onClick = onOpenSettings
+                    Text(
+                        sourceBadge,
+                        color = Color(0xFF38BDF8),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // ---- Kaynak Yükleme İlerleme Çubuğu (TV) ----
+            Spacer(Modifier.height(20.dp))
+
+            // Ana TV Navigasyon Butonları
+            TvNavRailItem(
+                icon = Icons.Default.Home,
+                label = "Ana Sayfa",
+                selected = selectedTab == 0,
+                focusRequester = if (selectedTab == 0) firstItemFocusRequester else null,
+                onClick = { selectedTab = 0 }
+            )
+            Spacer(Modifier.height(6.dp))
+            TvNavRailItem(
+                icon = Icons.Default.LiveTv,
+                label = "Canlı TV",
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 }
+            )
+            Spacer(Modifier.height(6.dp))
+            TvNavRailItem(
+                icon = Icons.Default.Movie,
+                label = "Filmler",
+                selected = selectedTab == 2,
+                onClick = { selectedTab = 2 }
+            )
+            Spacer(Modifier.height(6.dp))
+            TvNavRailItem(
+                icon = Icons.Default.VideoLibrary,
+                label = "Diziler",
+                selected = selectedTab == 3,
+                onClick = { selectedTab = 3 }
+            )
+            Spacer(Modifier.height(6.dp))
+            TvNavRailItem(
+                icon = Icons.Default.Search,
+                label = "Ara",
+                selected = false,
+                onClick = onOpenSearch
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            // Alt Araçlar (Profil & Ayarlar)
+            TvNavRailItem(
+                icon = Icons.Default.AccountCircle,
+                label = "Profil",
+                selected = false,
+                onClick = onOpenProfiles
+            )
+            Spacer(Modifier.height(6.dp))
+            TvNavRailItem(
+                icon = Icons.Default.Settings,
+                label = "Ayarlar",
+                selected = false,
+                onClick = onOpenSettings
+            )
+        }
+
+        // ==========================================
+        // 2. SAĞ İÇERİK ALANI
+        // ==========================================
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(Color(0xFF0C0D14))
+        ) {
+            // Kaynak Yükleme İlerleme Çubuğu (TV)
             if (catalog.status == VodCatalogStatus.Syncing) {
                 val ratio = if (catalog.totalCategories > 0)
                     catalog.doneCategories.toFloat() / catalog.totalCategories
@@ -321,11 +347,11 @@ fun TvHomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 36.dp, vertical = 6.dp)
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF131A2A))
                         .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Column {
                         Row(
@@ -335,41 +361,34 @@ fun TvHomeScreen(
                         ) {
                             Text(
                                 "Kaynaklar yükleniyor…",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
                             Text(
                                 "%$pct",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF38BDF8)
                             )
                         }
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { ratio.coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(6.dp)
+                                .height(5.dp)
                                 .clip(RoundedCornerShape(3.dp)),
                             color = Color(0xFF38BDF8),
                             trackColor = Color(0xFF1E293B)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${catalog.loadedCount} içerik yüklendi • ${catalog.doneCategories}/${catalog.totalCategories} kategori",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f)
                         )
                     }
                 }
             }
 
-            // ---------- TV İçerik Alanı ----------
+            // TV Sayfa Gövdesi
             when (selectedTab) {
                 1 -> {
-                    // Canlı TV Tam Ekran
                     LiveTvScreen(
                         profile = profile,
                         onOpenPlayer = onOpenPlayer,
@@ -378,7 +397,6 @@ fun TvHomeScreen(
                     )
                 }
                 2 -> {
-                    // Filmler Tam Ekran
                     VodScreen(
                         profile = profile,
                         onOpenVod = onOpenVod,
@@ -387,7 +405,6 @@ fun TvHomeScreen(
                     )
                 }
                 3 -> {
-                    // Diziler Tam Ekran
                     VodScreen(
                         profile = profile,
                         onOpenVod = onOpenVod,
@@ -396,10 +413,9 @@ fun TvHomeScreen(
                     )
                 }
                 else -> {
-                    // Ana Sayfa Dashboard (TV D-Pad optimize edilmiş LazyColumn)
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 48.dp),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // İzlemeye Devam
@@ -407,7 +423,7 @@ fun TvHomeScreen(
                             item(key = "section_cw") {
                                 TvSection(title = "İzlemeye Devam Et") {
                                     LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
                                         items(continueWatching, key = { "cw_${it.id}" }) { item ->
@@ -427,7 +443,7 @@ fun TvHomeScreen(
                             item(key = "section_live") {
                                 TvSection(title = "Canlı TV Kanalları") {
                                     LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
                                         items(liveChannels, key = { "live_${it.id}" }) { channel ->
@@ -446,14 +462,14 @@ fun TvHomeScreen(
                             item(key = "section_movies") {
                                 TvSection(title = "Filmler") {
                                     LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
-                                        items(popularMovies, key = { "movie_${it.id}" }) { movie ->
+                                        items(popularMovies, key = { "mov_${it.id}" }) { item ->
                                             TvVodCard(
-                                                item = movie,
+                                                item = item,
                                                 tmdbApiKey = settings.tmdbApiKey,
-                                                onClick = { onOpenVod(movie.id, false) }
+                                                onClick = { onOpenVod(item.id, false) }
                                             )
                                         }
                                     }
@@ -466,14 +482,14 @@ fun TvHomeScreen(
                             item(key = "section_series") {
                                 TvSection(title = "Diziler") {
                                     LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
-                                        items(popularSeries, key = { "series_${it.id}" }) { series ->
+                                        items(popularSeries, key = { "ser_${it.id}" }) { item ->
                                             TvVodCard(
-                                                item = series,
+                                                item = item,
                                                 tmdbApiKey = settings.tmdbApiKey,
-                                                onClick = { onOpenVod(series.id, true) }
+                                                onClick = { onOpenVod(item.id, true) }
                                             )
                                         }
                                     }
@@ -486,7 +502,7 @@ fun TvHomeScreen(
                             item(key = "section_recent") {
                                 TvSection(title = "Son İzlenen Kanallar") {
                                     LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 36.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp),
                                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
                                         items(recentChannelList, key = { "recent_${it.id}" }) { channel ->
@@ -541,7 +557,7 @@ fun TvHomeScreen(
 }
 
 @Composable
-private fun TvNavTab(
+private fun TvNavRailItem(
     icon: ImageVector,
     label: String,
     selected: Boolean,
@@ -550,14 +566,15 @@ private fun TvNavTab(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.15f else 1.0f,
-        label = "nav_tab_scale"
+        targetValue = if (focused) 1.06f else 1.0f,
+        label = "nav_rail_scale"
     )
 
     Box(
         modifier = Modifier
+            .fillMaxWidth()
             .scale(scale)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
                     focused -> Color(0xFF00E5FF)
@@ -566,11 +583,11 @@ private fun TvNavTab(
                 }
             )
             .border(
-                width = if (focused) 3.dp else if (selected) 1.dp else 0.dp,
+                width = if (focused) 3.dp else if (selected) 1.5.dp else 0.dp,
                 color = if (focused) Color.White else if (selected) Color(0xFF00E5FF).copy(alpha = 0.5f) else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(12.dp)
             )
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
@@ -584,19 +601,19 @@ private fun TvNavTab(
                     onClick(); true
                 } else false
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.CenterStart
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = if (focused) Color.Black else if (selected) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
                 label,
-                color = if (focused) Color.Black else if (selected) Color.White else Color.White.copy(alpha = 0.8f),
+                color = if (focused) Color.Black else if (selected) Color.White else Color.White.copy(alpha = 0.85f),
                 fontSize = 14.sp,
                 fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Medium
             )
@@ -615,7 +632,7 @@ private fun TvSection(
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,
-            modifier = Modifier.padding(horizontal = 36.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             fontSize = 20.sp
         )
         content()
