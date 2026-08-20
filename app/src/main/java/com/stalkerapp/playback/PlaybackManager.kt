@@ -160,6 +160,9 @@ object PlaybackManager {
         }
     }
 
+    /** Kullanıcı bu uygulamadan açıkça Cast başlattı mı? Ağdaki yabancı oturumları izole eder. */
+    @Volatile var userInitiatedCast: Boolean = false
+
     /**
      * Yayın oturumu durumu (media3-cast `SessionAvailabilityListener`): oturum
      * bağlanınca aktif içeriği TV'ye aktarır, bağlantı kesilince telefon
@@ -167,6 +170,11 @@ object PlaybackManager {
      */
     private val sessionAvailabilityListener = object : SessionAvailabilityListener {
         override fun onCastSessionAvailable() {
+            // Başka bir telefon/kullanıcı ağda Cast başlattığında bu uygulamanın
+            // oturumu otomatik devralmasını engelle. Yalnızca bu uygulamadan
+            // kullanıcı "Yayınla" dediğinde aktif edilir.
+            if (!userInitiatedCast) return
+
             castSessionActive = true
             // Aktif içeriği TV'ye gönder; telefondaki oynatmayı duraklat
             // (aksi halde iki cihazdan aynı anda ses çıkar).
@@ -182,8 +190,10 @@ object PlaybackManager {
         }
 
         override fun onCastSessionUnavailable() {
+            val wasActive = castSessionActive
             castSessionActive = false
-            if (!stopping) {
+            userInitiatedCast = false
+            if (wasActive && !stopping) {
                 // Yayın bitti/kesildi: telefon oynatıcısı kaldığı yerden sürsün.
                 val pos = castPlayer?.currentPosition ?: 0L
                 activePlayer?.let { p ->
@@ -245,8 +255,7 @@ object PlaybackManager {
                 setSessionAvailabilityListener(sessionAvailabilityListener)
             }
         }.getOrNull()
-        // Uygulama açılırken oturum zaten bağlıysa (CastContext hatırlar) durumu yakala.
-        castSessionActive = castPlayer?.isCastSessionAvailable() == true
+        castSessionActive = false
         // Bölüm %85 izlendiğinde otomatik "izlendi" işareti (ekran arka planda
         // olsa da, PiP/arka plan oynatmada bile) — 5 sn'de bir kontrol edilir.
         scope.launch {

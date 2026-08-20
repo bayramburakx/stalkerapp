@@ -36,7 +36,18 @@ class VodSyncService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startForeground(NOTIF_ID, buildNotification(l10n("VOD senkronize ediliyor...")))
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                androidx.core.app.ServiceCompat.startForeground(
+                    this,
+                    NOTIF_ID,
+                    buildNotification(l10n("VOD senkronize ediliyor...")),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIF_ID, buildNotification(l10n("VOD senkronize ediliyor...")))
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -65,7 +76,8 @@ class VodSyncService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
-        stopSelf()
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        runCatching { stopSelf() }
         super.onDestroy()
     }
 
@@ -94,15 +106,23 @@ class VodSyncService : Service() {
             .build()
 
     private fun updateNotification(text: String) {
-        val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        mgr.notify(NOTIF_ID, buildNotification(text))
+        runCatching {
+            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            mgr.notify(NOTIF_ID, buildNotification(text))
+        }
     }
 
     companion object {
         const val NOTIF_ID = 1002
         const val CHANNEL_ID = "vod_sync"
         fun start(ctx: Context) {
-            ctx.startForegroundService(Intent(ctx, VodSyncService::class.java))
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ctx.startForegroundService(Intent(ctx, VodSyncService::class.java))
+                } else {
+                    ctx.startService(Intent(ctx, VodSyncService::class.java))
+                }
+            }
         }
     }
 }

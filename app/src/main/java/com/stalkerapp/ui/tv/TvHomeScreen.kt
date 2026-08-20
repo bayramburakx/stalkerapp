@@ -1,6 +1,7 @@
 package com.stalkerapp.ui.tv
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -547,10 +549,15 @@ private fun TvNavTab(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.15f else 1.0f,
+        label = "nav_tab_scale"
+    )
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .scale(scale)
+            .clip(RoundedCornerShape(10.dp))
             .background(
                 when {
                     focused -> Color(0xFF00E5FF)
@@ -559,14 +566,14 @@ private fun TvNavTab(
                 }
             )
             .border(
-                width = if (focused) 2.5.dp else 0.dp,
-                color = if (focused) Color.White else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
+                width = if (focused) 3.dp else if (selected) 1.dp else 0.dp,
+                color = if (focused) Color.White else if (selected) Color(0xFF00E5FF).copy(alpha = 0.5f) else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
             )
             .padding(horizontal = 14.dp, vertical = 8.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .focusable()
             .onFocusChanged { focused = it.isFocused }
+            .focusable()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -622,19 +629,24 @@ private fun TvChannelCard(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.12f else 1.0f,
+        label = "ch_scale"
+    )
 
     Box(
         modifier = Modifier
             .size(130.dp, 84.dp)
+            .scale(scale)
             .clip(RoundedCornerShape(12.dp))
             .background(if (focused) Color(0xFF1E293B) else Color(0xFF131722))
             .border(
-                width = if (focused) 3.dp else 1.dp,
+                width = if (focused) 3.5.dp else 1.dp,
                 color = if (focused) Color(0xFF00E5FF) else Color.White.copy(0.08f),
                 shape = RoundedCornerShape(12.dp)
             )
-            .focusable()
             .onFocusChanged { focused = it.isFocused }
+            .focusable()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -682,6 +694,10 @@ private fun TvVodCard(
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.10f else 1.0f,
+        label = "vod_scale"
+    )
 
     var resolvedPoster by remember(item.id, item.poster) {
         mutableStateOf(app.tmdb.getCachedPoster(item.name, item.isSeries) ?: item.poster)
@@ -703,15 +719,16 @@ private fun TvVodCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
+                .scale(scale)
                 .clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF131722))
                 .border(
-                    width = if (focused) 3.dp else 0.dp,
+                    width = if (focused) 3.5.dp else 0.dp,
                     color = if (focused) Color(0xFF00E5FF) else Color.Transparent,
                     shape = RoundedCornerShape(10.dp)
                 )
-                .focusable()
                 .onFocusChanged { focused = it.isFocused }
+                .focusable()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

@@ -87,14 +87,17 @@ class FirebaseSyncManager(private val context: Context) {
             }
         }
 
-    fun signOut() {
+    fun signOut(store: Store? = null) {
         auth.signOut()
-        GoogleSignIn.getClient(
-            context,
-            com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
-                com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
-            ).build()
-        ).signOut()
+        runCatching {
+            GoogleSignIn.getClient(
+                context,
+                com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                ).build()
+            ).signOut()
+        }
+        store?.setAccount(null)
         _syncState.value = ""
     }
 

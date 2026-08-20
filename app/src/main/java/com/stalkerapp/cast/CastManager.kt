@@ -70,11 +70,13 @@ object CastManager {
 
     /** Seçilen cihaza bağlan — Cast framework'ü oturumu kurar, CastPlayer devralır. */
     fun connect(route: CastRoute) {
+        com.stalkerapp.playback.PlaybackManager.userInitiatedCast = true
         router?.selectRoute(route.info)
     }
 
     /** Bağlantıyı keser; CastPlayer `onCastSessionUnavailable` ile yerel oynatıcıya döner. */
     fun disconnect() {
+        com.stalkerapp.playback.PlaybackManager.userInitiatedCast = false
         router?.unselect(MediaRouter.UNSELECT_REASON_STOPPED)
     }
 

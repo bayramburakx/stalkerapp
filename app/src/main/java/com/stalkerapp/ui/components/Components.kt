@@ -1,10 +1,12 @@
 package com.stalkerapp.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
@@ -361,19 +364,24 @@ fun GlassChip(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.14f else 1.0f,
+        label = "glass_chip_scale"
+    )
     val pillShape = RoundedCornerShape(50)
     Box(
         modifier = modifier
+            .scale(scale)
             .clip(pillShape)
             .background(
                 when {
-                    isFocused -> Color(0xFF38BDF8)
+                    isFocused -> Color(0xFF00E5FF)
                     selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
                     else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
                 }
             )
             .border(
-                if (isFocused) 2.dp else 1.dp,
+                if (isFocused) 3.dp else 1.dp,
                 when {
                     isFocused -> Color.White
                     selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
@@ -382,6 +390,7 @@ fun GlassChip(
                 pillShape
             )
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
             .clickable { onClick() }
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
