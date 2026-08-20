@@ -871,7 +871,7 @@ class Store(private val context: Context) {
         val meta = loadVodCatalogMeta(portalId) ?: return@runCatching null
         val dir = catalogDir(portalId)
         if (!dir.exists()) return@runCatching null
-        val capacity = minOf(meta.count.coerceAtLeast(100), 200_000)
+        val capacity = minOf(meta.itemCount.coerceAtLeast(100), 200_000)
         val seen = HashSet<Long>(capacity)
         val items = ArrayList<VodItem>(capacity)
         dir.listFiles().orEmpty()
