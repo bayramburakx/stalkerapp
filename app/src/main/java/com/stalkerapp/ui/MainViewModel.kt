@@ -954,6 +954,9 @@ data class VodCatalogState(
                 if (isSeries(item)) sList.add(item) else mList.add(item)
             }
 
+            val byIdMap = if (status == VodCatalogStatus.Syncing) emptyMap()
+            else allItems.associateBy { it.id }
+
             return VodCatalogState(
                 status = status,
                 doneCategories = doneCategories,
@@ -965,7 +968,7 @@ data class VodCatalogState(
                 categories = categories,
                 portalTotal = portalTotal,
                 lastSync = lastSync,
-                byId = allItems.associateBy { it.id },
+                byId = byIdMap,
                 seriesCategoryIds = seriesCatIds
             )
         }

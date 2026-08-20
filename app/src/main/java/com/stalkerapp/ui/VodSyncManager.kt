@@ -154,7 +154,7 @@ class VodSyncManager(
                     cats = vodCats + seriesCats
                     val seriesRemaining = seriesCats.filter { it.id != 0L && (force || it.id !in doneCats) }
                     if (seriesRemaining.isNotEmpty()) {
-                        val sem = Semaphore(6)
+                        val sem = Semaphore(4)
                         coroutineScope {
                             seriesRemaining.forEach { cat ->
                                 launch {
@@ -223,7 +223,7 @@ class VodSyncManager(
             // 2) Per-category fetch for all remaining movie/VOD categories.
             val vodRemaining = vodCats.filter { it.id != 0L && (force || it.id !in doneCats) }
             if (!singleOk && vodRemaining.isNotEmpty()) {
-                val sem = Semaphore(6)
+                val sem = Semaphore(4)
                 coroutineScope {
                     vodRemaining.forEach { cat ->
                         launch {
@@ -258,7 +258,7 @@ class VodSyncManager(
             // 3) Letter/digit search enumeration fallback if movie library is empty
             val movieCount = all.values.count { !isSeriesItem(it) }
             if (movieCount < 200) {
-                val sem = Semaphore(6)
+                val sem = Semaphore(4)
                 coroutineScope {
                     searchTokens.forEach { token ->
                         launch {
@@ -345,7 +345,7 @@ class VodSyncManager(
         // son hazır kataloğun haritası kullanılır (yarım liste için de faydalı).
         if (status == VodCatalogStatus.Syncing) {
             val now = System.currentTimeMillis()
-            val publish = now - lastUiPublish >= 500L
+            val publish = now - lastUiPublish >= 1500L
             if (publish) {
                 lastUiPublish = now
                 return VodCatalogState.of(

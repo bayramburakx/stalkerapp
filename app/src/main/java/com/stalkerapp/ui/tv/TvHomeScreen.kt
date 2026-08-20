@@ -134,26 +134,40 @@ fun TvHomeScreen(
     // Seçili TV sekmesi: 0: Ana Sayfa, 1: Canlı TV, 2: Filmler, 3: Diziler
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val moviesList = remember(catalog) {
-        val list = if (catalog.movies.isNotEmpty()) catalog.movies
-        else catalog.allItems.filter { !catalog.isSeriesItem(it) }
-        list.filter { it.id > 0 }.distinctBy { it.id }
-    }
-    val seriesList = remember(catalog) {
-        val list = if (catalog.series.isNotEmpty()) catalog.series
-        else catalog.allItems.filter { catalog.isSeriesItem(it) }
-        list.filter { it.id > 0 }.distinctBy { it.id }
+    val popularMovies by androidx.compose.runtime.produceState(
+        initialValue = emptyList<VodItem>(),
+        catalog.movies,
+        catalog.allItems.size,
+        catalog.status
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val list = if (catalog.movies.isNotEmpty()) catalog.movies
+            else catalog.allItems.filter { !catalog.isSeriesItem(it) }
+            list.filter { it.id > 0 }
+                .distinctBy { it.id }
+                .sortedByDescending {
+                    it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+                }
+                .take(30)
+        }
     }
 
-    val popularMovies = remember(moviesList) {
-        moviesList.sortedByDescending {
-            it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
-        }.take(30)
-    }
-    val popularSeries = remember(seriesList) {
-        seriesList.sortedByDescending {
-            it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
-        }.take(30)
+    val popularSeries by androidx.compose.runtime.produceState(
+        initialValue = emptyList<VodItem>(),
+        catalog.series,
+        catalog.allItems.size,
+        catalog.status
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val list = if (catalog.series.isNotEmpty()) catalog.series
+            else catalog.allItems.filter { catalog.isSeriesItem(it) }
+            list.filter { it.id > 0 }
+                .distinctBy { it.id }
+                .sortedByDescending {
+                    it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
+                }
+                .take(30)
+        }
     }
 
     val liveChannels = remember(homeChannels, favChannels) {
