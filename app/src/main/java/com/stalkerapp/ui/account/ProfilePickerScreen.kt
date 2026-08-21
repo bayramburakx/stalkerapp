@@ -489,4 +489,3 @@ private fun EditProfileDialog(
         }
     )
 }
-}
