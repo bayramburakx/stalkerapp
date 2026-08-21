@@ -143,6 +143,7 @@ import com.stalkerapp.data.Channel
 import com.stalkerapp.data.EpgReminder
 import com.stalkerapp.data.Profile
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.stalkerapp.playback.ChannelQueue
@@ -1079,7 +1080,7 @@ fun PlayerScreen(navController: NavHostController) {
                 Icon(
                     Icons.Default.CastConnected,
                     contentDescription = null,
-                    tint = Color(0xFF4FC3F7),
+                    tint = Color.White,
                     modifier = Modifier.size(56.dp)
                 )
                 Spacer(Modifier.height(16.dp))
@@ -1274,7 +1275,7 @@ fun PlayerScreen(navController: NavHostController) {
                                 },
                                 icon = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
                                 contentDescription = "Chromecast",
-                                tint = if (isCasting) Color(0xFF4FC3F7) else Color.White,
+                                tint = if (isCasting) Color.White else Color.White,
                                 iconSize = 22.dp,
                                 modifier = Modifier.size(40.dp)
                             )
@@ -1530,7 +1531,14 @@ fun PlayerScreen(navController: NavHostController) {
                                     seeking = false
                                 },
                                 valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color.White,
+                                    activeTrackColor = Color.White,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                                    activeTickColor = Color.White,
+                                    inactiveTickColor = Color.White.copy(alpha = 0.25f)
+                                )
                             )
                             TextButton(onClick = { PlaybackManager.seekTo((duration - 1000).coerceAtLeast(0L)) }) {
                                 Text(str(lang, "Canlıya Dön"), color = Color(0xFFFF5252), style = MaterialTheme.typography.labelMedium)
@@ -1820,7 +1828,7 @@ private fun SleepTimerDialog(
     val presets = listOf(15, 30, 45, 60, 90, 120)
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF18181B),
+        containerColor = AppleTvTokens.SurfaceRaised,
         shape = RoundedCornerShape(24.dp),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1880,7 +1888,7 @@ private fun SleepTimerDialog(
                             val active = current == m * 60L
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (active) MaterialTheme.colorScheme.primary else Color(0xFF27272A),
+                                color = if (active) MaterialTheme.colorScheme.primary else AppleTvTokens.SurfaceRaised,
                                 modifier = Modifier
                                     .weight(1f)
                                     .clickable { onMinutes(m) }
@@ -1905,7 +1913,7 @@ private fun SleepTimerDialog(
                 val untilEndActive = current < 0
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (untilEndActive) MaterialTheme.colorScheme.primary else Color(0xFF27272A),
+                    color = if (untilEndActive) MaterialTheme.colorScheme.primary else AppleTvTokens.SurfaceRaised,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onUntilEnd)
@@ -1947,7 +1955,7 @@ private fun TvFocusableSurface(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(12.dp),
-    backgroundColor: Color = Color(0xFF222226),
+    backgroundColor: Color = AppleTvTokens.SurfaceRaised,
     content: @Composable () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -1989,7 +1997,7 @@ fun AudioTracksSheet(lang: String, onDismiss: () -> Unit, onSelect: (String?) ->
     }
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141416),
+        containerColor = AppleTvTokens.SurfaceRaised,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -2110,7 +2118,7 @@ fun SubtitleSheet(
     }
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141416),
+        containerColor = AppleTvTokens.SurfaceRaised,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -2288,7 +2296,7 @@ fun EpgSheet(
 
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141416),
+        containerColor = AppleTvTokens.SurfaceRaised,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -2341,7 +2349,7 @@ fun EpgSheet(
                     items(programs.orEmpty()) { p ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (p.isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else Color(0xFF222226),
+                            color = if (p.isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else AppleTvTokens.SurfaceRaised,
                             border = if (p.isCurrent) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -2480,7 +2488,7 @@ fun PlayerInfoSheet(
 
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141416),
+        containerColor = AppleTvTokens.SurfaceRaised,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -2536,7 +2544,7 @@ fun PlayerInfoSheet(
                     pairList.forEach { (label, value) ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF222226),
+                            color = AppleTvTokens.SurfaceRaised,
                             modifier = Modifier.weight(1f)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -2555,7 +2563,7 @@ fun PlayerInfoSheet(
             if (url.isNotBlank()) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF222226),
+                    color = AppleTvTokens.SurfaceRaised,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -2613,7 +2621,7 @@ fun PlayerSettingsSheet(
     )
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141416),
+        containerColor = AppleTvTokens.SurfaceRaised,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -2652,7 +2660,7 @@ fun PlayerSettingsSheet(
                         TvFocusableSurface(
                             onClick = { onSpeed(s) },
                             shape = RoundedCornerShape(10.dp),
-                            backgroundColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
+                            backgroundColor = if (selected) MaterialTheme.colorScheme.primary else AppleTvTokens.SurfaceRaised,
                             modifier = Modifier.weight(1f)
                         ) {
                             Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
@@ -2680,7 +2688,7 @@ fun PlayerSettingsSheet(
                         TvFocusableSurface(
                             onClick = { onAspect(mode) },
                             shape = RoundedCornerShape(10.dp),
-                            backgroundColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF222226),
+                            backgroundColor = if (selected) MaterialTheme.colorScheme.primary else AppleTvTokens.SurfaceRaised,
                             modifier = Modifier.weight(1f)
                         ) {
                             Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
@@ -2699,7 +2707,7 @@ fun PlayerSettingsSheet(
             // A/V Senkron
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = Color(0xFF222226),
+                color = AppleTvTokens.SurfaceRaised,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2717,7 +2725,7 @@ fun PlayerSettingsSheet(
                         TvFocusableSurface(
                             onClick = { onDelay((audioDelayMs - 50).coerceIn(-500, 500)) },
                             shape = RoundedCornerShape(10.dp),
-                            backgroundColor = Color(0xFF2E2E34)
+                            backgroundColor = AppleTvTokens.SurfaceRaised
                         ) {
                             Text("−50 ms", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = Color.White)
                         }
@@ -2730,7 +2738,7 @@ fun PlayerSettingsSheet(
                         TvFocusableSurface(
                             onClick = { onDelay((audioDelayMs + 50).coerceIn(-500, 500)) },
                             shape = RoundedCornerShape(10.dp),
-                            backgroundColor = Color(0xFF2E2E34)
+                            backgroundColor = AppleTvTokens.SurfaceRaised
                         ) {
                             Text("+50 ms", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = Color.White)
                         }
@@ -2749,7 +2757,7 @@ fun PlayerSettingsSheet(
             // Binge Modu
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = Color(0xFF222226),
+                color = AppleTvTokens.SurfaceRaised,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
