@@ -1,9 +1,9 @@
 package com.stalkerapp
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -21,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -31,24 +31,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.stalkerapp.StalkerApp
-import com.stalkerapp.ui.MainViewModel
-import com.stalkerapp.ui.PlayerScreen
-import com.stalkerapp.ui.account.LoginScreen
-import com.stalkerapp.ui.account.ProfilePickerScreen
 import com.stalkerapp.data.FirebaseSyncManager
-import com.stalkerapp.ui.favorites.FavoritesScreen
-import com.stalkerapp.ui.rememberMainViewModel
-import com.stalkerapp.ui.home.HomeScreen
-import com.stalkerapp.ui.live.EpgGuideScreen
-import com.stalkerapp.ui.onboarding.OnboardingScreen
-import com.stalkerapp.ui.person.PersonScreen
-import com.stalkerapp.ui.search.SearchScreen
-import com.stalkerapp.ui.theme.StalkerTheme
-import com.stalkerapp.ui.vod.VodDetailScreen
-import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.data.UpdateChecker
 import com.stalkerapp.data.UpdateInfo
+import com.stalkerapp.playback.PlaybackManager
+import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.components.ToastHost
 import com.stalkerapp.ui.components.UpdateDialog
+import com.stalkerapp.ui.rememberMainViewModel
+import com.stalkerapp.ui.screens.ContentDetailScreen
+import com.stalkerapp.ui.screens.EpgScreen
+import com.stalkerapp.ui.screens.FavoritesScreen
+import com.stalkerapp.ui.screens.HomeScreen
+import com.stalkerapp.ui.screens.LoginScreen
+import com.stalkerapp.ui.screens.PersonDetailScreen
+import com.stalkerapp.ui.screens.PlayerScreen
+import com.stalkerapp.ui.screens.ProfileSelectScreen
+import com.stalkerapp.ui.screens.SearchScreen
+import com.stalkerapp.ui.screens.SettingsScreen
+import com.stalkerapp.ui.screens.OnboardingScreen
+import com.stalkerapp.ui.theme.PortioTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -57,10 +59,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            StalkerTheme {
+            PortioTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    NotificationPermission()
-                    AppNav()
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        NotificationPermission()
+                        AppNav()
+                        ToastHost()
+                    }
                 }
             }
         }
@@ -68,8 +73,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // PiP yalnızca aktif bir oynatma varsa ve kullanıcı oynatıcı ekranındayken
-        // tetiklenir — aksi halde Ayarlar veya Ana Sayfa PiP'e girer.
         if (PlaybackManager.isPlaying()) {
             PlaybackManager.enterPip(this)
         }
@@ -77,16 +80,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // "Arka Planda Oynatmaya Devam Et" kapalıysa ve PiP'te değilsek (örn.
-        // ev tuşuyla çıkış) oynatmayı duraklat — medya sessizce çalıp durmasın.
-        // Yayın (Chromecast) sırasında atlanır: TV'deki oynatma etkilenmemeli.
         if (!isInPictureInPictureMode && !PlaybackManager.isCasting() && !PlaybackManager.isBackgroundPlaybackEnabled()) {
             PlaybackManager.pause()
         }
-        // Oturum açıksa yapılan değişiklikleri buluta yaz (diğer cihazlara taşır).
         if (FirebaseSyncManager.current.isSignedIn) {
             val store = (applicationContext as StalkerApp).store
-            // pushBackup suspend olduğu için bir coroutine içinde çağrılır.
             val appScope = (applicationContext as StalkerApp).appScope
             appScope.launch { FirebaseSyncManager.current.pushBackup(store) }
         }
@@ -117,9 +115,6 @@ private fun AppNav() {
     val navController = rememberNavController()
     val vm: MainViewModel = rememberMainViewModel(app)
 
-    // Telefon geri tuşu: önceki ekrana dön; geri dönülecek ekran yoksa (back
-    // stack boş) uygulamadan çıkmak yerine Ana Sayfa'ya yönlendir — böylece
-    // sayfalar arasında geri tuşuna basınca uygulama kapanmaz.
     fun safeBack() {
         if (!navController.popBackStack()) {
             navController.navigate("home") {
@@ -128,7 +123,7 @@ private fun AppNav() {
             }
         }
     }
-    // Ana ekran widget'ından gelen kanal: uygulama açılır açılmaz o kanal oynatılır.
+
     val activity = LocalContext.current as? Activity
     val widgetChannelId = remember {
         activity?.intent?.getLongExtra(com.stalkerapp.widget.FavoritesWidgetProvider.EXTRA_PLAY_CHANNEL, -1L) ?: -1L
@@ -139,19 +134,15 @@ private fun AppNav() {
             navController.navigate("player") { launchSingleTop = true }
         }
     }
-    // Firebase hesap yönetimi (giriş/çıkış için uygulama genelinde kullanılır).
+
     val firebase = remember { FirebaseSyncManager.init(app) }
 
-    // Uygulama içi güncelleme: açılışta bir kez kontrol edilir. Yeni sürüm
-    // varsa pop-up gösterilir — "Şimdi Güncelle" / "Sonra Hatırlat" / "Bir Daha Sorma".
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     val updateContext = LocalContext.current
     LaunchedEffect(Unit) {
         val store = app.store
         val info = runCatching { UpdateChecker().latest() }.getOrNull() ?: return@LaunchedEffect
         if (!UpdateChecker.isNewer(info.version, BuildConfig.VERSION_NAME)) return@LaunchedEffect
-        // "Bir daha sorma" denmişse bu sürüm tekrar sorulmaz; "sonra hatırlat"
-        // süresi dolmadıysa beklenir.
         if (store.updateSkipVersion() == info.version) return@LaunchedEffect
         if (System.currentTimeMillis() < store.updateRemindTs()) return@LaunchedEffect
         updateInfo = info
@@ -178,8 +169,6 @@ private fun AppNav() {
         )
     }
 
-    // Başlangıç ekranı: ilk açılışta onboarding; sonrasında oturum varsa
-    // Netflix tarzı profil seçici, yoksa Giriş ekranı.
     val startDestination = remember {
         when {
             !app.store.isOnboardingDone() -> "onboarding"
@@ -187,10 +176,10 @@ private fun AppNav() {
             else -> "login"
         }
     }
+
     NavHost(navController = navController, startDestination = startDestination) {
         composable("onboarding") {
             OnboardingScreen(onDone = {
-                // Onboarding sonrası: hesabı olan profil seçiciye, olmayan giriş ekranına gider.
                 if (firebase.isSignedIn) {
                     navController.navigate("profiles") { popUpTo("onboarding") { inclusive = true } }
                 } else {
@@ -203,7 +192,6 @@ private fun AppNav() {
                 firebase = firebase,
                 lang = app.store.settings().language,
                 onSignedIn = {
-                    // Bulut yedeği geri yüklendiyse Store değişti; akışları tazele.
                     vm.refreshFlows()
                     navController.navigate("profiles") { popUpTo("login") { inclusive = true } }
                 },
@@ -211,7 +199,7 @@ private fun AppNav() {
             )
         }
         composable("profiles") {
-            ProfilePickerScreen(
+            ProfileSelectScreen(
                 vm = vm,
                 firebase = firebase,
                 lang = app.store.settings().language,
@@ -225,11 +213,11 @@ private fun AppNav() {
                 profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
                 onOpenPlayer = { navController.navigate("player") },
                 onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
-                modifier = Modifier
+                modifier = Modifier,
+                onBack = { safeBack() }
             )
         }
         composable("home") {
-            // Android TV (Leanback): 10-foot arayüz — büyük kartlar, D-pad gezinme.
             val ctx = LocalContext.current
             val st = app.store.settings()
             val isTv = when (st.preferredLayout) {
@@ -263,7 +251,6 @@ private fun AppNav() {
                     onOpenSearch = { navController.navigate("search") },
                     onOpenGuide = { navController.navigate("epg") },
                     onOpenOnboarding = {
-                        // Oturum kapalıysa giriş ekranına, açıksa kurulum sihirbazına.
                         if (firebase.isSignedIn) {
                             navController.navigate("onboarding") {
                                 popUpTo("home") { inclusive = false }
@@ -286,14 +273,14 @@ private fun AppNav() {
             }
         }
         composable("epg") {
-            EpgGuideScreen(
+            EpgScreen(
                 profile = (LocalContext.current.applicationContext as StalkerApp).repository.cachedProfile(),
                 onBack = { safeBack() },
                 onOpenPlayer = { navController.navigate("player") }
             )
         }
         composable("settings") {
-            com.stalkerapp.ui.settings.SettingsScreen(
+            SettingsScreen(
                 vm = vm,
                 onOpenPlayer = { navController.navigate("player") },
                 onOpenProfiles = {
@@ -305,7 +292,13 @@ private fun AppNav() {
                 onBack = { safeBack() }
             )
         }
-        composable("search") { SearchScreen(onBack = { safeBack() }, onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }, onOpenPlayer = { navController.navigate("player") }) }
+        composable("search") {
+            SearchScreen(
+                onBack = { safeBack() },
+                onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
+                onOpenPlayer = { navController.navigate("player") }
+            )
+        }
         composable("player") { PlayerScreen(navController) }
         composable(
             route = "person/{name}?isDirector={isDirector}",
@@ -314,7 +307,7 @@ private fun AppNav() {
                 navArgument("isDirector") { type = NavType.BoolType; defaultValue = false }
             )
         ) { entry ->
-            PersonScreen(
+            PersonDetailScreen(
                 name = Uri.decode(entry.arguments?.getString("name").orEmpty()),
                 isDirector = entry.arguments?.getBoolean("isDirector") ?: false,
                 onBack = { safeBack() },
@@ -328,7 +321,7 @@ private fun AppNav() {
                 navArgument("series") { type = NavType.BoolType; defaultValue = false }
             )
         ) { entry ->
-            VodDetailScreen(
+            ContentDetailScreen(
                 vodId = entry.arguments?.getLong("vodId") ?: 0L,
                 isSeriesHint = entry.arguments?.getBoolean("series") ?: false,
                 onBack = { safeBack() },

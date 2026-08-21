@@ -1,11 +1,12 @@
 package com.stalkerapp.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -14,59 +15,34 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.stalkerapp.StalkerApp
 
-private val DarkColors = darkColorScheme(
-    primary = Color.White,
-    onPrimary = Color.Black,
-    primaryContainer = Color(0x33FFFFFF),
-    onPrimaryContainer = Color.White,
-    secondary = Color(0x80FFFFFF),
-    background = Color.Black,
-    onBackground = Color.White,
-    surface = Color.Black,
-    onSurface = Color.White,
-    surfaceVariant = Color(0x1AFFFFFF),
-    onSurfaceVariant = Color(0xB3FFFFFF),
-    outline = Color(0x33FFFFFF),
-    error = Color(0xFFFF453A)
-)
-
-private val LightColors = lightColorScheme(
-    primary = Color.Black,
-    onPrimary = Color.White,
-    primaryContainer = Color(0x1A000000),
-    onPrimaryContainer = Color.Black,
-    secondary = Color(0x80000000),
-    background = Color(0xFFF2F2F7),
-    onBackground = Color.Black,
-    surface = Color.White,
-    onSurface = Color.Black,
-    surfaceVariant = Color(0x1A000000),
-    onSurfaceVariant = Color(0xB3000000),
-    outline = Color(0x33000000),
-    error = Color(0xFFFF3B30)
-)
+val LocalPortioColors = staticCompositionLocalOf { PortioColors }
+val LocalPortioTypography = staticCompositionLocalOf { PortioTypography }
+val LocalPortioShape = staticCompositionLocalOf { PortioShape }
 
 /**
- * Tema modu (sistem/açık/koyu/AMOLED), vurgu rengi ve yazı ölçeği
- * Ayarlar → Görünüm & Cihaz'dan okunur. AMOLED modda arka plan tam siyahtır.
+ * PortioTheme - Ana MaterialTheme sarmalayıcısı.
+ * Tema modu (sistem/açık/koyu/AMOLED), vurgu rengi ve yazı ölçeğini uygular.
  */
 @Composable
-fun StalkerTheme(
+fun PortioTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    val settings = (context.applicationContext as StalkerApp).store.settings()
+    val app = context.applicationContext as? StalkerApp
+    val settings = app?.store?.settings()
 
-    val dark = when (settings.themeMode) {
+    val themeMode = settings?.themeMode ?: "dark"
+    val dark = when (themeMode) {
         "light" -> false
         "dark", "amoled" -> true
         else -> darkTheme
     }
-    var colors = if (dark) DarkColors else LightColors
+
+    var colors = if (dark) PortioColors.DarkColorScheme else PortioColors.LightColorScheme
 
     // Vurgu rengi: atanmışsa primary/container ondan türetilir.
-    val accent = settings.accentColor
+    val accent = settings?.accentColor ?: 0L
     if (accent != 0L) {
         val c = Color(accent.toInt())
         val bg = if (dark) Color.Black else Color.White
@@ -77,8 +53,9 @@ fun StalkerTheme(
             onPrimaryContainer = if (dark) Color.White else Color(0xFF10151C)
         )
     }
+
     // AMOLED: tüm yüzeyler tam siyah.
-    if (settings.themeMode == "amoled") {
+    if (themeMode == "amoled") {
         colors = colors.copy(
             background = Color.Black,
             surface = Color.Black,
@@ -88,16 +65,32 @@ fun StalkerTheme(
 
     // Yazı ölçeği: tüm sp tabanlı metinleri ölçeklendirir (LocalDensity.fontScale).
     val density = LocalDensity.current
-    val fontScale = settings.uiFontScale.coerceIn(0.85f, 1.4f)
+    val fontScale = (settings?.uiFontScale ?: 1.0f).coerceIn(0.85f, 1.4f)
 
     CompositionLocalProvider(
-        LocalDensity provides Density(density.density, density.fontScale * fontScale)
+        LocalDensity provides Density(density.density, density.fontScale * fontScale),
+        LocalPortioColors provides PortioColors,
+        LocalPortioTypography provides PortioTypography,
+        LocalPortioShape provides PortioShape
     ) {
         MaterialTheme(
             colorScheme = colors,
+            typography = PortioTypography.MaterialTypography,
+            shapes = PortioShape.MaterialShapes,
             content = content
         )
     }
+}
+
+/**
+ * Geriye dönük uyumluluk için StalkerTheme wrapper'ı.
+ */
+@Composable
+fun StalkerTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    PortioTheme(darkTheme = darkTheme, content = content)
 }
 
 /** Giriş/onboarding ekranları için yumuşak degrade arka plan (tema renklerinden). */
