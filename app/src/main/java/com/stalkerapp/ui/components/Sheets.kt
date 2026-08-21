@@ -290,3 +290,96 @@ fun UpdateDialog(
         }
     }
 }
+
+/** VOD / Dizi Filtreleme & Sıralama Diyaloğu */
+@Composable
+fun VodFilterDialog(
+    lang: String,
+    state: com.stalkerapp.data.VodFilterState,
+    onDismiss: () -> Unit,
+    onApply: (com.stalkerapp.data.VodFilterState) -> Unit
+) {
+    var sortMode by remember { mutableStateOf(state.sortMode) }
+    var minRating by remember { mutableStateOf(state.minRating) }
+    var yearFrom by remember { mutableStateOf(state.yearRange?.first ?: 1980) }
+    var yearTo by remember { mutableStateOf(state.yearRange?.last ?: 2026) }
+    var yearFilterOn by remember { mutableStateOf(state.yearRange != null) }
+    var langFilter by remember { mutableStateOf(state.language) }
+
+    PortioDialog(
+        title = L10n.t(lang, "Filtrele & Sırala"),
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            PortioPrimaryButton(
+                text = L10n.t(lang, "Uygula"),
+                onClick = {
+                    onApply(
+                        state.copy(
+                            sortMode = sortMode,
+                            minRating = minRating,
+                            yearRange = if (yearFilterOn) yearFrom..yearTo else null,
+                            language = langFilter
+                        )
+                    )
+                }
+            )
+        },
+        dismissButton = {
+            PortioGlassButton(
+                text = L10n.t(lang, "Sıfırla"),
+                onClick = { onApply(com.stalkerapp.data.VodFilterState()) }
+            )
+        }
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                L10n.t(lang, "Sıralama"),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            val options = listOf(
+                com.stalkerapp.data.SortMode.DEFAULT to L10n.t(lang, "Varsayılan"),
+                com.stalkerapp.data.SortMode.NEWEST to L10n.t(lang, "En Yeni"),
+                com.stalkerapp.data.SortMode.HIGHEST_RATED to L10n.t(lang, "En Yüksek Puanlı"),
+                com.stalkerapp.data.SortMode.A_Z to "A-Z",
+                com.stalkerapp.data.SortMode.Z_A to "Z-A"
+            )
+            options.forEach { (mode, label) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(PortioShape.Small)
+                        .background(if (sortMode == mode) PortioColors.SurfaceRaised else Color.Transparent)
+                        .clickable { sortMode = mode }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    androidx.compose.material3.RadioButton(
+                        selected = sortMode == mode,
+                        onClick = { sortMode = mode }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${L10n.t(lang, "Minimum Puan")}: ${minRating.toInt()}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            androidx.compose.material3.Slider(
+                value = minRating,
+                onValueChange = { minRating = it },
+                valueRange = 0f..9f,
+                steps = 8
+            )
+        }
+    }
+}

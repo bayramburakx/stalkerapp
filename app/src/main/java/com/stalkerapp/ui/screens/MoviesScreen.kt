@@ -59,8 +59,8 @@ import com.stalkerapp.ui.components.SectionTitle
 import com.stalkerapp.ui.components.VodQuickActionsSheet
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
+import com.stalkerapp.ui.components.VodFilterDialog
 import com.stalkerapp.ui.theme.PortioColors
-import com.stalkerapp.ui.vod.VodFilterDialog
 import com.stalkerapp.util.L10n
 
 /**
