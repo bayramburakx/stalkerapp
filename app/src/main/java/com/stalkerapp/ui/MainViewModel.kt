@@ -749,20 +749,66 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
      * only runs when there is no complete cache yet, or to resume an
      * interrupted sync from its checkpoint.
      */
+    private val categoryItemsCache = java.util.concurrent.ConcurrentHashMap<String, List<VodItem>>()
+
+    /**
+     * TiviMate / OTT Navigator tarzı hızlı talep üzerine (on-demand) VOD kategori yükleyici.
+     * Tüm 80.000 filmi aynı anda indirip belleği şişirmek yerine, yalnızca seçili
+     * kategorinin filmlerini/dizilerini çeker ve önbelleğe alır. Sekme geçişleri anında olur.
+     */
+    suspend fun loadVodCategoryItems(profile: Profile?, catId: Long, isSeries: Boolean): List<VodItem> {
+        val kind = enabledSourceKind()
+        if (kind == "m3u" || kind == "xtream") {
+            val fullCatalog = _externalCatalog.value
+            return if (isSeries) {
+                if (catId == 0L) fullCatalog.series
+                else fullCatalog.series.filter { it.categoryId == catId }
+            } else {
+                if (catId == 0L) fullCatalog.movies
+                else fullCatalog.movies.filter { it.categoryId == catId }
+            }
+        }
+        val p = profile ?: return emptyList()
+        val cacheKey = "${p.portal?.id}:${if (isSeries) "series" else "vod"}:$catId"
+        categoryItemsCache[cacheKey]?.let { return it }
+
+        // Diske kaydedilmiş parça (chunk) varsa hemen dön
+        val diskChunk = store.loadVodCatalogChunks(p.portal?.id ?: "")[catId]
+        if (diskChunk != null && diskChunk.isNotEmpty()) {
+            categoryItemsCache[cacheKey] = diskChunk
+            return diskChunk
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val items = if (isSeries) {
+                    if (catId == 0L) repository.loadSeriesCategories(p).take(6).flatMap {
+                        repository.fetchSeriesCategory(p, it.id, 30).take(15)
+                    }.take(60)
+                    else repository.fetchSeriesCategory(p, catId, 500)
+                } else {
+                    if (catId == 0L) repository.fetchVodPage(p, 1, 60, emptyMap()).first
+                    else repository.fetchVodCategory(p, catId, 500)
+                }
+                categoryItemsCache[cacheKey] = items
+                if (catId != 0L && items.isNotEmpty()) {
+                    store.saveVodCategoryChunk(p.portal?.id ?: "", catId, items)
+                }
+                items
+            } catch (e: Throwable) {
+                emptyList()
+            }
+        }
+    }
+
     fun syncVodIfNeeded(profile: Profile) {
         val portalId = profile.portal?.id ?: return
-        // Completion is decided by the catalog meta file (written only at the
-        // end of a successful sync). A running/interrupted sync has chunks but
-        // no meta yet, so it resumes from its chunks instead of restarting.
         val meta = store.loadVodCatalogMeta(portalId)
         val staleCatalog = meta != null && meta.version < Store.VOD_CATALOG_VERSION
         if (meta != null && !staleCatalog) {
             StalkerApp.instance.vodSyncManager.publishCached(profile)
             return
         }
-        // Kütüphane & İçerik ayarları: otomatik senkron kapalıysa ya da
-        // "yalnızca Wi-Fi" açıkken Wi-Fi yoksa arka plan senkronu başlatılmaz
-        // (kullanıcı isterse "Şimdi Senkronize Et" ile manuel başlatır).
         if (!shouldAutoSyncVod()) return
         StalkerApp.instance.vodSyncManager.ensureSynced(profile, force = staleCatalog)
         VodSyncService.start(app)

@@ -35,7 +35,13 @@ import kotlinx.coroutines.launch
 class StalkerApp : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
+        val okHttpClient = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
         return ImageLoader.Builder(this)
+            .okHttpClient(okHttpClient)
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.20)
@@ -49,6 +55,7 @@ class StalkerApp : Application(), ImageLoaderFactory {
             }
             .allowRgb565(true)
             .respectCacheHeaders(false)
+            .crossfade(false)
             .build()
     }
 

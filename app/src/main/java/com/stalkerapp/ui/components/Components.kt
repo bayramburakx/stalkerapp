@@ -146,27 +146,75 @@ fun UpdateDialog(
 }
 
 @Composable
-fun ChannelLogo(logo: String, modifier: Modifier = Modifier) {
+fun ChannelLogo(
+    logo: String,
+    modifier: Modifier = Modifier,
+    channelName: String = "",
+    baseUrl: String = ""
+) {
+    val resolved = remember(logo, baseUrl) { resolveUrl(logo, baseUrl) }
+    var loadFailed by remember(resolved) { mutableStateOf(false) }
+
+    // Temizlenmiş kanal adı (örn: "↺TRT 1 FHD" -> "TRT 1", "TR ✫ ATV HD+" -> "ATV")
+    val cleanTitle = remember(channelName) {
+        channelName
+            .replace(Regex("^[↺✦☪★✫✪*\\-\\s]+"), "")
+            .replace(Regex("(?i)\\s+(FHD|UHD|HD\\+|HD|SD|4K|2160p|1080p|720p|TEST|HEVC)\\b.*"), "")
+            .trim()
+            .ifBlank { channelName.take(6).trim() }
+    }
+
+    val badgeGradient = remember(cleanTitle) {
+        val hash = cleanTitle.hashCode()
+        val colors = when (Math.abs(hash) % 6) {
+            0 -> listOf(Color(0xFF1E3A8A), Color(0xFF3B82F6)) // Mavi
+            1 -> listOf(Color(0xFF831843), Color(0xFFEC4899)) // Pembe/Kırmızı
+            2 -> listOf(Color(0xFF14532D), Color(0xFF22C55E)) // Yeşil
+            3 -> listOf(Color(0xFF581C87), Color(0xFFA855F7)) // Mor
+            4 -> listOf(Color(0xFF7C2D12), Color(0xFFF97316)) // Turuncu
+            else -> listOf(Color(0xFF0F172A), Color(0xFF334155)) // Koyu Gri
+        }
+        androidx.compose.ui.graphics.Brush.linearGradient(colors)
+    }
+
     Box(
         modifier = modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .size(44.dp, 32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF131722))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center
     ) {
-        if (logo.isNotBlank()) {
+        if (resolved.isNotBlank() && !loadFailed && !resolved.contains("tvlogolar.xyz")) {
             AsyncImage(
-                model = logo,
-                contentDescription = null,
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(resolved)
+                    .crossfade(false)
+                    .build(),
+                contentDescription = channelName,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(34.dp)
+                onError = { loadFailed = true },
+                modifier = Modifier.fillMaxSize().padding(3.dp)
             )
         } else {
-            Icon(
-                Icons.Default.Tv,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Şık Kanal Monogram / İsim Rozeti
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(badgeGradient)
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = cleanTitle.take(8).ifBlank { "TV" },
+                    color = Color.White,
+                    fontSize = 10.androidx.compose.ui.unit.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 2,
+                    lineHeight = 11.androidx.compose.ui.unit.sp
+                )
+            }
         }
     }
 }
@@ -238,7 +286,11 @@ fun ChannelRow(
                 modifier = Modifier.size(28.dp)
             )
         }
-        ChannelLogo(logo = resolveUrl(channel.logo, baseUrl))
+        ChannelLogo(
+            logo = channel.logo,
+            channelName = channel.name,
+            baseUrl = baseUrl
+        )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = channel.name,

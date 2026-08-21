@@ -402,6 +402,7 @@ fun EpgGuideScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 ChannelLogo(
                                     logo = resolveUrl(ch.logo, profile?.baseUrl.orEmpty()),
+                                    channelName = ch.name,
                                     modifier = Modifier.size(40.dp)
                                 )
                                 Spacer(Modifier.width(12.dp))
@@ -561,7 +562,11 @@ private fun EpgGridView(
                             .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ChannelLogo(logo = resolveUrl(ch.logo, baseUrl), modifier = Modifier.size(28.dp))
+                        ChannelLogo(
+                            logo = resolveUrl(ch.logo, baseUrl),
+                            channelName = ch.name,
+                            modifier = Modifier.size(28.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = ch.name,

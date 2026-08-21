@@ -1255,6 +1255,7 @@ fun PlayerScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.width(16.dp))
                         ChannelLogo(
                             logo = resolveUrl(currentChannel?.logo ?: "", profile?.baseUrl.orEmpty()),
+                            channelName = currentChannel?.name.orEmpty(),
                             modifier = Modifier.size(38.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -2494,7 +2495,11 @@ fun PlayerInfoSheet(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (channel != null) {
-                    ChannelLogo(logo = resolveUrl(channel.logo, profile?.baseUrl.orEmpty()), modifier = Modifier.size(52.dp))
+                    ChannelLogo(
+                        logo = resolveUrl(channel.logo, profile?.baseUrl.orEmpty()),
+                        channelName = channel.name,
+                        modifier = Modifier.size(52.dp)
+                    )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(channel.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)

@@ -396,18 +396,18 @@ fun TvHomeScreen(
                     )
                 }
                 2 -> {
-                    // FİLMLER - TV NATIVE
+                    // FİLMLER - TV NATIVE (On-Demand Kategori Yükleme)
                     TvVodSection(
-                        catalog = catalog,
+                        vm = vm,
                         isSeries = false,
                         tmdbApiKey = settings.tmdbApiKey,
                         onOpenVod = { id -> onOpenVod(id, false) }
                     )
                 }
                 3 -> {
-                    // DİZİLER - TV NATIVE
+                    // DİZİLER - TV NATIVE (On-Demand Kategori Yükleme)
                     TvVodSection(
-                        catalog = catalog,
+                        vm = vm,
                         isSeries = true,
                         tmdbApiKey = settings.tmdbApiKey,
                         onOpenVod = { id -> onOpenVod(id, true) }
@@ -709,49 +709,60 @@ private fun TvLiveSection(
 // =========================================================================
 @Composable
 private fun TvVodSection(
-    catalog: VodCatalogState,
+    vm: MainViewModel,
     isSeries: Boolean,
     tmdbApiKey: String,
     onOpenVod: (Long) -> Unit
 ) {
-    val items = if (isSeries) {
-        if (catalog.series.isNotEmpty()) catalog.series
-        else catalog.allItems.filter { catalog.isSeriesItem(it) }
-    } else {
-        if (catalog.movies.isNotEmpty()) catalog.movies
-        else catalog.allItems.filter { !catalog.isSeriesItem(it) }
-    }
+    val profile = vm.repository.cachedProfile()
+    var categories by remember(isSeries, profile) { mutableStateOf<List<Genre>>(emptyList()) }
+    var selectedCatId by remember(isSeries, profile) { mutableStateOf(0L) }
+    var items by remember(isSeries, selectedCatId, profile) { mutableStateOf<List<VodItem>>(emptyList()) }
+    var loadingCats by remember(isSeries, profile) { mutableStateOf(true) }
+    var loadingItems by remember(isSeries, selectedCatId, profile) { mutableStateOf(true) }
+    var visibleLimit by remember(selectedCatId) { mutableIntStateOf(40) }
 
-    val cats = remember(catalog.categories, isSeries) {
-        catalog.categories.filter { c ->
-            val isS = com.stalkerapp.data.ExternalVod.isSeriesCat(c.id) ||
-                VodCatalogState.isSeriesCatTitle(c.title)
-            if (isSeries) isS else !isS
+    LaunchedEffect(profile, isSeries, vm.activeSourceKind(), vm.activeSourceId()) {
+        loadingCats = true
+        categories = withContext(Dispatchers.IO) {
+            val kind = vm.enabledSourceKind()
+            if (kind == "m3u" || kind == "xtream") {
+                val allCats = vm.externalCatalog.value.categories
+                allCats.filter { c ->
+                    val isS = com.stalkerapp.data.ExternalVod.isSeriesCat(c.id) ||
+                        VodCatalogState.isSeriesCatTitle(c.title)
+                    if (isSeries) isS else !isS
+                }
+            } else {
+                profile?.let { p ->
+                    if (isSeries) vm.repository.loadSeriesCategories(p)
+                    else vm.repository.loadVodCategories(p)
+                } ?: emptyList()
+            }
         }
+        loadingCats = false
     }
 
-    var selectedCatId by remember { mutableStateOf(0L) }
-    var visibleLimit by remember { mutableIntStateOf(40) }
-
-    val filtered = remember(items, selectedCatId) {
-        if (selectedCatId == 0L) items
-        else items.filter { it.categoryId == selectedCatId }
+    LaunchedEffect(profile, isSeries, selectedCatId, vm.activeSourceKind(), vm.activeSourceId()) {
+        loadingItems = true
+        items = vm.loadVodCategoryItems(profile, selectedCatId, isSeries)
+        loadingItems = false
     }
 
-    val displayedItems = remember(filtered, visibleLimit) {
-        filtered.take(visibleLimit)
+    val displayedItems = remember(items, visibleLimit) {
+        items.take(visibleLimit)
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         // Üst Kategori Şeridi
-        if (cats.isNotEmpty()) {
+        if (categories.isNotEmpty()) {
             LazyRow(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
                     TvFilterChip(
-                        title = "Tümü (${items.size})",
+                        title = "Tümü",
                         selected = selectedCatId == 0L,
                         onClick = {
                             selectedCatId = 0L
@@ -759,7 +770,7 @@ private fun TvVodSection(
                         }
                     )
                 }
-                items(cats, key = { it.id }) { cat ->
+                items(categories, key = { it.id }) { cat ->
                     TvFilterChip(
                         title = cat.title,
                         selected = selectedCatId == cat.id,
@@ -772,35 +783,56 @@ private fun TvVodSection(
             }
         }
 
-        // VOD Poster Grid
-        val gridState = rememberLazyGridState()
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(5),
-            state = gridState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(displayedItems, key = { it.id }) { item ->
-                TvVodCard(
-                    item = item,
-                    tmdbApiKey = tmdbApiKey,
-                    onClick = { onOpenVod(item.id) }
-                )
+        if (loadingItems && items.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color(0xFF00E5FF))
             }
-            if (displayedItems.size < filtered.size) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(80.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF131722))
-                            .clickable { visibleLimit += 40 },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Daha fazla yükle…", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        } else if (!loadingItems && items.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Bu kategoride içerik bulunamadı", color = Color.White.copy(0.6f), fontSize = 14.sp)
+            }
+        } else {
+            // VOD Poster Grid
+            val gridState = rememberLazyGridState()
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(5),
+                state = gridState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(displayedItems, key = { it.id }) { item ->
+                    TvVodCard(
+                        item = item,
+                        tmdbApiKey = tmdbApiKey,
+                        onClick = { onOpenVod(item.id) }
+                    )
+                }
+                if (displayedItems.size < items.size) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF131722))
+                                .clickable { visibleLimit += 40 },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Daha fazla yükle (${items.size - displayedItems.size})…",
+                                color = Color(0xFF00E5FF),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -1194,6 +1226,7 @@ private fun TvChannelCard(
     ) {
         ChannelLogo(
             logo = channel.logo,
+            channelName = channel.name,
             modifier = Modifier.size(80.dp, 48.dp)
         )
         if (focused) {
@@ -1255,6 +1288,7 @@ private fun TvChannelGridCard(
     ) {
         ChannelLogo(
             logo = channel.logo,
+            channelName = channel.name,
             modifier = Modifier.size(54.dp, 36.dp)
         )
         Spacer(Modifier.width(10.dp))

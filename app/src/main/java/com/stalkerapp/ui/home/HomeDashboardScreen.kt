@@ -862,7 +862,11 @@ private fun ChannelCard(channel: Channel, baseUrl: String, onClick: () -> Unit) 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            ChannelLogo(logo = resolveUrl(channel.logo, baseUrl), modifier = Modifier.size(40.dp))
+            ChannelLogo(
+                logo = resolveUrl(channel.logo, baseUrl),
+                channelName = channel.name,
+                modifier = Modifier.size(40.dp)
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(channel.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (channel.tvGenreTitle.isNotBlank()) {
