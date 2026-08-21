@@ -142,6 +142,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     /** Tüm uygulama verilerini siler ve akışları sıfırlar. */
     fun clearAllData() {
         store.clearAllData()
+        M3uParser.clearCache()
         refreshFlows()
     }
 
@@ -236,12 +237,12 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     // ---------- M3U / Xtream kaynakları ----------
     // Oturum içinde bir kez yüklenip önbellekte tutulur (sekmeler arası geçişte
     // tekrar indirme olmaz).
-    private val m3uCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
-    private val xtreamCache = mutableMapOf<String, Pair<List<Genre>, List<Channel>>>()
+    private val m3uCache = java.util.concurrent.ConcurrentHashMap<String, Pair<List<Genre>, List<Channel>>>()
+    private val xtreamCache = java.util.concurrent.ConcurrentHashMap<String, Pair<List<Genre>, List<Channel>>>()
 
     // Silinen M3U kaynaklarının izleri: arka planda hâlâ süren indirme/parse
     // (testM3u, loadM3uChannels vb.) bitince kaynağı GERİ EKLEMESİN.
-    private val deletedM3uIds = HashSet<String>()
+    private val deletedM3uIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     // M3U içerik dosyasına aynı anda iki coroutine yazmasın (134MB liste iki kez
     // indirilip bozuk dosya oluşturabiliyordu) — tekilleştirme kilidi.
@@ -293,6 +294,7 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
             // Farklı bir M3U/Xtream kaynağına geçildiyse eski dış kataloğu
             // temizle — aksi halde önceki kaynağın içeriği gösterilir (bayat).
             if (prevKind != kind || prevId != id) {
+                M3uParser.clearCache()
                 _externalCatalog.value = VodCatalogState()
             }
             // M3U/Xtream kataloğunu arka planda kur (Filmler/Diziler anında dolu olsun).
@@ -474,8 +476,8 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
 
     // ---------- M3U / Xtream VOD kataloğu ----------
 
-    private val m3uVodCache = mutableMapOf<String, Pair<List<Genre>, List<VodItem>>>()
-    private val xtreamVodCache = mutableMapOf<String, Pair<List<Genre>, List<VodItem>>>()
+    private val m3uVodCache = java.util.concurrent.ConcurrentHashMap<String, Pair<List<Genre>, List<VodItem>>>()
+    private val xtreamVodCache = java.util.concurrent.ConcurrentHashMap<String, Pair<List<Genre>, List<VodItem>>>()
 
     /** M3U kaynağının film/dizi kataloğunu yükler (gerekirse içeriği indirir). */
     suspend fun loadM3uVod(source: M3uSource): Pair<List<Genre>, List<VodItem>> {

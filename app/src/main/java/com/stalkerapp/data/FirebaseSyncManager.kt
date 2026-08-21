@@ -82,7 +82,9 @@ class FirebaseSyncManager(private val context: Context) {
     suspend fun signInWithGoogle(account: GoogleSignInAccount): Result<FirebaseUser> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+                val idToken = account.idToken
+                    ?: throw Exception("Google ID Token alınamadı")
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
                 auth.signInWithCredential(credential).await().user!!
             }
         }

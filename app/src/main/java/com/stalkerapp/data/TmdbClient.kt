@@ -75,7 +75,7 @@ class TmdbClient(
         .followRedirects(true)
         .build()
 
-    private val cache = mutableMapOf<String, Any>()
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Any>()
     private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val resolveSemaphore = kotlinx.coroutines.sync.Semaphore(3)
 

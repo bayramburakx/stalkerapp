@@ -62,25 +62,25 @@ class PortalRepository(
 
     private fun l10n(text: String): String = L10n.t(store.settings().language, text)
 
-    private val handshakeTokens = mutableMapOf<String, String>()
-    private val streamTokens = mutableMapOf<String, String>()
-    private val profiles = mutableMapOf<String, Profile>()
-    private val genresCache = mutableMapOf<String, List<Genre>>()
-    private val channelsCache = mutableMapOf<String, MutableMap<Long, List<Channel>>>()
-    private val vodGenresCache = mutableMapOf<String, List<Genre>>()
-    private val seriesGenresCache = mutableMapOf<String, List<Genre>>()
+    private val handshakeTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val streamTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val profiles = java.util.concurrent.ConcurrentHashMap<String, Profile>()
+    private val genresCache = java.util.concurrent.ConcurrentHashMap<String, List<Genre>>()
+    private val channelsCache = java.util.concurrent.ConcurrentHashMap<String, MutableMap<Long, List<Channel>>>()
+    private val vodGenresCache = java.util.concurrent.ConcurrentHashMap<String, List<Genre>>()
+    private val seriesGenresCache = java.util.concurrent.ConcurrentHashMap<String, List<Genre>>()
     // Series season structure: seriesId -> (season number, episode numbers).
     // This portal has no get_season_list/get_episodes; seasons come back as
     // get_ordered_list&movie_id=<seriesId> items whose `series` array lists the
     // episode numbers. Cache them so loadEpisodes can build playable episodes.
-    private val seriesSeasonsCache = mutableMapOf<Long, List<Pair<Long, List<Int>>>>()
-    private val seriesSeasonsListCache = mutableMapOf<Long, List<Season>>()
+    private val seriesSeasonsCache = java.util.concurrent.ConcurrentHashMap<Long, List<Pair<Long, List<Int>>>>()
+    private val seriesSeasonsListCache = java.util.concurrent.ConcurrentHashMap<Long, List<Season>>()
     // Xtream dizileri: get_series_info sonucu (kaynakId:seriesId -> sezonlar).
-    private val xtreamSeriesInfoCache = mutableMapOf<String, List<XtreamSeasonInfo>>()
-    private val vodCache = mutableMapOf<String, MutableMap<String, List<VodItem>>>()
-    private val vodTotals = mutableMapOf<String, Int>()
-    private val vodItemsById = mutableMapOf<String, MutableMap<Long, VodItem>>()
-    private val epgCache = mutableMapOf<Long, List<EpgProgram>>()
+    private val xtreamSeriesInfoCache = java.util.concurrent.ConcurrentHashMap<String, List<XtreamSeasonInfo>>()
+    private val vodCache = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, List<VodItem>>>()
+    private val vodTotals = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val vodItemsById = java.util.concurrent.ConcurrentHashMap<String, MutableMap<Long, VodItem>>()
+    private val epgCache = java.util.concurrent.ConcurrentHashMap<Long, List<EpgProgram>>()
     // Harici (XMLTV) EPG: xmltv_id -> programlar. 6 saatte bir yeniden indirilir.
     private val externalEpgMutex = Mutex()
     private var externalEpg: Map<String, List<EpgProgram>> = emptyMap()
@@ -1302,6 +1302,7 @@ class PortalRepository(
         vodItemsById.clear()
         epgCache.clear()
         xtreamSeriesInfoCache.clear()
+        M3uParser.clearCache()
         vodCategoryParam = null
         vodPageParam = null
         vodPageSize = 0

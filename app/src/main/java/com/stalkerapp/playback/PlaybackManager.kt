@@ -762,11 +762,15 @@ object PlaybackManager {
         if (store.activeSourceKind() == "xtream") return
         val next = ChannelQueue.next ?: return
         val queue = ChannelQueue.channels
+        val targetIndex = ChannelQueue.index + 1
         scope.launch {
             try {
                 val url = repository.channelStreamUrl(next, ChannelQueue.profile) ?: return@launch
                 if (url.isBlank()) return@launch
+                // Hızlı zapping: suspend noktasından sonra kuyruk değişmiş olabilir —
+                // hem kanal listesi referansı hem de hedef index kontrol edilir.
                 if (standbyPlayer != null) return@launch
+                if (ChannelQueue.channels !== queue || ChannelQueue.index + 1 != targetIndex) return@launch
                 val p = buildPlayer()
                 // Ön-tampon yalnızca: playWhenReady=false olduğu için ses çıkmaz ve
                 // audio-focus alınmaz. buildPlayer() playWhenReady=true kurar; bu
@@ -777,10 +781,12 @@ object PlaybackManager {
                 p.prepare()
                 // Bu sırada kuyruk değiştiyse (yeni kanal seçildi) standby artık
                 // geçersizdir; boşa kurulan player'ı serbest bırak.
-                if (ChannelQueue.channels !== queue) {
+                if (ChannelQueue.channels !== queue || ChannelQueue.index + 1 != targetIndex) {
                     p.release()
                     return@launch
                 }
+                // Başka bir coroutine arada standby kurmuşsa onu serbest bırak.
+                standbyPlayer?.release()
                 standbyPlayer = p
             } catch (_: Exception) {
                 standbyPlayer = null
@@ -1106,7 +1112,17 @@ object PlaybackManager {
             metadata.title?.toString() ?: currentTitle,
             metadata.artist?.toString() ?: currentSubtitle
         )
-        s.startForeground(NOTIFICATION_ID, notif)
+        try {
+            s.startForeground(NOTIFICATION_ID, notif)
+        } catch (e: Exception) {
+            // Android 12+: ForegroundServiceStartNotAllowedException arka plandan
+            // foreground servis başlatılamadığında fırlatılır. Bildirimi güncelle
+            // ama crash olmasın.
+            runCatching {
+                val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                nm?.notify(NOTIFICATION_ID, notif)
+            }
+        }
     }
 
     private fun buildNotification(context: Context, title: String, subtitle: String): Notification {

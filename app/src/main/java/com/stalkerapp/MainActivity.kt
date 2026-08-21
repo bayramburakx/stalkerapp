@@ -68,7 +68,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        PlaybackManager.enterPip(this)
+        // PiP yalnızca aktif bir oynatma varsa ve kullanıcı oynatıcı ekranındayken
+        // tetiklenir — aksi halde Ayarlar veya Ana Sayfa PiP'e girer.
+        if (PlaybackManager.isPlaying()) {
+            PlaybackManager.enterPip(this)
+        }
     }
 
     override fun onStop() {

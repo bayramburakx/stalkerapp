@@ -128,17 +128,20 @@ class CacheManager(private val context: Context) {
      * Belirli bir boyut limitini aşıyorsa en eski VOD önbelleklerini siler.
      */
     fun enforceQuota(maxBytes: Long) {
-        val used = cacheUsageBytes()
-        if (used <= maxBytes) return
+        var currentUsage = cacheUsageBytes()
+        if (currentUsage <= maxBytes) return
 
-        Log.d(tag, "Disk kotası aşıldı ($used > $maxBytes), eski önbellekler temizleniyor")
+        Log.d(tag, "Disk kotası aşıldı ($currentUsage > $maxBytes), eski önbellekler temizleniyor")
         context.filesDir.walkTopDown()
             .filter { it.isFile && (it.name.startsWith("vod_catalog_") || it.name.startsWith("ext_vod_")) }
             .sortedBy { it.lastModified() }
             .forEach { file ->
-                if (cacheUsageBytes() > maxBytes * 0.8) {
-                    file.delete()
-                    Log.d(tag, "Silindi: ${file.name}")
+                if (currentUsage > maxBytes * 0.8) {
+                    val fileSize = file.length()
+                    if (file.delete()) {
+                        currentUsage -= fileSize
+                        Log.d(tag, "Silindi: ${file.name}")
+                    }
                 }
             }
     }

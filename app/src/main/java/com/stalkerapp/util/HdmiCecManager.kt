@@ -76,13 +76,6 @@ object HdmiCecManager {
         if (playbackClient == null || oneTouchPlayMethod == null) return
         
         runCatching {
-            // Create OneTouchPlayCallback dynamically
-            val callbackClass = Class.forName("android.hardware.hdmi.HdmiPlaybackClient\$OneTouchPlayCallback")
-            val callback = callbackClass.getDeclaredConstructor().newInstance()
-            
-            // Override onComplete using a proxy or anonymous class
-            // Since we can't easily create anonymous class via reflection,
-            // we'll skip the callback for now
             oneTouchPlayMethod?.invoke(playbackClient, createOneTouchPlayCallback())
         }.onFailure {
             Log.d("HdmiCecManager", "One Touch Play failed: ${it.message}")

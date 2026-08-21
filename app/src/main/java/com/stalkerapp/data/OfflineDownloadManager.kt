@@ -290,15 +290,18 @@ object OfflineDownloadManager {
                 if (!destFile.exists() || destFile.length() < 1024L) {
                     val cacheDataSource = cacheDataSourceFactory().createDataSource()
                     val dataSpec = androidx.media3.datasource.DataSpec(Uri.parse(entry.url))
-                    cacheDataSource.open(dataSpec)
-                    tempFile.outputStream().use { out ->
-                        val buf = ByteArray(128 * 1024)
-                        var bytesRead: Int
-                        while (cacheDataSource.read(buf, 0, buf.size).also { bytesRead = it } != -1) {
-                            out.write(buf, 0, bytesRead)
+                    try {
+                        cacheDataSource.open(dataSpec)
+                        tempFile.outputStream().use { out ->
+                            val buf = ByteArray(128 * 1024)
+                            var bytesRead: Int
+                            while (cacheDataSource.read(buf, 0, buf.size).also { bytesRead = it } != -1) {
+                                out.write(buf, 0, bytesRead)
+                            }
                         }
+                    } finally {
+                        runCatching { cacheDataSource.close() }
                     }
-                    cacheDataSource.close()
                     if (tempFile.exists() && tempFile.length() > 1024L) {
                         tempFile.renameTo(destFile)
                     }
