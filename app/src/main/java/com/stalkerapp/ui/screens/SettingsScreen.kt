@@ -11,12 +11,12 @@ import com.stalkerapp.ui.MainViewModel
 fun SettingsScreen(
     vm: MainViewModel,
     modifier: Modifier = Modifier,
-    onPortalsChanged: (() -> Unit)? = null,
-    onOpenLibrary: (() -> Unit)? = null,
-    onOpenPlayer: (() -> Unit)? = null,
-    onBack: (() -> Unit)? = null,
-    onRestartSetup: (() -> Unit)? = null,
-    onOpenProfiles: (() -> Unit)? = null
+    onPortalsChanged: () -> Unit = {},
+    onOpenLibrary: () -> Unit = {},
+    onOpenPlayer: () -> Unit = {},
+    onBack: () -> Unit = {},
+    onRestartSetup: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {}
 ) {
     com.stalkerapp.ui.settings.SettingsScreen(
         vm = vm,
