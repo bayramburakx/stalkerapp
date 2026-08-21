@@ -2859,7 +2859,7 @@ fun ChannelListPanel(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
-                                    ChannelLogo(url = ch.logo, modifier = Modifier.size(60.dp))
+                                    ChannelLogo(logo = ch.logo, modifier = Modifier.size(60.dp))
                                     Spacer(Modifier.height(8.dp))
                                     Text(
                                         text = ch.name,

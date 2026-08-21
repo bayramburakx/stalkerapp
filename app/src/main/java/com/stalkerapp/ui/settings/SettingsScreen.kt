@@ -2843,6 +2843,7 @@ private fun SettingsNavRow(
         }
     }
 }
+@Composable
 private fun SettingsPage(
     lang: String,
     icon: ImageVector,

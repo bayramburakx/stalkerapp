@@ -333,7 +333,7 @@ private fun ProfileCard(
     }
 }
 
-@Composable}
+@Composable
 
 private fun AddProfileCard(lang: String, onClick: () -> Unit) {
     fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
@@ -376,7 +376,7 @@ private fun AddProfileCard(lang: String, onClick: () -> Unit) {
     }
 }
 
-@Composable}
+@Composable
 
 private fun AddProfileDialog(
     lang: String,
