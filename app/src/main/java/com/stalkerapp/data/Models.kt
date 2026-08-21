@@ -222,7 +222,9 @@ data class Settings(
     /** Maksimum VOD katalog önbelleği (MB). */
     val maxCacheMb: Long = 500L,
 
-    // ---------- Android TV ----------
+    // ---------- Android TV & Deneyim ----------
+    /** Tercih edilen arayüz modu: "auto" (otomatik algıla), "tv" (Android TV modu), "mobile" (Mobil mod). */
+    val preferredLayout: String = "auto",
     /** HDMI-CEC: oynatma başlayınca TV'yi aç (One Touch Play). */
     val hdmiCecOneTouchPlay: Boolean = true,
     /** Numara tuşuyla kanal açma (Android TV). */

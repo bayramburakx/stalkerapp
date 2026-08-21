@@ -231,10 +231,12 @@ private fun AppNav() {
         composable("home") {
             // Android TV (Leanback): 10-foot arayüz — büyük kartlar, D-pad gezinme.
             val ctx = LocalContext.current
-            val isTv = ((ctx.resources.configuration.uiMode and
-                Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION) ||
-                ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
-                ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION)
+            val st = app.store.settings()
+            val isTv = when (st.preferredLayout) {
+                "tv" -> true
+                "mobile" -> false
+                else -> com.stalkerapp.ui.tv.isTvDevice(ctx)
+            }
             if (isTv) {
                 com.stalkerapp.ui.tv.TvHomeScreen(
                     vm = vm,

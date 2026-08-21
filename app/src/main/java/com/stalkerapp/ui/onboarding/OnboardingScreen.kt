@@ -100,12 +100,16 @@ private val FEATURES = listOf(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(onDone: () -> Unit) {
-    val app = LocalContext.current.applicationContext as StalkerApp
+    val context = LocalContext.current
+    val app = context.applicationContext as StalkerApp
     val vm: MainViewModel = rememberMainViewModel(app)
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
 
-    // Dil: ilk ekranda seçilir ve kaydedilir; tüm sihirbaz o dilde gösterilir.
+    val detectedIsTv = remember { com.stalkerapp.ui.tv.isTvDevice(context) }
+    var selectedLayout by remember { mutableStateOf(if (detectedIsTv) "tv" else "mobile") }
+
+    // Dil: sihirbaz başında seçilir ve kaydedilir
     var lang by remember { mutableStateOf(app.store.settings().language) }
     fun t(text: String) = L10n.t(lang, text)
 
@@ -127,7 +131,12 @@ fun OnboardingScreen(onDone: () -> Unit) {
     var sourceError by remember { mutableStateOf<String?>(null) }
 
     fun finish() {
-        app.store.saveSettings(app.store.settings().copy(language = lang))
+        app.store.saveSettings(
+            app.store.settings().copy(
+                language = lang,
+                preferredLayout = selectedLayout
+            )
+        )
         app.store.setOnboardingDone(true)
         onDone()
     }
@@ -140,7 +149,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
     ) {
         // Üst çubuk: geri + atla
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (pagerState.currentPage > 0) {
@@ -162,13 +171,20 @@ fun OnboardingScreen(onDone: () -> Unit) {
             modifier = Modifier.weight(1f)
         ) { page ->
             when (page) {
-                0 -> LanguagePage(
-                    current = lang,
-                    onSelect = { lang = it },
+                0 -> DeviceModePage(
+                    current = selectedLayout,
+                    detectedIsTv = detectedIsTv,
+                    lang = lang,
+                    onSelect = { selectedLayout = it },
                     onContinue = { scope.launch { pagerState.animateScrollToPage(1) } }
                 )
-                1 -> WelcomePage(lang = lang) { scope.launch { pagerState.animateScrollToPage(2) } }
-                2 -> SourcePage(
+                1 -> LanguagePage(
+                    current = lang,
+                    onSelect = { lang = it },
+                    onContinue = { scope.launch { pagerState.animateScrollToPage(2) } }
+                )
+                2 -> WelcomePage(lang = lang) { scope.launch { pagerState.animateScrollToPage(3) } }
+                3 -> SourcePage(
                     lang = lang,
                     vm = vm,
                     sourceChoice = sourceChoice,
@@ -195,20 +211,203 @@ fun OnboardingScreen(onDone: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
             horizontalArrangement = Arrangement.Center
         ) {
-            repeat(3) { i ->
+            repeat(4) { i ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
                         .size(if (i == pagerState.currentPage) 9.dp else 7.dp)
                         .clip(CircleShape)
                         .background(
-                            if (i == pagerState.currentPage) Color.White
+                            if (i == pagerState.currentPage) Color(0xFF00E5FF)
                             else Color.White.copy(alpha = 0.3f)
                         )
                 )
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Cihaz Deneyimi Seçimi Ekranı (Mobil vs Android TV). */
+@Composable
+private fun DeviceModePage(
+    current: String,
+    detectedIsTv: Boolean,
+    lang: String,
+    onSelect: (String) -> Unit,
+    onContinue: () -> Unit
+) {
+    fun t(text: String) = L10n.t(lang, text)
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(max = 560.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(16.dp))
+            Image(
+                painter = painterResource(R.drawable.portio_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(RoundedCornerShape(22.dp))
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                t("Kullanım Deneyiminizi Seçin"),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                t("Arayüzü cihazınıza en uygun şekilde optimize edelim."),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(28.dp))
+
+            DeviceModeCard(
+                icon = Icons.Default.Tv,
+                title = t("Android TV & TV Box"),
+                desc = t("Kumanda D-Pad ile gezinme, 10-foot sinematik arayüz, otomatik odaklanma ve büyük posterler."),
+                isRecommended = detectedIsTv,
+                selected = current == "tv",
+                onClick = { onSelect("tv") }
+            )
+            Spacer(Modifier.height(14.dp))
+            DeviceModeCard(
+                icon = Icons.Default.Movie,
+                title = t("Mobil Telefon & Tablet"),
+                desc = t("Dokunmatik kontroller, portre/yatay görünüm, alt menü ve resim içinde resim (PiP)."),
+                isRecommended = !detectedIsTv,
+                selected = current == "mobile",
+                onClick = { onSelect("mobile") }
+            )
+
+            Spacer(Modifier.height(32.dp))
+            Button(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(t("Devam Et"), fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun DeviceModeCard(
+    icon: ImageVector,
+    title: String,
+    desc: String,
+    isRecommended: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.04f else 1.0f, label = "dev_card_scale")
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .border(
+                width = if (isFocused) 3.dp else if (selected) 2.dp else 1.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else if (selected) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.10f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
+        shape = RoundedCornerShape(16.dp),
+        color = if (isFocused) Color(0xFF1E293B)
+        else if (selected) Color(0xFF131A2A)
+        else Color.White.copy(alpha = 0.05f)
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) Color(0xFF00E5FF).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (selected) Color(0xFF00E5FF) else Color.White,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (isRecommended) {
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF00E5FF).copy(alpha = 0.25f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "Önerilen",
+                                color = Color(0xFF00E5FF),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.65f),
+                    lineHeight = 16.sp
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Text("✓", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                }
+            }
+        }
     }
 }
 

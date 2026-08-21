@@ -465,7 +465,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(recentlyWatched, key = { it.item.id }) { e ->
+                            itemsIndexed(recentlyWatched, key = { index, e -> "rec_${e.item.id}_$index" }) { _, e ->
                                 VodPoster(
                                     item = e.item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -486,7 +486,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(continueWatching, key = { it.item.id }) { e ->
+                            itemsIndexed(continueWatching, key = { index, e -> "cw_${e.item.id}_$index" }) { _, e ->
                                 ContinueWatchingCard(
                                     item = e.item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -506,7 +506,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(recommendations, key = { it.id }) { item ->
+                            itemsIndexed(recommendations, key = { index, item -> "rec_${item.id}_$index" }) { _, item ->
                                 VodPoster(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -528,7 +528,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(movies, key = { it.id }) { item ->
+                            itemsIndexed(movies, key = { index, item -> "mov_${item.id}_$index" }) { _, item ->
                                 VodPoster(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -550,7 +550,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(series, key = { it.id }) { item ->
+                            itemsIndexed(series, key = { index, item -> "ser_${item.id}_$index" }) { _, item ->
                                 VodPoster(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -570,7 +570,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(recentChannels, key = { it.id }) { ch ->
+                            itemsIndexed(recentChannels, key = { index, ch -> "rc_${ch.id}_$index" }) { _, ch ->
                                 ChannelCard(
                                     channel = ch,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -594,7 +594,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(favChannels.take(sectionSize), key = { it.id }) { ch ->
+                            itemsIndexed(favChannels.take(sectionSize), key = { index, ch -> "fc_${ch.id}_$index" }) { _, ch ->
                                 ChannelCard(
                                     channel = ch,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -617,7 +617,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(homeChannels.orEmpty(), key = { it.id }) { ch ->
+                            itemsIndexed(homeChannels.orEmpty(), key = { index, ch -> "live_${ch.id}_$index" }) { _, ch ->
                                 ChannelCard(
                                     channel = ch,
                                     baseUrl = profile?.baseUrl.orEmpty(),
@@ -638,7 +638,7 @@ fun HomeDashboardScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(favVods.take(sectionSize), key = { it.id }) { item ->
+                            itemsIndexed(favVods.take(sectionSize), key = { index, item -> "fv_${item.id}_$index" }) { _, item ->
                                 VodPoster(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),

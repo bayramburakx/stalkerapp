@@ -698,20 +698,22 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
     suspend fun loadChannelsForActiveSource(profile: Profile?): Pair<List<Genre>, List<Channel>>? {
         val kind = enabledSourceKind() ?: return null
         val id = store.activeSourceId()
-        return when (kind) {
-            "m3u" -> store.m3uSources().firstOrNull { it.id == id }?.let { loadM3uChannels(it) }
-            "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamChannels(it) }
-            else -> {
-                val p = profile ?: return null
-                coroutineScope {
-                    val catsDeferred = async { runCatching { repository.loadGenres(p) }.getOrDefault(emptyList()) }
-                    val channelsDeferred = async { runCatching { repository.loadChannels(p, 0) }.getOrDefault(emptyList()) }
-                    val cats = catsDeferred.await()
-                    val channels = channelsDeferred.await()
-                    listOf(Genre(0, "Tümü")) + cats to channels
+        return runCatching {
+            when (kind) {
+                "m3u" -> store.m3uSources().firstOrNull { it.id == id }?.let { loadM3uChannels(it) }
+                "xtream" -> store.xtreamSources().firstOrNull { it.id == id }?.let { loadXtreamChannels(it) }
+                else -> {
+                    val p = profile ?: return null
+                    coroutineScope {
+                        val catsDeferred = async { runCatching { repository.loadGenres(p) }.getOrDefault(emptyList()) }
+                        val channelsDeferred = async { runCatching { repository.loadChannels(p, 0) }.getOrDefault(emptyList()) }
+                        val cats = catsDeferred.await()
+                        val channels = channelsDeferred.await()
+                        listOf(Genre(0, "Tümü")) + cats to channels
+                    }
                 }
             }
-        }
+        }.getOrNull()
     }
 
     // ---------- VOD catalog (background sync) ----------
