@@ -3238,9 +3238,9 @@ private fun PortalEditDialog(
         containerColor = Color.Black.copy(alpha = 0.6f),
         modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
         confirmButton = {
-            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
+            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = btn@ {
                 val trimmed = url.trim()
-                if (trimmed.isBlank()) { error = "Portal adresi gerekli"; return@TextButton }
+                if (trimmed.isBlank()) { error = "Portal adresi gerekli"; return@btn }
                 val id = initial?.id ?: ("p_" + trimmed.hashCode().toString() + System.currentTimeMillis().toString().takeLast(4))
                 onSave(
                     Portal(
@@ -3342,9 +3342,9 @@ private fun M3uDialog(
         containerColor = Color.Black.copy(alpha = 0.6f),
         modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
         confirmButton = {
-            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
+            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = btn@ {
                 val trimmed = url.trim()
-                if (!trimmed.startsWith("http")) { error = str(lang, "Geçerli bir http(s) URL girin"); return@TextButton }
+                if (!trimmed.startsWith("http")) { error = str(lang, "Geçerli bir http(s) URL girin"); return@btn }
                 val id = initial?.id ?: ("m3u_" + trimmed.hashCode().toString() + System.currentTimeMillis().toString().takeLast(4))
                 onSave(
                     M3uSource(
@@ -3402,10 +3402,10 @@ private fun XtreamDialog(
         containerColor = Color.Black.copy(alpha = 0.6f),
         modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
         confirmButton = {
-            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
+            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = btn@ {
                 val srv = server.trim()
-                if (!srv.startsWith("http")) { error = str(lang, "Geçerli bir http(s) sunucu adresi girin"); return@TextButton }
-                if (username.trim().isBlank()) { error = str(lang, "Kullanıcı adı gerekli"); return@TextButton }
+                if (!srv.startsWith("http")) { error = str(lang, "Geçerli bir http(s) sunucu adresi girin"); return@btn }
+                if (username.trim().isBlank()) { error = str(lang, "Kullanıcı adı gerekli"); return@btn }
                 checking = true
                 error = null
                 val candidate = XtreamSource(

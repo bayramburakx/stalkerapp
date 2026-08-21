@@ -220,9 +220,11 @@ fun GlassSurface(
 fun AppleSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
-    onSeeAll: (() -> Unit)? = null
+    onSeeAll: (() -> Unit)? = null,
+    content: @Composable (() -> Unit)? = null
 ) {
     SectionTitle(title = title, modifier = modifier, onSeeAll = onSeeAll)
+    content?.invoke()
 }
 
 /** İnce ayraç çizgisi (bölümler arası nefes alma). */

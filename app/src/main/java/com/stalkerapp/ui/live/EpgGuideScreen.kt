@@ -465,7 +465,6 @@ fun EpgGuideScreen(
                                         )
                                     }
                                 }
-                                }
                             }
                             if (next != null && !next.isDefault) {
                                 Spacer(Modifier.height(4.dp))

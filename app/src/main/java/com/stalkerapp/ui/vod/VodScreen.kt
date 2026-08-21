@@ -72,6 +72,9 @@ import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.VodCatalogState
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import com.stalkerapp.ui.VodCatalogStatus
 import com.stalkerapp.ui.components.AppleSectionHeader
 import com.stalkerapp.ui.components.AppleTvButton
