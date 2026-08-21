@@ -688,9 +688,7 @@ private fun HeroBanner(
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
             .height(heroHeight)
-            .clip(RoundedCornerShape(18.dp))
     ) { page ->
         val item = items[page]
         val isSeries = item.isSeries || item.seriesRef.isNotBlank()

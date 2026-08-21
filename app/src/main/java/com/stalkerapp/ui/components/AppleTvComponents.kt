@@ -3,6 +3,7 @@ package com.stalkerapp.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -187,7 +188,7 @@ fun AppleTvButton(
         border = border,
         contentColor = contentColor
     ) {
-        Box { content(isFocused) }
+        Box(contentAlignment = Alignment.Center) { content(isFocused) }
     }
 }
 
@@ -203,13 +204,15 @@ enum class AppleTvButtonStyle { Primary, Secondary, Glass }
 fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape = AppleTvTokens.CardShape,
+    backgroundAlpha: Float = 0.55f,
+    border: BorderStroke? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     Surface(
         modifier = modifier.clip(shape),
         shape = shape,
-        color = Color.Black.copy(alpha = 0.55f),
-        border = BorderStroke(1.dp, AppleTvTokens.Hairline)
+        color = Color.Black.copy(alpha = backgroundAlpha),
+        border = border ?: BorderStroke(1.dp, AppleTvTokens.Hairline)
     ) {
         Box(modifier = Modifier.background(AppleTvTokens.GlassGradient)) { content() }
     }

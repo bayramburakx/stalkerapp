@@ -299,7 +299,7 @@ fun VodScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    Column(modifier = modifier.fillMaxSize().background(AppleTvTokens.Surface)) {
         if (catalog.status == VodCatalogStatus.Error) {
             Text(
                 str(lang, "VOD senkron hatası. Yenileme için kategorileri açın."),

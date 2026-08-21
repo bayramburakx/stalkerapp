@@ -570,6 +570,21 @@ class PortalRepository(
             }
             fuzzy?.key?.let { k -> externalEpg[k]?.takeIf { it.isNotEmpty() }?.let { return it } }
         }
+        // 3) Normalleştirilmiş ad indeksi ile eşleşme (nowPlayingTitles ile aynı
+        //    mantık): "TRT 1" gibi Stalker adları, XMLTV'deki "TRT1" ile noktalama/
+        //    boşluk farkı nedeniyle yukarıdaki eşleşmeden kaçıyordu.
+        if (name.isNotBlank()) {
+            val key = normalizeEpgName(channel.name)
+            val ids = externalEpgNormIndex[key]
+            var id = ids?.firstOrNull()
+            if (id == null) {
+                val fuzzyNorm = externalEpgNormIndex.entries.firstOrNull { (k, v) ->
+                    v.isNotEmpty() && (k.contains(key) || key.contains(k))
+                }
+                id = fuzzyNorm?.value?.firstOrNull()
+            }
+            if (id != null) externalEpg[id]?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
         return emptyList()
     }
 

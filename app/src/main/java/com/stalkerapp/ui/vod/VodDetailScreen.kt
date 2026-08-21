@@ -1000,7 +1000,8 @@ fun VodDetailScreen(
             item {
                 GlassSurface(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    shape = AppleTvTokens.CardShape
+                    shape = AppleTvTokens.CardShape,
+                    border = null
                 ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     val ratingStr = it.rating.takeIf { r -> r.isNotBlank() && r != "0" && r != "0.0" }

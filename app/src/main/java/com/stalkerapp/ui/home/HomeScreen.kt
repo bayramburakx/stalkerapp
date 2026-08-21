@@ -153,19 +153,13 @@ private fun AppleNavItem(
     val active = selected || isFocused
     Surface(
         shape = RoundedCornerShape(40),
-        color = if (active) Color.White.copy(alpha = 0.16f) else Color.Transparent,
+        color = if (active) Color.White.copy(alpha = 0.12f) else Color.Transparent,
         modifier = Modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(40))
-            .shadow(
-                elevation = if (active) 14.dp else 0.dp,
-                shape = RoundedCornerShape(40),
-                spotColor = AppleTvTokens.FocusGlow.copy(alpha = 0.45f),
-                ambientColor = AppleTvTokens.FocusGlow.copy(alpha = 0.30f)
-            )
             .border(
-                width = if (active) 1.5.dp else 0.dp,
-                color = if (active) AppleTvTokens.FocusBorder else Color.Transparent,
+                width = if (active) 1.dp else 0.dp,
+                color = if (active) AppleTvTokens.FocusBorder.copy(alpha = 0.5f) else Color.Transparent,
                 shape = RoundedCornerShape(40)
             )
             .onFocusChanged { fs: FocusState -> isFocused = fs.isFocused }
@@ -260,7 +254,8 @@ fun HomeScreen(
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 10.dp)
                     .height(62.dp),
-                shape = AppleTvTokens.PillShape
+                shape = AppleTvTokens.PillShape,
+                backgroundAlpha = 0.78f
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
