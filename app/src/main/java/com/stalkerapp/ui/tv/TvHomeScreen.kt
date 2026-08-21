@@ -256,7 +256,6 @@ fun TvHomeScreen(
     var quickActionVodItem by remember { mutableStateOf<VodItem?>(null) }
     var quickActionChannel by remember { mutableStateOf<Channel?>(null) }
     val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
-    val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -564,7 +563,7 @@ fun TvHomeScreen(
         val qItem = quickActionVodItem!!
         val isSeries = catalog.isSeriesItem(qItem)
         val isFav = favVods.any { it.id == qItem.id }
-        val isWatched = app.store.isVodWatched(qItem.id)
+        val isWatched = app.store.isWatchedOverride(qItem.id)
 
         TvVodQuickActionsDialog(
             item = qItem,
@@ -575,8 +574,7 @@ fun TvHomeScreen(
             onDetails = { onOpenVod(qItem.id, isSeries) },
             onToggleFavorite = { vm.toggleFavoriteVod(qItem) },
             onToggleWatched = {
-                if (isWatched) app.store.clearVodProgress(qItem.id)
-                else app.store.markVodWatched(qItem.id)
+                app.store.toggleWatchedOverride(qItem.id)
                 vm.bumpWatched()
             },
             onHideFromHome = {
@@ -1221,6 +1219,146 @@ private fun TvSearchSection(
 // =========================================================================
 // TV YARDIMCI BİLEŞENLERİ (APPLE TV STİLİNDE)
 // =========================================================================
+@Composable
+private fun AppleTvTabButton(
+    tab: AppleTvTab,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.10f else 1.0f, label = "tab_scale")
+
+    Surface(
+        modifier = Modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(50))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                shape = RoundedCornerShape(50)
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
+        shape = RoundedCornerShape(50),
+        color = if (isFocused) Color(0xFF00E5FF)
+        else if (selected) Color.White.copy(alpha = 0.20f)
+        else Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = tab.icon,
+                contentDescription = tab.title,
+                tint = if (isFocused) Color.Black else if (selected) Color.White else Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = tab.title,
+                color = if (isFocused) Color.Black else if (selected) Color.White else Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+                fontWeight = if (selected || isFocused) FontWeight.Bold else FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppleTvCircleAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.15f else 1.0f, label = "act_scale")
+
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .scale(scale)
+            .clip(CircleShape)
+            .background(if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.10f))
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.15f),
+                shape = CircleShape
+            )
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isFocused) Color.Black else Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun TvSearchInputDialog(
+    initialQuery: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(initialQuery) }
+    val focusReq = remember { FocusRequester() }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Arama Yapın", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    placeholder = { Text("Aramak istediğiniz adı yazın…") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusReq)
+                )
+                LaunchedEffect(Unit) {
+                    delay(100)
+                    runCatching { focusReq.requestFocus() }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onConfirm(text) }) {
+                Text("Ara", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onConfirm("")
+            }) {
+                Text("Temizle", color = Color.White.copy(0.6f))
+            }
+        },
+        containerColor = Color(0xFF131722),
+        shape = RoundedCornerShape(14.dp)
+    )
+}
 @Composable
 private fun TvCategoryItem(
     title: String,
