@@ -3,6 +3,7 @@ package com.stalkerapp.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,14 +26,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
@@ -46,13 +45,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvTokens
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.library.LibraryScreen
 import com.stalkerapp.ui.live.LiveTvScreen
@@ -83,6 +88,9 @@ private fun AdultPinDialog(
     var error by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = AppleTvTokens.SurfaceRaised,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         title = { Text(str(lang, "Yetişkin İçerik Kilitli")) },
         text = {
             Column {
@@ -110,13 +118,68 @@ private fun AdultPinDialog(
             }
         },
         confirmButton = {
-            Button(
+            AppleTvButton(
                 onClick = { if (!onUnlock(pin)) error = true },
-                enabled = pin.isNotBlank()
-            ) { Text(str(lang, "Aç")) }
+                enabled = pin.isNotBlank(),
+                style = AppleTvButtonStyle.Primary
+            ) {
+                Text(
+                    str(lang, "Aç"),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = Color.Black,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "Vazgeç")) } }
+        dismissButton = {
+            AppleTvButton(onClick = onDismiss, style = AppleTvButtonStyle.Glass) {
+                Text(
+                    str(lang, "Vazgeç"),
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+            }
+        }
     )
+}
+
+@Composable
+private fun AppleNavItem(
+    item: NavItem,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val active = selected || isFocused
+    Surface(
+        shape = RoundedCornerShape(40),
+        color = if (active) Color.White.copy(alpha = 0.16f) else Color.Transparent,
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(40))
+            .shadow(
+                elevation = if (active) 14.dp else 0.dp,
+                shape = RoundedCornerShape(40),
+                spotColor = AppleTvTokens.FocusGlow.copy(alpha = 0.45f),
+                ambientColor = AppleTvTokens.FocusGlow.copy(alpha = 0.30f)
+            )
+            .border(
+                width = if (active) 1.5.dp else 0.dp,
+                color = if (active) AppleTvTokens.FocusBorder else Color.Transparent,
+                shape = RoundedCornerShape(40)
+            )
+            .onFocusChanged { fs: FocusState -> isFocused = fs.isFocused }
+            .focusable()
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+    ) {
+        Icon(
+            imageVector = item.icon,
+            contentDescription = item.label,
+            tint = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(9.dp).size(22.dp)
+        )
+    }
 }
 
 @Composable
@@ -188,26 +251,16 @@ fun HomeScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            // Tek glass (cam) pill: yanlardan tam yuvarlak, gölge + boşluk ile
-            // yüzer (floating) hissi, yarı saydam cam arka plan. Sabit yükseklik
-            // (62dp) tek bir kutu — `blur` kullanılmaz (bazı cihazlarda öğenin
-            // tüm ekranı kaplamasına yol açan Compose render sorunları var);
-            // yarı saydam yüzey + ince çerçeve + gölge cam görünümünü verir.
-            val glassShape = RoundedCornerShape(50)
-            Box(
+            // Tek cam (glass) pill: derin siyah + ince beyaz çerçeve, yarı
+            // saydam; aktif öğe beyaz parıltı (glow) ile belirginleşir, mavi
+            // aksan yok. Sabit yükseklik (62dp) tek bir yüzen kutu.
+            GlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 10.dp)
-                    .height(62.dp)
-                    .shadow(18.dp, glassShape)
-                    .clip(glassShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-                        shape = glassShape
-                    )
+                    .height(62.dp),
+                shape = AppleTvTokens.PillShape
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
@@ -219,25 +272,13 @@ fun HomeScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxSize()
-                                .clip(glassShape)
-                                .clickable { if (item.onClick != null) item.onClick() else tab = index },
-                            contentAlignment = Alignment.Center
+                                .clip(AppleTvTokens.PillShape)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(40),
-                                // Aktif öğe: açık gri yarı saydam zemin (cam üzerinde
-                                // açık gri görünür) + beyaz simge.
-                                color = if (selected) Color.White.copy(alpha = 0.18f) else Color.Transparent,
-                                modifier = Modifier.padding(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = item.label,
-                                    tint = if (selected) Color.White
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(9.dp).size(22.dp)
-                                )
-                            }
+                            AppleNavItem(
+                                item = item,
+                                selected = selected,
+                                onClick = { if (item.onClick != null) item.onClick() else tab = index }
+                            )
                         }
                     }
                 }
@@ -249,7 +290,10 @@ fun HomeScreen(
         // efekt gerçek olur. Her sekme kendi listesinin sonuna pill yüksekliği
         // kadar boşluk ekler. SaveableStateProvider sayesinde sekme değişince
         // ekran durumu (kaydırma konumu, pager sayfası) kaybolmaz.
-        val contentModifier = Modifier.padding(top = padding.calculateTopPadding())
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .background(AppleTvTokens.Surface)
+            .padding(top = padding.calculateTopPadding())
         // Portal değişince (farklı id) HomeDashboardScreen'i baştan kur ki Canlı TV
         // önizleme kanalları yeni portaldan yüklensin (iç LaunchedEffect(Unit) yeniden tetiklenir).
         val portalKey = when (vm.activeSourceKind()) {

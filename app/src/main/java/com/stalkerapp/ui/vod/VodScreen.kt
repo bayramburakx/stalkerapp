@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
-import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,18 +28,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.stalkerapp.data.matches
@@ -59,24 +61,23 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.onKeyEvent
-import com.stalkerapp.data.ExternalVod
-import com.stalkerapp.data.Genre
-import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
+import com.stalkerapp.data.ExternalVod
+import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.ui.MainViewModel
-import com.stalkerapp.ui.VodCatalogState
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvCard
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.GlassChip
 import com.stalkerapp.ui.components.LoadingBox
@@ -119,7 +120,7 @@ fun VodScreen(
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
                 str(lang, "Henüz kaynak eklenmedi.\nVOD kataloğu için Ayarlar → Playlist & Kaynaklar bölümünden bir Stalker portal, M3U listesi veya Xtream Codes ekleyebilirsin."),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(24.dp)
             )
@@ -287,18 +288,25 @@ fun VodScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    val sectionTitle = remember(selectedCategory, shownCats, query) {
+        when {
+            query.isNotBlank() -> str(lang, "Film / dizi ara…")
+            selectedCategory == 0L -> str(lang, "Tümü")
+            else -> shownCats.firstOrNull { it.id == selectedCategory }?.title ?: str(lang, "Tümü")
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize().background(Color.Black)) {
         if (catalog.status == VodCatalogStatus.Error) {
             Text(
                 str(lang, "VOD senkron hatası. Yenileme için kategorileri açın."),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+                color = Color(0xFFFF6B6B),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
 
         // Anasayfa dili: cam arama çubuğu (yarı saydam, yuvarlak, ince çerçeve).
-        val searchShape = RoundedCornerShape(50)
         val isTv = com.stalkerapp.ui.tv.isTvDevice(LocalContext.current)
         var isInputModalOpen by remember { mutableStateOf(false) }
         var isFocused by remember { mutableStateOf(false) }
@@ -306,37 +314,32 @@ fun VodScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp)
-                .clip(searchShape)
-                .background(if (isTv && isFocused) Color(0xFF1E293B) else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(50))
+                .background(Color.Black.copy(alpha = 0.55f))
                 .border(
-                    width = if (isTv && isFocused) 2.5.dp else 1.dp,
-                    color = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-                    shape = searchShape
+                    width = if (isTv && isFocused) 2.dp else 1.dp,
+                    color = if (isTv && isFocused) AppleTvTokens.FocusBorder else AppleTvTokens.Hairline,
+                    shape = RoundedCornerShape(50)
                 )
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable(isTv)
                 .clickable(isTv) { isInputModalOpen = true }
-                .onKeyEvent { ev ->
-                    if (isTv && com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
-                        isInputModalOpen = true; true
-                    } else false
-                }
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
                 Icons.Default.Search,
                 contentDescription = null,
-                tint = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isTv && isFocused) Color.White else Color.White.copy(alpha = 0.6f),
                 modifier = Modifier.size(18.dp)
             )
             if (isTv) {
                 Text(
                     text = if (query.isNotBlank()) query else str(lang, "Film / dizi ara… (OK tuşuna basın)"),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (query.isNotBlank()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (query.isNotBlank()) Color.White else Color.White.copy(alpha = 0.6f),
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -344,14 +347,14 @@ fun VodScreen(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
                     modifier = Modifier.weight(1f),
                     decorationBox = { inner ->
                         if (query.isBlank()) {
                             Text(
                                 str(lang, "Film / dizi ara…"),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color.White.copy(alpha = 0.6f)
                             )
                         }
                         inner()
@@ -372,10 +375,19 @@ fun VodScreen(
                             value = tempText,
                             onValueChange = { tempText = it; query = it },
                             singleLine = true,
-                            placeholder = { Text(str(lang, "Film veya dizi adı yazın…")) },
+                            placeholder = { Text(str(lang, "Film veya dizi adı yazın…"), color = Color.White.copy(alpha = 0.5f)) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .focusRequester(focusReq)
+                                .focusRequester(focusReq),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = AppleTvTokens.Hairline,
+                                cursorColor = Color.White,
+                                focusedLabelColor = Color.White,
+                                unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
                         )
                         LaunchedEffect(Unit) {
                             kotlinx.coroutines.delay(100)
@@ -385,7 +397,7 @@ fun VodScreen(
                 },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = { isInputModalOpen = false }) {
-                        Text(str(lang, "Tamam"), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                        Text(str(lang, "Tamam"), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
@@ -396,8 +408,8 @@ fun VodScreen(
                         Text(str(lang, "Temizle"), color = Color.White.copy(0.6f))
                     }
                 },
-                containerColor = Color(0xFF131722),
-                shape = RoundedCornerShape(14.dp)
+                containerColor = AppleTvTokens.SurfaceRaised,
+                shape = RoundedCornerShape(18.dp)
             )
         }
 
@@ -408,8 +420,8 @@ fun VodScreen(
             ) {
                 LazyRow(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item {
                         GlassChip(
@@ -427,8 +439,17 @@ fun VodScreen(
                     }
                 }
                 // Filtreleme / Sıralama Butonu
-                IconButton(onClick = { showFilterDialog = true }) {
-                    Icon(Icons.Default.FilterList, contentDescription = str(lang, "Filtreler"))
+                AppleTvButton(
+                    onClick = { showFilterDialog = true },
+                    style = AppleTvButtonStyle.Secondary,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        Icons.Default.FilterList,
+                        contentDescription = str(lang, "Filtreler"),
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -440,35 +461,45 @@ fun VodScreen(
             filtered.isEmpty() -> EmptyState(str(lang, "İçerik bulunamadı"))
             else -> {
                 val pageItems = filtered.take(visibleCount)
-                LazyVerticalGrid(
-                    state = gridState,
-                    columns = GridCells.Adaptive(minSize = 135.dp),
-                    contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 96.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(pageItems, key = { it.id }) { item ->
-                        val isSeries = filterIsSeries == true || catalog.isSeriesItem(item)
-                        VodPoster(
-                            item = item,
-                            baseUrl = profile?.baseUrl.orEmpty(),
-                            isSeries = isSeries,
-                            watched = isWatched(item),
-                            onLongPress = { quickActionItem = item },
-                            onClick = { onOpenVod(item.id, isSeries) }
-                        )
-                    }
-                    // Liste sonuna gelindiğinde bir sonraki sayfa yükleniyor göstergesi.
-                    if (visibleCount < filtered.size) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    AppleSectionHeader(
+                        title = sectionTitle,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Adaptive(minSize = 140.dp),
+                        contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 96.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(pageItems, key = { it.id }) { item ->
+                            val isSeries = filterIsSeries == true || catalog.isSeriesItem(item)
+                            VodPoster(
+                                item = item,
+                                baseUrl = profile?.baseUrl.orEmpty(),
+                                isSeries = isSeries,
+                                watched = isWatched(item),
+                                onLongPress = { quickActionItem = item },
+                                onClick = { onOpenVod(item.id, isSeries) }
+                            )
+                        }
+                        // Liste sonuna gelindiğinde bir sonraki sayfa yükleniyor göstergesi.
+                        if (visibleCount < filtered.size) {
+                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
@@ -517,11 +548,6 @@ fun VodPoster(
     val app = LocalContext.current.applicationContext as StalkerApp
     val settings = app.store.settings()
     val lang = settings.language
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (isFocused) 1.10f else 1.0f,
-        label = "poster_scale"
-    )
 
     var resolvedPoster by remember(item.id, item.poster) {
         mutableStateOf(app.tmdb.getCachedPoster(item.name, isSeries) ?: item.poster)
@@ -537,115 +563,102 @@ fun VodPoster(
     }
 
     Column(
-        modifier = Modifier
-            .then(if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth())
-            .scale(scale)
-            .clip(RoundedCornerShape(12.dp))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 3.5.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            }
-            .let { mod ->
-                if (onLongPress != null) {
-                    mod.combinedClickable(onClick = onClick, onLongClick = onLongPress)
-                } else {
-                    mod.clickable(onClick = onClick)
-                }
-            }
+        modifier = Modifier.then(
+            if (posterWidth != null) Modifier.width(posterWidth.dp) else Modifier.fillMaxWidth()
+        )
     ) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
-            AsyncImage(
-                model = resolveUrl(resolvedPoster.ifBlank { item.poster }, baseUrl),
-                contentDescription = item.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
-            )
-            if (isSeries) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .background(Color(0xFFE50914), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        str(lang, "DİZİ"),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall
-                    )
+        AppleTvCard(
+            onClick = onClick,
+            onLongClick = onLongPress,
+            cornerRadius = 18.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) { isFocused ->
+            Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+                AsyncImage(
+                    model = resolveUrl(resolvedPoster.ifBlank { item.poster }, baseUrl),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
+                )
+                if (isSeries) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .background(Color(0xFFE50914), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            str(lang, "DİZİ"),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
-            }
-            if (watched) {
-                // İzlenme işareti: yeşil onay rozeti (sol üst).
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp)
-                        .size(20.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF2E7D32)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = str(lang, "İzlendi"),
-                        tint = Color.White,
-                        modifier = Modifier.size(13.dp)
-                    )
+                if (watched) {
+                    // İzlenme işareti: yeşil onay rozeti (sol üst).
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF2E7D32)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = str(lang, "İzlendi"),
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
-            }
-            // IMDb puanı rozeti (sol alt): portal rating'i boş/0 değilse gösterilir.
-            val ratingText = item.rating.trim().trimEnd('/').let { r ->
-                if (r.isBlank() || r == "0" || r == "0.0") null else r
-            }
-            if (ratingText != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.Black.copy(alpha = 0.72f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        "★ $ratingText",
-                        color = Color(0xFFFFC107),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1
-                    )
+                // IMDb puanı rozeti (sol alt): portal rating'i boş/0 değilse gösterilir.
+                val ratingText = item.rating.trim().trimEnd('/').let { r ->
+                    if (r.isBlank() || r == "0" || r == "0.0") null else r
                 }
-            }
-            if (label != null) {
-                // Bölüm etiketi ("S1E3" vb.): sağ alt köşede gösterilir.
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.Black.copy(alpha = 0.72f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        label,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1
-                    )
+                if (ratingText != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.72f))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            "★ $ratingText",
+                            color = Color(0xFFFFC107),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                    }
+                }
+                if (label != null) {
+                    // Bölüm etiketi ("S1E3" vb.): sağ alt köşede gösterilir.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.72f))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            label,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
-        Column(modifier = Modifier.padding(top = 6.dp)) {
+        Column(modifier = Modifier.padding(top = 8.dp)) {
             Text(
                 text = if (label != null) "${item.name} • $label" else item.name,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(color = Color.White),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -655,7 +668,7 @@ fun VodPoster(
                 Text(
                     text = year,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -690,17 +703,19 @@ fun VodFilterDialog(
                         language = langFilter
                     )
                 )
-            }) { Text(str(lang, "Uygula"), fontWeight = FontWeight.Bold) }
+            }) { Text(str(lang, "Uygula"), fontWeight = FontWeight.Bold, color = Color.White) }
         },
         dismissButton = {
             Row {
                 TextButton(onClick = {
                     onApply(com.stalkerapp.data.VodFilterState())
-                }) { Text(str(lang, "Sıfırla"), color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) }
+                }) { Text(str(lang, "Sıfırla"), color = Color.White.copy(alpha = 0.7f)) }
+                TextButton(onClick = onDismiss) { Text(str(lang, "İptal"), color = Color.White.copy(alpha = 0.7f)) }
             }
         },
-        title = { Text(str(lang, "Filtrele & Sırala")) },
+        title = { Text(str(lang, "Filtrele & Sırala"), color = Color.White, fontWeight = FontWeight.Bold) },
+        containerColor = AppleTvTokens.SurfaceRaised,
+        shape = RoundedCornerShape(18.dp),
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -708,7 +723,7 @@ fun VodFilterDialog(
             ) {
                 // Sıralama
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(str(lang, "Sıralama"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(str(lang, "Sıralama"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
                     val options = listOf(
                         com.stalkerapp.data.SortMode.DEFAULT to str(lang, "Varsayılan"),
                         com.stalkerapp.data.SortMode.NEWEST to str(lang, "En Yeni"),
@@ -726,56 +741,81 @@ fun VodFilterDialog(
                         ) {
                             androidx.compose.material3.RadioButton(
                                 selected = sortMode == mode,
-                                onClick = { sortMode = mode }
+                                onClick = { sortMode = mode },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = Color.White,
+                                    unselectedColor = AppleTvTokens.HairlineStrong
+                                )
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                            Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.White)
                         }
                     }
                 }
-                HorizontalDivider()
+                HorizontalDivider(color = AppleTvTokens.Hairline)
                 // Puan Filtresi
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(str(lang, "Minimum IMDb Puanı: ${minRating.toInt()}"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(str(lang, "Minimum IMDb Puanı: ${minRating.toInt()}"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
                     Slider(
                         value = minRating,
                         onValueChange = { minRating = it },
                         valueRange = 0f..9f,
-                        steps = 8
+                        steps = 8,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.White,
+                            inactiveTrackColor = AppleTvTokens.Hairline
+                        )
                     )
                 }
-                HorizontalDivider()
+                HorizontalDivider(color = AppleTvTokens.Hairline)
                 // Yıl Aralığı Filtresi
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(str(lang, "Yıl Aralığı"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(str(lang, "Yıl Aralığı"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
                         Spacer(Modifier.weight(1f))
                         androidx.compose.material3.FilterChip(
                             selected = yearFilterOn,
                             onClick = { yearFilterOn = !yearFilterOn },
-                            label = { Text(str(lang, if (yearFilterOn) "Açık" else "Kapalı")) }
+                            label = { Text(str(lang, if (yearFilterOn) "Açık" else "Kapalı"), color = Color.White) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color.White.copy(alpha = 0.18f),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White.copy(alpha = 0.06f),
+                                labelColor = Color.White.copy(alpha = 0.7f)
+                            )
                         )
                     }
                     if (yearFilterOn) {
-                        Text("$yearFrom – $yearTo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("$yearFrom – $yearTo", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
                         Slider(
                             value = yearFrom.toFloat(),
                             onValueChange = { yearFrom = it.toInt().coerceAtMost(yearTo) },
                             valueRange = 1980f..currentYear().toFloat(),
-                            steps = 0
+                            steps = 0,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color.White,
+                                activeTrackColor = Color.White,
+                                inactiveTrackColor = AppleTvTokens.Hairline
+                            )
                         )
                         Slider(
                             value = yearTo.toFloat(),
                             onValueChange = { yearTo = it.toInt().coerceAtLeast(yearFrom) },
                             valueRange = 1980f..currentYear().toFloat(),
-                            steps = 0
+                            steps = 0,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color.White,
+                                activeTrackColor = Color.White,
+                                inactiveTrackColor = AppleTvTokens.Hairline
+                            )
                         )
                     }
                 }
-                HorizontalDivider()
+                HorizontalDivider(color = AppleTvTokens.Hairline)
                 // Dil Filtresi
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(str(lang, "Dil"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(str(lang, "Dil"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         GlassChip(
                             selected = langFilter.isEmpty(),

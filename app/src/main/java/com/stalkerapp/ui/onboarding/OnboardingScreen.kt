@@ -1,10 +1,8 @@
 package com.stalkerapp.ui.onboarding
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.foundation.pager.HorizontalPager
@@ -39,16 +37,13 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -75,6 +70,10 @@ import com.stalkerapp.data.StalkerClient
 import com.stalkerapp.data.XtreamClient
 import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvCard
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.util.L10n
 import kotlinx.coroutines.launch
@@ -161,8 +160,14 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 Spacer(Modifier.width(48.dp))
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { finish() }) {
-                Text(t("Atla"), color = Color.White.copy(alpha = 0.8f))
+            AppleTvButton(
+                onClick = { finish() },
+                style = AppleTvButtonStyle.Glass,
+                modifier = Modifier.height(40.dp).widthIn(min = 96.dp)
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(t("Atla"), color = Color.White, fontWeight = FontWeight.Medium)
+                }
             }
         }
 
@@ -209,17 +214,17 @@ fun OnboardingScreen(onDone: () -> Unit) {
 
         // İlerleme noktaları
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
             horizontalArrangement = Arrangement.Center
         ) {
             repeat(4) { i ->
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 4.dp)
+                        .padding(horizontal = 5.dp)
                         .size(if (i == pagerState.currentPage) 9.dp else 7.dp)
                         .clip(CircleShape)
                         .background(
-                            if (i == pagerState.currentPage) Color(0xFF00E5FF)
+                            if (i == pagerState.currentPage) Color.White
                             else Color.White.copy(alpha = 0.3f)
                         )
                 )
@@ -250,33 +255,33 @@ private fun DeviceModePage(
                 .widthIn(max = 560.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Image(
                 painter = painterResource(R.drawable.portio_logo),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(90.dp)
+                    .size(92.dp)
                     .clip(RoundedCornerShape(22.dp))
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 t("Kullanım Deneyiminizi Seçin"),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 t("Arayüzü cihazınıza en uygun şekilde optimize edelim."),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(32.dp))
 
             DeviceModeCard(
                 icon = Icons.Default.Tv,
@@ -286,7 +291,7 @@ private fun DeviceModePage(
                 selected = current == "tv",
                 onClick = { onSelect("tv") }
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
             DeviceModeCard(
                 icon = Icons.Default.Movie,
                 title = t("Mobil Telefon & Tablet"),
@@ -296,13 +301,15 @@ private fun DeviceModePage(
                 onClick = { onSelect("mobile") }
             )
 
-            Spacer(Modifier.height(32.dp))
-            Button(
+            Spacer(Modifier.height(36.dp))
+            AppleTvButton(
                 onClick = onContinue,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp)
+                style = AppleTvButtonStyle.Primary,
+                modifier = Modifier.fillMaxWidth().height(54.dp)
             ) {
-                Text(t("Devam Et"), fontWeight = FontWeight.Bold)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(t("Devam Et"), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -318,47 +325,26 @@ private fun DeviceModeCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isFocused) 1.04f else 1.0f, label = "dev_card_scale")
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clip(RoundedCornerShape(16.dp))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 3.dp else if (selected) 2.dp else 1.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else if (selected) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.10f),
-                shape = RoundedCornerShape(16.dp)
-            )
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        shape = RoundedCornerShape(16.dp),
-        color = if (isFocused) Color(0xFF1E293B)
-        else if (selected) Color(0xFF131A2A)
-        else Color.White.copy(alpha = 0.05f)
-    ) {
+    AppleTvCard(
+        onClick = onClick,
+        cornerRadius = 18.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) { isFocused ->
         Row(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (selected) Color(0xFF00E5FF).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)),
+                    .background(if (selected) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (selected) Color(0xFF00E5FF) else Color.White,
+                    tint = Color.White,
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -376,12 +362,12 @@ private fun DeviceModeCard(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF00E5FF).copy(alpha = 0.25f))
+                                .background(Color.White.copy(alpha = 0.22f))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 "Önerilen",
-                                color = Color(0xFF00E5FF),
+                                color = Color.Black,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -401,7 +387,7 @@ private fun DeviceModeCard(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(if (selected) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.2f)),
+                    .background(if (selected) Color.White else Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 if (selected) {
@@ -429,10 +415,10 @@ private fun LanguagePage(
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
         Image(
             painter = painterResource(R.drawable.portio_logo),
             contentDescription = null,
@@ -440,21 +426,21 @@ private fun LanguagePage(
                 .size(96.dp)
                 .clip(RoundedCornerShape(24.dp))
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(22.dp))
         Text(
             "Portio",
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Text(
             "Dilini seç  •  Choose your language",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = Color.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(36.dp))
 
         LanguageCard(
             code = "tr",
@@ -463,7 +449,7 @@ private fun LanguagePage(
             selected = current == "tr",
             onClick = { onSelect("tr") }
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
         LanguageCard(
             code = "en",
             title = "English",
@@ -472,13 +458,15 @@ private fun LanguagePage(
             onClick = { onSelect("en") }
         )
 
-        Spacer(Modifier.height(32.dp))
-        Button(
+        Spacer(Modifier.height(36.dp))
+        AppleTvButton(
             onClick = onContinue,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp)
+            style = AppleTvButtonStyle.Primary,
+            modifier = Modifier.fillMaxWidth().height(54.dp)
         ) {
-            Text(if (current == "en") "Continue" else "Devam Et", fontWeight = FontWeight.Bold)
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(if (current == "en") "Continue" else "Devam Et", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
         }
         Spacer(Modifier.height(16.dp))
         }
@@ -493,44 +481,20 @@ private fun LanguageCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.05f else 1.0f,
-        label = "lang_card_scale"
-    )
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clip(RoundedCornerShape(16.dp))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 3.dp else if (selected) 1.5.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else if (selected) Color(0xFF38BDF8) else Color.Transparent,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        shape = RoundedCornerShape(16.dp),
-        color = if (isFocused) Color(0xFF1E293B)
-        else if (selected) Color.White.copy(alpha = 0.16f)
-        else Color.White.copy(alpha = 0.06f)
+    AppleTvCard(
+        onClick = onClick,
+        cornerRadius = 18.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                    color = Color.White,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
@@ -539,7 +503,7 @@ private fun LanguageCard(
                 modifier = Modifier
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(if (selected) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.2f)),
+                    .background(if (selected) Color.White else Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 if (selected) {
@@ -548,7 +512,7 @@ private fun LanguageCard(
             }
         }
     }
-    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = Color.White.copy(alpha = 0.06f))
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = AppleTvTokens.Hairline)
 }
 
 @Composable
@@ -564,10 +528,10 @@ private fun WelcomePage(lang: String, onStart: () -> Unit) {
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Image(
                 painter = painterResource(R.drawable.portio_logo),
                 contentDescription = null,
@@ -575,26 +539,26 @@ private fun WelcomePage(lang: String, onStart: () -> Unit) {
                     .size(96.dp)
                     .clip(RoundedCornerShape(24.dp))
             )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(22.dp))
             Text(
                 t("Hoş Geldin"),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
             Text(
                 t("Tüm IPTV kaynakların tek bir akıllı arayüzde"),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.padding(top = 10.dp)
             )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(32.dp))
             FEATURES.forEach { f ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -613,22 +577,15 @@ private fun WelcomePage(lang: String, onStart: () -> Unit) {
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
-            var isStartFocused by remember { mutableStateOf(false) }
-            Button(
+            Spacer(Modifier.height(28.dp))
+            AppleTvButton(
                 onClick = onStart,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .onFocusChanged { isStartFocused = it.isFocused }
-                    .border(
-                        width = if (isStartFocused) 3.dp else 0.dp,
-                        color = if (isStartFocused) Color(0xFF00E5FF) else Color.Transparent,
-                        shape = RoundedCornerShape(14.dp)
-                    ),
-                shape = RoundedCornerShape(14.dp)
+                style = AppleTvButtonStyle.Primary,
+                modifier = Modifier.fillMaxWidth().height(54.dp)
             ) {
-                Text(t("Başla"), fontWeight = FontWeight.Bold)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(t("Başla"), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -743,22 +700,22 @@ private fun SourcePage(
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 28.dp)
         ) {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         Text(
             t("İlk Kaynağını Ekle"),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
         Text(
             t("İçeriğinin geldiği kaynağı seç — sonradan Ayarlar → Playlist & Kaynaklar'dan dilediğin kadar ekleyebilirsin."),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = Color.White.copy(alpha = 0.7f),
-            modifier = Modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = 10.dp)
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(24.dp))
 
         SourceChoiceCard(
             icon = Icons.Default.Tv,
@@ -784,9 +741,9 @@ private fun SourcePage(
 
         when (sourceChoice) {
             "portal" -> {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(24.dp))
                 Text(t("Stalker Portal"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = pName, onValueChange = onPName, label = { Text(t("Portal Adı")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = pUrl, onValueChange = onPUrl, label = { Text(t("Portal URL (http://ip:port/portal)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -797,7 +754,15 @@ private fun SourcePage(
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
-                    TextButton(onClick = { onPMac(StalkerClient.generateMac()) }) { Text(t("Yeni MAC")) }
+                    AppleTvButton(
+                        onClick = { onPMac(StalkerClient.generateMac()) },
+                        style = AppleTvButtonStyle.Glass,
+                        modifier = Modifier.height(44.dp).widthIn(min = 110.dp)
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(t("Yeni MAC"), color = Color.White, fontWeight = FontWeight.Medium)
+                        }
+                    }
                 }
                 OutlinedTextField(value = pUser, onValueChange = onPUser, label = { Text(t("Kullanıcı Adı (opsiyonel)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
@@ -810,18 +775,18 @@ private fun SourcePage(
                 )
             }
             "xtream" -> {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(24.dp))
                 Text(t("Xtream Codes"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = xName, onValueChange = onXName, label = { Text(t("İsim")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = xServer, onValueChange = onXServer, label = { Text(t("Sunucu (http://host:port)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = xUser, onValueChange = onXUser, label = { Text(t("Kullanıcı adı")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = xPass, onValueChange = onXPass, label = { Text(t("Şifre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
             "m3u" -> {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(24.dp))
                 Text(t("M3U Playlist"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = mName, onValueChange = onMName, label = { Text(t("İsim (opsiyonel)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = mUrl, onValueChange = onMUrl, label = { Text(t("M3U URL")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
@@ -836,12 +801,12 @@ private fun SourcePage(
         }
 
         if (sourceChoice != null) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             if (error != null) {
-                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(error, color = Color(0xFFFF453A), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
             }
-            Button(
+            AppleTvButton(
                 onClick = {
                     when (sourceChoice) {
                         "portal" -> savePortalAndFinish()
@@ -850,25 +815,32 @@ private fun SourcePage(
                     }
                 },
                 enabled = !busy,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp)
+                style = AppleTvButtonStyle.Primary,
+                modifier = Modifier.fillMaxWidth().height(54.dp)
             ) {
-                if (busy) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                    Spacer(Modifier.width(10.dp))
-                    Text(t("Bağlanılıyor…"))
-                } else {
-                    Text(t("Kaydet ve Devam Et"), fontWeight = FontWeight.Bold)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (busy) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black)
+                            Spacer(Modifier.width(10.dp))
+                            Text(t("Bağlanılıyor…"), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        }
+                    } else {
+                        Text(t("Kaydet ve Devam Et"), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    }
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        TextButton(
+        Spacer(Modifier.height(20.dp))
+        AppleTvButton(
             onClick = onDone,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
+            style = AppleTvButtonStyle.Glass,
+            modifier = Modifier.align(Alignment.CenterHorizontally).height(44.dp).widthIn(min = 160.dp)
         ) {
-            Text(t("Şimdilik atla"), color = Color.White.copy(alpha = 0.7f))
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(t("Şimdilik atla"), color = Color.White, fontWeight = FontWeight.Medium)
+            }
         }
         Spacer(Modifier.height(16.dp))
         }
@@ -883,44 +855,19 @@ private fun SourceChoiceCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (isFocused) 1.05f else 1.0f,
-        label = "choice_card_scale"
-    )
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .padding(vertical = 5.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 3.dp else if (selected) 1.5.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else if (selected) Color(0xFF38BDF8) else Color.Transparent,
-                shape = RoundedCornerShape(14.dp)
-            )
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        shape = RoundedCornerShape(14.dp),
-        color = if (isFocused) Color(0xFF1E293B)
-        else if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-        else Color.White.copy(alpha = 0.06f)
+    AppleTvCard(
+        onClick = onClick,
+        cornerRadius = 14.dp,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                tint = Color.White,
                 modifier = Modifier.size(26.dp)
             )
             Spacer(Modifier.width(14.dp))
@@ -928,15 +875,15 @@ private fun SourceChoiceCard(
                 Text(
                     title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                    color = Color.White,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(desc, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
             }
             if (selected) {
-                Text("✓", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                Text("✓", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
-    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = Color.White.copy(alpha = 0.06f))
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = AppleTvTokens.Hairline)
 }

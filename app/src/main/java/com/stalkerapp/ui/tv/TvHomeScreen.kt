@@ -61,8 +61,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -104,7 +102,14 @@ import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogState
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvCard
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.ChannelLogo
+import com.stalkerapp.ui.components.GlassChip
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -262,7 +267,7 @@ fun TvHomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF000000))
+            .background(Color.Black)
             .statusBarsPadding()
     ) {
         // =========================================================================
@@ -294,12 +299,12 @@ fun TvHomeScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(Color.White.copy(alpha = 0.12f))
-                        .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                        .border(0.5.dp, AppleTvTokens.Hairline, RoundedCornerShape(6.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = sourceBadge,
-                        color = Color(0xFF00E5FF),
+                        color = Color.White,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -307,13 +312,9 @@ fun TvHomeScreen(
             }
 
             // Orta: Apple TV Tarzı Yüzen Cam Kapsül Sekme Çubuğu
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFF161B26).copy(alpha = 0.85f))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(50)),
-                shape = RoundedCornerShape(50),
-                color = Color.Transparent
+            GlassSurface(
+                modifier = Modifier,
+                shape = RoundedCornerShape(50)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -345,6 +346,16 @@ fun TvHomeScreen(
                     label = "Ayarlar",
                     onClick = onOpenSettings
                 )
+                AppleTvCircleAction(
+                    icon = Icons.Default.Search,
+                    label = "Ara",
+                    onClick = onOpenSearch
+                )
+                AppleTvCircleAction(
+                    icon = Icons.Default.Tv,
+                    label = "Kılavuz",
+                    onClick = onOpenGuide
+                )
             }
         }
 
@@ -362,8 +373,8 @@ fun TvHomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 2.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF111827).copy(alpha = 0.7f))
-                    .border(0.5.dp, Color(0xFF00E5FF).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .background(AppleTvTokens.SurfaceRaised.copy(alpha = 0.7f))
+                    .border(0.5.dp, AppleTvTokens.Hairline, RoundedCornerShape(8.dp))
                     .padding(horizontal = 14.dp, vertical = 4.dp)
             ) {
                 Row(
@@ -374,7 +385,7 @@ fun TvHomeScreen(
                     Text(
                         "Katalog senkronize ediliyor… (%$pct)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF00E5FF),
+                        color = Color.White,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.sp
                     )
@@ -384,8 +395,8 @@ fun TvHomeScreen(
                             .width(100.dp)
                             .height(3.dp)
                             .clip(RoundedCornerShape(2.dp)),
-                        color = Color(0xFF00E5FF),
-                        trackColor = Color(0xFF1E293B)
+                        color = Color.White,
+                        trackColor = Color.White.copy(alpha = 0.2f)
                     )
                 }
             }
@@ -633,8 +644,8 @@ private fun AppleTvHeroBillboard(
             .height(350.dp)
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF0D1117))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+            .background(AppleTvTokens.Surface)
+            .border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(20.dp))
     ) {
         HorizontalPager(
             state = pagerState,
@@ -678,14 +689,7 @@ private fun AppleTvHeroBillboard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.90f)
-                                )
-                            )
-                        )
+                        .background(AppleTvTokens.BackdropScrim)
                 )
 
                 // Başlık ve Bilgiler
@@ -713,11 +717,11 @@ private fun AppleTvHeroBillboard(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF00E5FF).copy(alpha = 0.25f))
-                                    .border(0.5.dp, Color(0xFF00E5FF), RoundedCornerShape(4.dp))
+                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .border(0.5.dp, AppleTvTokens.HairlineStrong, RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("4K UHD", color = Color(0xFF00E5FF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                Text("4K UHD", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -771,18 +775,52 @@ private fun AppleTvHeroBillboard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        AppleTvActionButton(
-                            text = "Hemen İzle",
-                            icon = Icons.Default.PlayArrow,
-                            isPrimary = true,
-                            onClick = { onPlayClick(item) }
-                        )
-                        AppleTvActionButton(
-                            text = "Detaylar",
-                            icon = Icons.Default.Info,
-                            isPrimary = false,
-                            onClick = { onDetailsClick(item) }
-                        )
+                        AppleTvButton(
+                            onClick = { onPlayClick(item) },
+                            style = AppleTvButtonStyle.Primary
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Hemen İzle",
+                                    color = Color.Black,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        AppleTvButton(
+                            onClick = { onDetailsClick(item) },
+                            style = AppleTvButtonStyle.Secondary
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Detaylar",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -803,63 +841,10 @@ private fun AppleTvHeroBillboard(
                         modifier = Modifier
                             .size(if (isCurrent) 8.dp else 6.dp)
                             .clip(CircleShape)
-                            .background(if (isCurrent) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.35f))
+                            .background(if (isCurrent) Color.White else Color.White.copy(alpha = 0.35f))
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun AppleTvActionButton(
-    text: String,
-    icon: ImageVector,
-    isPrimary: Boolean,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isFocused) 1.08f else 1.0f, label = "btn_scale")
-
-    Surface(
-        modifier = Modifier
-            .scale(scale)
-            .clip(RoundedCornerShape(50))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else if (isPrimary) Color.Transparent else Color.White.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(50)
-            )
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        shape = RoundedCornerShape(50),
-        color = if (isFocused) Color(0xFF00E5FF)
-        else if (isPrimary) Color.White
-        else Color(0xFF1E293B).copy(alpha = 0.8f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isFocused || isPrimary) Color.Black else Color.White,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = text,
-                color = if (isFocused || isPrimary) Color.Black else Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }
@@ -894,7 +879,7 @@ private fun TvLiveSection(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = Color(0xFF00E5FF))
+            CircularProgressIndicator(color = Color.White)
         }
         return
     }
@@ -917,8 +902,8 @@ private fun TvLiveSection(
             modifier = Modifier
                 .width(220.dp)
                 .fillMaxHeight()
-                .background(Color(0xFF0F141F).copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                .border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(16.dp))
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -1004,10 +989,10 @@ private fun TvVodSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 itemsIndexed(categories, key = { index, cat -> "cat_${cat.id}_$index" }) { _, cat ->
-                    TvFilterChip(
-                        title = cat.title,
+                    GlassChip(
                         selected = selectedCatId == cat.id,
-                        onClick = { selectedCatId = cat.id }
+                        onClick = { selectedCatId = cat.id },
+                        label = cat.title
                     )
                 }
             }
@@ -1018,7 +1003,7 @@ private fun TvVodSection(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFF00E5FF))
+                CircularProgressIndicator(color = Color.White)
             }
         } else if (items.isEmpty()) {
             Box(
@@ -1056,14 +1041,14 @@ private fun TvVodSection(
                                 .fillMaxWidth()
                                 .height(90.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF131722))
-                                .border(1.dp, Color(0xFF00E5FF).copy(0.3f), RoundedCornerShape(12.dp))
+                                .background(AppleTvTokens.SurfaceRaised)
+                                .border(1.dp, AppleTvTokens.HairlineStrong, RoundedCornerShape(12.dp))
                                 .clickable { visibleLimit += 40 },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 "Daha fazla yükle (${items.size - displayedItems.size})…",
-                                color = Color(0xFF00E5FF),
+                                color = Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -1122,7 +1107,7 @@ private fun TvSearchSection(
                 .focusable()
                 .border(
                     width = if (searchFocused) 3.dp else 1.dp,
-                    color = if (searchFocused) Color(0xFF00E5FF) else Color.White.copy(0.15f),
+                    color = if (searchFocused) Color.White else AppleTvTokens.Hairline,
                     shape = RoundedCornerShape(16.dp)
                 )
                 .clickable { isInputDialogOpen = true }
@@ -1132,7 +1117,7 @@ private fun TvSearchSection(
                     } else false
                 },
             shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF131824)
+            color = AppleTvTokens.SurfaceRaised
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -1141,7 +1126,7 @@ private fun TvSearchSection(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = if (searchFocused) Color(0xFF00E5FF) else Color.White.copy(0.6f),
+                    tint = if (searchFocused) Color.White else Color.White.copy(0.6f),
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(16.dp))
@@ -1238,7 +1223,7 @@ private fun AppleTvTabButton(
             .focusable()
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                color = if (isFocused) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(50)
             )
             .clickable(
@@ -1252,7 +1237,7 @@ private fun AppleTvTabButton(
                 } else false
             },
         shape = RoundedCornerShape(50),
-        color = if (isFocused) Color(0xFF00E5FF)
+        color = if (isFocused) Color.White
         else if (selected) Color.White.copy(alpha = 0.20f)
         else Color.Transparent
     ) {
@@ -1291,10 +1276,10 @@ private fun AppleTvCircleAction(
             .size(38.dp)
             .scale(scale)
             .clip(CircleShape)
-            .background(if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.10f))
+            .background(if (isFocused) Color.White else Color.White.copy(alpha = 0.10f))
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.15f),
+                color = if (isFocused) Color.White else AppleTvTokens.Hairline,
                 shape = CircleShape
             )
             .onFocusChanged { isFocused = it.isFocused }
@@ -1347,7 +1332,7 @@ private fun TvSearchInputDialog(
         },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = { onConfirm(text) }) {
-                Text("Ara", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                Text("Ara", color = Color.White, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -1357,7 +1342,7 @@ private fun TvSearchInputDialog(
                 Text("Temizle", color = Color.White.copy(0.6f))
             }
         },
-        containerColor = Color(0xFF131722),
+        containerColor = AppleTvTokens.SurfaceRaised,
         shape = RoundedCornerShape(14.dp)
     )
 }
@@ -1376,7 +1361,7 @@ private fun TvCategoryItem(
             .focusable()
             .border(
                 width = if (focused) 2.dp else 0.dp,
-                color = if (focused) Color(0xFF00E5FF) else Color.Transparent,
+                color = if (focused) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
@@ -1386,8 +1371,8 @@ private fun TvCategoryItem(
                 } else false
             },
         color = when {
-            focused -> Color(0xFF00E5FF)
-            selected -> Color(0xFF1E293B)
+            focused -> Color.White
+            selected -> AppleTvTokens.SurfaceRaised
             else -> Color.Transparent
         },
         shape = RoundedCornerShape(10.dp)
@@ -1396,7 +1381,7 @@ private fun TvCategoryItem(
             text = title,
             color = when {
                 focused -> Color.Black
-                selected -> Color(0xFF00E5FF)
+                selected -> Color.White
                 else -> Color.White.copy(0.85f)
             },
             fontSize = 13.sp,
@@ -1409,65 +1394,12 @@ private fun TvCategoryItem(
 }
 
 @Composable
-private fun TvFilterChip(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(
-                when {
-                    focused -> Color(0xFF00E5FF)
-                    selected -> Color(0xFF1E293B)
-                    else -> Color(0xFF131722)
-                }
-            )
-            .border(
-                width = if (focused) 2.5.dp else if (selected) 1.dp else 1.dp,
-                color = if (focused) Color.White else if (selected) Color(0xFF00E5FF).copy(0.5f) else Color.White.copy(0.08f),
-                shape = RoundedCornerShape(50)
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            }
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Text(
-            title,
-            color = if (focused) Color.Black else if (selected) Color(0xFF00E5FF) else Color.White.copy(0.85f),
-            fontSize = 13.sp,
-            fontWeight = if (focused || selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
-@Composable
 private fun TvSection(
     title: String,
     content: @Composable () -> Unit
 ) {
     Column {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
-            fontSize = 19.sp,
-            letterSpacing = (-0.3).sp
-        )
+        AppleSectionHeader(title = title, modifier = Modifier.padding(start = 12.dp, end = 12.dp))
         content()
         Spacer(Modifier.height(8.dp))
     }
@@ -1480,7 +1412,7 @@ private fun TvChannelCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null
 ) {
-    com.stalkerapp.ui.components.AppleTvCard(
+    AppleTvCard(
         modifier = Modifier.size(130.dp, 84.dp),
         onClick = onClick,
         onLongClick = onLongClick
@@ -1528,10 +1460,10 @@ private fun TvChannelGridCard(
             .fillMaxWidth()
             .scale(scale)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (focused) Color(0xFF1E293B) else Color(0xFF131722))
+            .background(if (focused) AppleTvTokens.SurfaceRaised else Color.Black.copy(alpha = 0.5f))
             .border(
                 width = if (focused) 3.dp else 1.dp,
-                color = if (focused) Color(0xFF00E5FF) else Color.White.copy(0.08f),
+                color = if (focused) Color.White else AppleTvTokens.Hairline,
                 shape = RoundedCornerShape(12.dp)
             )
             .onFocusChanged { focused = it.isFocused }
@@ -1570,7 +1502,7 @@ private fun TvChannelGridCard(
             if (channel.tvGenreTitle.isNotBlank()) {
                 Text(
                     text = channel.tvGenreTitle,
-                    color = Color(0xFF00E5FF),
+                    color = Color.White.copy(0.6f),
                     fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1603,7 +1535,7 @@ private fun TvVodCard(
     }
 
     Column(modifier = Modifier.width(135.dp)) {
-        com.stalkerapp.ui.components.AppleTvCard(
+        AppleTvCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f),
@@ -1674,10 +1606,10 @@ private fun TvVodQuickActionsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(22.dp),
-            color = Color(0xFF131722).copy(alpha = 0.98f),
+            color = AppleTvTokens.SurfaceRaised.copy(alpha = 0.98f),
             modifier = Modifier
                 .width(360.dp)
-                .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(22.dp))
+                .border(1.5.dp, AppleTvTokens.Hairline, RoundedCornerShape(22.dp))
                 .padding(20.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1715,12 +1647,13 @@ private fun TvVodQuickActionsDialog(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
+                                    .background(Color.White.copy(alpha = 0.20f))
+                                    .border(0.5.dp, AppleTvTokens.HairlineStrong, RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = if (isSeries) "DİZİ" else "FİLM",
-                                    color = Color(0xFF00E5FF),
+                                    color = Color.White,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1737,7 +1670,7 @@ private fun TvVodQuickActionsDialog(
                 }
 
                 Spacer(Modifier.height(4.dp))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                HorizontalDivider(color = AppleTvTokens.Hairline)
                 Spacer(Modifier.height(2.dp))
 
                 TvDialogActionRow(
@@ -1784,10 +1717,10 @@ private fun TvChannelQuickActionsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(22.dp),
-            color = Color(0xFF131722).copy(alpha = 0.98f),
+            color = AppleTvTokens.SurfaceRaised.copy(alpha = 0.98f),
             modifier = Modifier
                 .width(350.dp)
-                .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(22.dp))
+                .border(1.5.dp, AppleTvTokens.Hairline, RoundedCornerShape(22.dp))
                 .padding(20.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1809,14 +1742,14 @@ private fun TvChannelQuickActionsDialog(
                         )
                         Text(
                             text = channel.tvGenreTitle.ifBlank { "Canlı TV Kanalı" },
-                            color = Color(0xFF00E5FF),
+                            color = Color.White.copy(0.6f),
                             fontSize = 12.sp
                         )
                     }
                 }
 
                 Spacer(Modifier.height(4.dp))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                HorizontalDivider(color = AppleTvTokens.Hairline)
                 Spacer(Modifier.height(2.dp))
 
                 TvDialogActionRow(
@@ -1856,7 +1789,7 @@ private fun TvDialogActionRow(
             .focusable()
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                color = if (isFocused) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
@@ -1866,8 +1799,8 @@ private fun TvDialogActionRow(
                 } else false
             },
         color = when {
-            isFocused -> Color(0xFF00E5FF)
-            isPrimary -> Color(0xFF1E293B)
+            isFocused -> Color.White
+            isPrimary -> AppleTvTokens.SurfaceRaised
             else -> Color.White.copy(alpha = 0.05f)
         },
         shape = RoundedCornerShape(12.dp)

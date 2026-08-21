@@ -17,8 +17,12 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
+import com.stalkerapp.ui.components.AppleSectionHeader
 import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
 import com.stalkerapp.ui.components.AppleTvCard
+import com.stalkerapp.ui.components.AppleTvTokens
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -688,7 +692,7 @@ fun VodDetailScreen(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize().blur(60.dp)
         )
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
+        Box(modifier = Modifier.fillMaxSize().background(AppleTvTokens.BackdropScrim))
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             // ---------- Hero: poster, yarım ekran, anasayfadaki gibi ----------
             item {
@@ -703,16 +707,7 @@ fun VodDetailScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colorStops = arrayOf(
-                                        0.0f to Color.Transparent,
-                                        0.30f to Color.Black.copy(alpha = 0.15f),
-                                        0.60f to Color.Black.copy(alpha = 0.50f),
-                                        1.0f to Color.Black.copy(alpha = 0.88f)
-                                    )
-                                )
-                            )
+                            .background(AppleTvTokens.BackdropScrim)
                     )
                     Column(
                         modifier = Modifier
@@ -774,7 +769,7 @@ fun VodDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Oynat: Apple TV hap butonu, beyaz zemin, siyah kalın yazı, cyan odak çerçevesi
+                            // Oynat: Apple TV hap butonu, beyaz zemin, siyah kalın yazı, beyaz odak parıltısı
                             val playScale by androidx.compose.animation.core.animateFloatAsState(
                                 targetValue = if (isPlayFocused) 1.08f else 1.0f,
                                 label = "play_scale"
@@ -782,14 +777,14 @@ fun VodDetailScreen(
                             Surface(
                                 modifier = Modifier
                                     .scale(playScale)
-                                    .clip(RoundedCornerShape(50))
+                                    .clip(AppleTvTokens.PillShape)
                                     .focusRequester(playButtonFocusRequester)
                                     .onFocusChanged { isPlayFocused = it.isFocused }
                                     .focusable()
                                     .border(
                                         width = if (isPlayFocused) 3.dp else 0.dp,
-                                        color = if (isPlayFocused) Color(0xFF00E5FF) else Color.Transparent,
-                                        shape = RoundedCornerShape(50)
+                                        color = if (isPlayFocused) AppleTvTokens.FocusBorder else Color.Transparent,
+                                        shape = AppleTvTokens.PillShape
                                     )
                                     .clickable(enabled = !playing, onClick = { onPlayPressed() })
                                     .onKeyEvent { ev ->
@@ -797,8 +792,8 @@ fun VodDetailScreen(
                                             onPlayPressed(); true
                                         } else false
                                     },
-                                shape = RoundedCornerShape(50),
-                                color = if (isPlayFocused) Color(0xFF00E5FF) else Color.White
+                                shape = AppleTvTokens.PillShape,
+                                color = if (isPlayFocused) Color.White else Color.White.copy(alpha = 0.85f)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
@@ -835,7 +830,7 @@ fun VodDetailScreen(
                                     .clip(CircleShape)
                                     .onFocusChanged { isFavFocused = it.isFocused }
                                     .focusable()
-                                    .background(if (isFavFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.20f))
+                                    .background(if (isFavFocused) Color.White else Color.White.copy(alpha = 0.20f))
                                     .border(
                                         width = if (isFavFocused) 3.dp else 1.dp,
                                         color = if (isFavFocused) Color.White else Color.White.copy(alpha = 0.25f),
@@ -870,7 +865,7 @@ fun VodDetailScreen(
                                     .clip(CircleShape)
                                     .onFocusChanged { isWatchLaterFocused = it.isFocused }
                                     .focusable()
-                                    .background(if (isWatchLaterFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.20f))
+                                    .background(if (isWatchLaterFocused) Color.White else Color.White.copy(alpha = 0.20f))
                                     .border(
                                         width = if (isWatchLaterFocused) 3.dp else 1.dp,
                                         color = if (isWatchLaterFocused) Color.White else Color.White.copy(alpha = 0.25f),
@@ -910,7 +905,7 @@ fun VodDetailScreen(
                                         .focusable()
                                         .background(
                                             when {
-                                                isDlFocused -> Color(0xFF00E5FF)
+                                                isDlFocused -> Color.White
                                                 isCompleted -> Color(0xFF2E7D32).copy(alpha = 0.9f)
                                                 isDownloading -> Color(0xFF1565C0).copy(alpha = 0.9f)
                                                 else -> Color.White.copy(alpha = 0.20f)
@@ -1003,7 +998,11 @@ fun VodDetailScreen(
 
             // ---------- Bilgiler: yıl • süre, yönetmen, yazar, sinopsis ----------
             item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                GlassSurface(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    shape = AppleTvTokens.CardShape
+                ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     val ratingStr = it.rating.takeIf { r -> r.isNotBlank() && r != "0" && r != "0.0" }
                         ?: (if (tmdbRating > 0.0) String.format(java.util.Locale.US, "%.1f", tmdbRating) else null)
                     val metaParts = listOfNotNull(
@@ -1027,7 +1026,7 @@ fun VodDetailScreen(
                         Text(
                             "${str(lang, "Yönetmen: ")}$d",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = Color.White.copy(alpha = 0.9f),
                             modifier = Modifier.clickable { onOpenPerson(d, true) }
                         )
                         Spacer(Modifier.height(4.dp))
@@ -1045,16 +1044,15 @@ fun VodDetailScreen(
                         )
                     }
                 }
+                }
             }
 
             // ---------- Fragman: sinopsisin altında, gömülü oynatıcı ----------
             if (trailerKey.isNotBlank()) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                        Text(
-                            str(lang, "Fragman"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                        AppleSectionHeader(
+                            title = str(lang, "Fragman"),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                         )
                         TrailerPlayer(
@@ -1071,10 +1069,8 @@ fun VodDetailScreen(
             if (actors.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                        Text(
-                            str(lang, "Oyuncular"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                        AppleSectionHeader(
+                            title = str(lang, "Oyuncular"),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                         )
                         LazyRow(
@@ -1098,7 +1094,7 @@ fun VodDetailScreen(
                                         modifier = Modifier
                                             .size(56.dp)
                                             .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            .background(AppleTvTokens.SurfaceRaised),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (photo.isNotBlank()) {
@@ -1113,7 +1109,7 @@ fun VodDetailScreen(
                                                 initials(actorName),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
+                                                color = Color.White
                                             )
                                         }
                                     }
@@ -1138,10 +1134,8 @@ fun VodDetailScreen(
             if (isSeries && seasons.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                        Text(
-                            str(lang, "Sezonlar"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                        AppleSectionHeader(
+                            title = str(lang, "Sezonlar"),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                         )
                         LazyRow(
@@ -1178,12 +1172,12 @@ fun VodDetailScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .aspectRatio(2f / 3f)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            .clip(AppleTvTokens.CardShapeSmall)
+                                            .background(AppleTvTokens.SurfaceRaised)
                                             .border(
                                                 width = if (isSeasonFocused) 3.5.dp else if (sel) 2.dp else 0.dp,
-                                                color = if (isSeasonFocused) Color(0xFF00E5FF) else if (sel) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                                shape = RoundedCornerShape(12.dp)
+                                                color = if (isSeasonFocused) AppleTvTokens.FocusBorder else if (sel) AppleTvTokens.HairlineStrong else Color.Transparent,
+                                                shape = AppleTvTokens.CardShapeSmall
                                             )
                                     ) {
                                         if (poster.isNotBlank()) {
@@ -1234,7 +1228,7 @@ fun VodDetailScreen(
                                         textAlign = TextAlign.Center,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        color = if (isSeasonFocused) Color(0xFF00E5FF) else if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isSeasonFocused) Color.White else if (sel) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -1246,10 +1240,8 @@ fun VodDetailScreen(
                     episodes.orEmpty().isEmpty() -> item { EmptyState(str(lang, "Bölüm bulunamadı")) }
                     else -> item {
                         Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                            Text(
-                                str(lang, "Bölümler"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
+                            AppleSectionHeader(
+                                title = str(lang, "Bölümler"),
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                             )
                             LazyRow(
@@ -1275,18 +1267,18 @@ fun VodDetailScreen(
                                         modifier = Modifier
                                             .width(196.dp)
                                             .scale(epScale)
-                                            .clip(RoundedCornerShape(14.dp))
+                                            .clip(AppleTvTokens.CardShapeSmall)
                                             .onFocusChanged { isEpFocused = it.isFocused }
                                             .focusable()
                                             .background(
-                                                if (isEpFocused) Color(0xFF1E293B)
-                                                else if (watched) MaterialTheme.colorScheme.primaryContainer
-                                                else MaterialTheme.colorScheme.surfaceVariant
+                                                if (isEpFocused) AppleTvTokens.SurfaceRaised
+                                                else if (watched) Color.White.copy(alpha = 0.14f)
+                                                else AppleTvTokens.Surface
                                             )
                                             .border(
                                                 width = if (isEpFocused) 3.5.dp else 0.dp,
-                                                color = if (isEpFocused) Color(0xFF00E5FF) else Color.Transparent,
-                                                shape = RoundedCornerShape(14.dp)
+                                                color = if (isEpFocused) AppleTvTokens.FocusBorder else Color.Transparent,
+                                                shape = AppleTvTokens.CardShapeSmall
                                             )
                                             .combinedClickable(
                                                 onClick = { onPlayPressed(ep) },
@@ -1457,7 +1449,7 @@ fun VodDetailScreen(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .height(4.dp),
-                                                        color = MaterialTheme.colorScheme.primary
+                                                        color = Color.White
                                                     )
                                                 }
                                             }
@@ -1475,10 +1467,8 @@ fun VodDetailScreen(
             if (similar.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                        Text(
-                            str(lang, "Benzer İçerikler"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                        AppleSectionHeader(
+                            title = str(lang, "Benzer İçerikler"),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                         )
                         LazyRow(
@@ -1550,13 +1540,13 @@ fun VodDetailScreen(
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 Spacer(Modifier.height(18.dp))
-                Button(
+                AppleTvButton(
                     onClick = {
                         toggleSeasonWatched(s.id)
                         seasonConfirm = null
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    style = AppleTvButtonStyle.Primary
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -1566,10 +1556,10 @@ fun VodDetailScreen(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(
+                AppleTvButton(
                     onClick = { seasonConfirm = null },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    style = AppleTvButtonStyle.Glass
                 ) {
                     Text(str(lang, "İptal"))
                 }

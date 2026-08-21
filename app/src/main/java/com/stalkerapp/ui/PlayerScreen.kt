@@ -149,8 +149,12 @@ import com.stalkerapp.playback.ChannelQueue
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.playback.VodQueue
 import com.stalkerapp.ui.cast.CastDialog
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.ChannelRow
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.util.Afr
 import kotlinx.coroutines.delay
@@ -250,7 +254,7 @@ private fun PlayerTvIconButton(
         targetValue = if (isTvFocused) 1.22f else 1.0f,
         label = "btn_scale"
     )
-    val glowColor = Color(0xFF00E5FF)
+    val glowColor = Color.White
 
     Box(
         modifier = modifier
@@ -302,7 +306,7 @@ private fun PlayerTvActionChip(
             .clip(RoundedCornerShape(16.dp))
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
-            .background(if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f))
+            .background(if (isFocused) Color.White else Color.White.copy(alpha = 0.15f))
             .border(
                 width = if (isFocused) 3.dp else 1.dp,
                 color = if (isFocused) Color.White else Color.White.copy(alpha = 0.25f),
@@ -1482,7 +1486,7 @@ fun PlayerScreen(navController: NavHostController) {
                                 .fillMaxHeight()
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(Color(0xFF00B4D8), Color(0xFF00E5FF))
+                                        listOf(Color.White.copy(alpha = 0.18f), Color.White)
                                     )
                                 )
                         )
@@ -1954,14 +1958,14 @@ private fun TvFocusableSurface(
 
     Surface(
         shape = shape,
-        color = if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.28f) else backgroundColor,
+        color = if (isFocused) Color.White.copy(alpha = 0.28f) else backgroundColor,
         modifier = modifier
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
             .border(
                 width = if (isFocused) 3.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                color = if (isFocused) Color.White else Color.Transparent,
                 shape = shape
             )
             .clickable(onClick = onClick)
@@ -2845,10 +2849,10 @@ fun ChannelListPanel(
                                     .padding(bottom = 16.dp)
                                     .scale(scale)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (ch.id == currentId) Color(0xFF00E5FF).copy(alpha=0.2f) else Color.White.copy(alpha = 0.1f))
+                                    .background(if (ch.id == currentId) Color.White.copy(alpha=0.2f) else Color.White.copy(alpha = 0.1f))
                                     .border(
                                         width = if (isFocused) 2.dp else if (ch.id == currentId) 1.dp else 0.dp,
-                                        color = if (isFocused) Color.White else if (ch.id == currentId) Color(0xFF00E5FF) else Color.Transparent,
+                                        color = if (isFocused) Color.White else if (ch.id == currentId) Color.White else Color.Transparent,
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     .onFocusChanged { isFocused = it.isFocused }

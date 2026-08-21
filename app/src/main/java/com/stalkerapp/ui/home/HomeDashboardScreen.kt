@@ -29,12 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -71,13 +65,18 @@ import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvCard
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.VodQuickActionsSheet
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
-import com.stalkerapp.ui.vod.VodPoster
 import kotlinx.coroutines.delay
 
 private val L10nLocal: Map<String, String> = mapOf(
@@ -99,6 +98,7 @@ private val L10nLocal: Map<String, String> = mapOf(
     "Henüz favori kanal yok" to "No favorite channels yet",
     "DİZİ" to "SERIES",
     "FİLM" to "MOVIE",
+    "Oynat" to "Play",
     "Detayları Gör" to "View Details",
     "Tümü" to "All",
     "Kaynaklar yükleniyor" to "Loading sources",
@@ -370,6 +370,7 @@ fun HomeDashboardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .background(AppleTvTokens.Surface)
             .verticalScroll(scrollState)
     ) {
         // Hero banner Kütüphane & İçerik ayarından kapatılabilir.
@@ -400,27 +401,13 @@ fun HomeDashboardScreen(
             else 0f
             val pct = (ratio * 100).toInt().coerceIn(0, 100)
 
-            Box(
+            GlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.10f)
-                            )
-                        )
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Column {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -430,13 +417,13 @@ fun HomeDashboardScreen(
                             "$sourceLabel — ${str(lang, "Kaynaklar yükleniyor")}",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color.White
                         )
                         Text(
                             "%$pct",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color.White
                         )
                     }
                     Spacer(Modifier.height(6.dp))
@@ -446,14 +433,14 @@ fun HomeDashboardScreen(
                             .fillMaxWidth()
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        color = Color.White,
+                        trackColor = Color.White.copy(alpha = 0.22f)
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "${catalog.loadedCount} ${str(lang, "içerik yüklendi")} • ${catalog.doneCategories}/${catalog.totalCategories} ${str(lang, "kategori")}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = Color.White.copy(alpha = 0.7f)
                     )
                 }
             }
@@ -462,13 +449,13 @@ fun HomeDashboardScreen(
         sectionOrder.forEach { key ->
             when (key) {
                 "recent" -> if (recentlyWatched.isNotEmpty()) {
-                    Section(title = str(lang, "Son İzlenenler"), lang = lang, onSeeAll = null) {
+                    AppleSectionHeader(title = str(lang, "Son İzlenenler"), onSeeAll = null) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(recentlyWatched, key = { index, e -> "rec_${e.item.id}_$index" }) { _, e ->
-                                VodPoster(
+                                VodPosterCard(
                                     item = e.item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
                                     isSeries = catalog.isSeriesItem(e.item),
@@ -483,7 +470,7 @@ fun HomeDashboardScreen(
                     }
                 }
                 "continue" -> if (continueWatching.isNotEmpty()) {
-                    Section(title = str(lang, "İzlemeye Devam"), lang = lang, onSeeAll = null) {
+                    AppleSectionHeader(title = str(lang, "İzlemeye Devam"), onSeeAll = null) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -503,13 +490,13 @@ fun HomeDashboardScreen(
                     }
                 }
                 "recommendations" -> if (recommendations.isNotEmpty()) {
-                    Section(title = str(lang, "Senin İçin"), lang = lang, onSeeAll = null) {
+                    AppleSectionHeader(title = str(lang, "Senin İçin"), onSeeAll = null) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(recommendations, key = { index, item -> "rec_${item.id}_$index" }) { _, item ->
-                                VodPoster(
+                                VodPosterCard(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
                                     isSeries = catalog.isSeriesItem(item),
@@ -522,7 +509,7 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "movies" -> Section(title = str(lang, "Popüler Filmler"), lang = lang, onSeeAll = { onGotoTab(2) }) {
+                "movies" -> AppleSectionHeader(title = str(lang, "Popüler Filmler"), onSeeAll = { onGotoTab(2) }) {
                     if (movies.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
                         EmptyState(str(lang, "Film bulunamadı"))
                     } else {
@@ -531,7 +518,7 @@ fun HomeDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(movies, key = { index, item -> "mov_${item.id}_$index" }) { _, item ->
-                                VodPoster(
+                                VodPosterCard(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
                                     isSeries = false,
@@ -544,7 +531,7 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "series" -> Section(title = str(lang, "Popüler Diziler"), lang = lang, onSeeAll = { onGotoTab(3) }) {
+                "series" -> AppleSectionHeader(title = str(lang, "Popüler Diziler"), onSeeAll = { onGotoTab(3) }) {
                     if (series.isEmpty() && catalog.status != VodCatalogStatus.Syncing) {
                         EmptyState(str(lang, "Dizi bulunamadı"))
                     } else {
@@ -553,7 +540,7 @@ fun HomeDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(series, key = { index, item -> "ser_${item.id}_$index" }) { _, item ->
-                                VodPoster(
+                                VodPosterCard(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
                                     isSeries = true,
@@ -567,7 +554,7 @@ fun HomeDashboardScreen(
                     }
                 }
                 "recentchannels" -> if (settings.recentChannelsOnHome && recentChannels.isNotEmpty()) {
-                    Section(title = str(lang, "Son İzlenen Kanallar"), lang = lang, onSeeAll = { onGotoTab(1) }) {
+                    AppleSectionHeader(title = str(lang, "Son İzlenen Kanallar"), onSeeAll = { onGotoTab(1) }) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -587,7 +574,7 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "favchannels" -> Section(title = str(lang, "Favori Kanallar"), lang = lang, onSeeAll = { onGotoTab(1) }) {
+                "favchannels" -> AppleSectionHeader(title = str(lang, "Favori Kanallar"), onSeeAll = { onGotoTab(1) }) {
                     if (favChannels.isEmpty()) {
                         Text(str(lang, "Henüz favori kanal yok"), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -611,7 +598,7 @@ fun HomeDashboardScreen(
                         }
                     }
                 }
-                "live" -> Section(title = str(lang, "Canlı TV"), lang = lang, onSeeAll = { onGotoTab(1) }) {
+                "live" -> AppleSectionHeader(title = str(lang, "Canlı TV"), onSeeAll = { onGotoTab(1) }) {
                     when {
                         loadingChannels -> LoadingBox()
                         homeChannels.isNullOrEmpty() -> EmptyState(str(lang, "Kanal bulunamadı"))
@@ -635,13 +622,13 @@ fun HomeDashboardScreen(
                     }
                 }
                 "favvods" -> if (favVods.isNotEmpty()) {
-                    Section(title = str(lang, "Favori Filmler & Diziler"), lang = lang, onSeeAll = { onGotoTab(4) }) {
+                    AppleSectionHeader(title = str(lang, "Favori Filmler & Diziler"), onSeeAll = { onGotoTab(4) }) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(favVods.take(sectionSize), key = { index, item -> "fv_${item.id}_$index" }) { _, item ->
-                                VodPoster(
+                                VodPosterCard(
                                     item = item,
                                     baseUrl = profile?.baseUrl.orEmpty(),
                                     isSeries = catalog.isSeriesItem(item),
@@ -701,7 +688,9 @@ private fun HeroBanner(
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp)
             .height(heroHeight)
+            .clip(RoundedCornerShape(18.dp))
     ) { page ->
         val item = items[page]
         val isSeries = item.isSeries || item.seriesRef.isNotBlank()
@@ -734,16 +723,7 @@ private fun HeroBanner(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0.0f to Color.Transparent,
-                                0.30f to Color.Black.copy(alpha = 0.20f),
-                                0.60f to Color.Black.copy(alpha = 0.55f),
-                                1.0f to Color.Black.copy(alpha = 0.92f)
-                            )
-                        )
-                    )
+                    .background(AppleTvTokens.BackdropScrim)
             )
             Column(
                 modifier = Modifier
@@ -793,17 +773,37 @@ private fun HeroBanner(
                     }
                 }
                 Spacer(modifier = Modifier.height(18.dp))
-                // 3) Detayları Gör butonu (beyaz zemin, siyah kalın yazı, ortada)
-                Button(
-                    onClick = { onOpenVod(item.id, isSeries) },
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
-                    ),
-                    modifier = Modifier.height(44.dp)
+                // 3) Birincil + ikincil aksiyon butonları (beyaz pill / cam pill)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
                 ) {
-                    Text(str(lang, "Detayları Gör"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    AppleTvButton(
+                        onClick = { onOpenVod(item.id, isSeries) },
+                        style = AppleTvButtonStyle.Primary,
+                        modifier = Modifier.height(46.dp)
+                    ) {
+                        Text(
+                            str(lang, "Oynat"),
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.Black,
+                            modifier = Modifier.padding(horizontal = 26.dp)
+                        )
+                    }
+                    AppleTvButton(
+                        onClick = { onOpenVod(item.id, isSeries) },
+                        style = AppleTvButtonStyle.Glass,
+                        modifier = Modifier.height(46.dp)
+                    ) {
+                        Text(
+                            str(lang, "Detayları Gör"),
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 22.dp)
+                        )
+                    }
                 }
 
                 if (items.size > 1) {
@@ -818,7 +818,7 @@ private fun HeroBanner(
                                 modifier = Modifier
                                     .size(if (isCurrent) 7.dp else 5.dp)
                                     .clip(CircleShape)
-                                    .background(if (isCurrent) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.4f))
+                                    .background(if (isCurrent) Color.White else Color.White.copy(alpha = 0.4f))
                             )
                         }
                     }
@@ -829,69 +829,122 @@ private fun HeroBanner(
 }
 
 @Composable
-private fun Section(title: String, lang: String, onSeeAll: (() -> Unit)?, content: @Composable () -> Unit) {
-    Column(modifier = Modifier.padding(vertical = 10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Başlıklar büyük + kalın; mavi aksan çubuğu yok.
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            if (onSeeAll != null) {
-                // "Tümü": alt menüdeki cam pill ile aynı görünüm, sadece ok simgesi.
-                val pillShape = RoundedCornerShape(50)
+private fun VodPosterCard(
+    item: VodItem,
+    baseUrl: String,
+    isSeries: Boolean,
+    posterWidth: Int,
+    label: String? = null,
+    watched: Boolean = false,
+    onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null
+) {
+    AppleTvCard(
+        modifier = Modifier.width(posterWidth.dp),
+        cornerRadius = 18.dp,
+        onClick = onClick,
+        onLongClick = onLongPress
+    ) { _ ->
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f)
+            ) {
+                AsyncImage(
+                    model = resolveUrl(item.poster, baseUrl),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Alt gradyan: başlık okunabilir kalsın.
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
-                        .clip(pillShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.70f))
-                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), pillShape)
-                        .clickable { onSeeAll() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = str(lang, "Tümü"),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0.55f to Color.Transparent,
+                                1.0f to Color.Black.copy(alpha = 0.85f)
+                            )
+                        )
+                )
+                if (watched) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .padding(4.dp)
+                    ) {
+                        Text(
+                            "✓",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (label != null) {
+                    GlassSurface(
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                        shape = AppleTvTokens.CardShapeSmall
+                    ) {
+                        Text(
+                            label,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
+            Text(
+                item.name,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp)
+            )
         }
-        // Başlık ile kartlar arasında nefes payı: kartlar başlığa çok yapışmasın.
-        Spacer(modifier = Modifier.height(8.dp))
-        content()
     }
 }
 
 @Composable
 private fun ChannelCard(channel: Channel, baseUrl: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .width(160.dp)
-            .clickable(onClick = onClick)
-    ) {
+    AppleTvCard(
+        modifier = Modifier.width(160.dp),
+        cornerRadius = 18.dp,
+        onClick = onClick
+    ) { _ ->
         Row(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ChannelLogo(
                 logo = resolveUrl(channel.logo, baseUrl),
                 channelName = channel.name,
-                modifier = Modifier.size(40.dp)
+                baseUrl = baseUrl,
+                modifier = Modifier.size(44.dp, 32.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text(channel.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    channel.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 if (channel.tvGenreTitle.isNotBlank()) {
-                    Text(channel.tvGenreTitle, style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        channel.tvGenreTitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -906,59 +959,56 @@ private fun ContinueWatchingCard(
     positionMs: Long,
     durationMs: Long,
     episodeLabel: String? = null,
+    posterWidth: Int = 130,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null
 ) {
-    Column(
-        modifier = Modifier
-            .width(130.dp)
-            .then(
-                if (onLongPress != null) {
-                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress)
-                } else {
-                    Modifier.clickable(onClick = onClick)
-                }
-            )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(10.dp))
-        ) {
-            AsyncImage(
-                model = resolveUrl(item.poster, baseUrl),
-                contentDescription = item.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            LinearProgressIndicator(
-                progress = { if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp).align(Alignment.BottomCenter),
-                color = Color(0xFFE50914)
-            )
-            if (episodeLabel != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp)
-                        .background(Color(0xCC000000), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        episodeLabel,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall
-                    )
+    AppleTvCard(
+        modifier = Modifier.width(posterWidth.dp),
+        cornerRadius = 18.dp,
+        onClick = onClick,
+        onLongClick = onLongPress
+    ) { _ ->
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f)
+            ) {
+                AsyncImage(
+                    model = resolveUrl(item.poster, baseUrl),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                LinearProgressIndicator(
+                    progress = { if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).align(Alignment.BottomCenter),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.25f)
+                )
+                if (episodeLabel != null) {
+                    GlassSurface(
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                        shape = AppleTvTokens.CardShapeSmall
+                    ) {
+                        Text(
+                            episodeLabel,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
+            Text(
+                if (episodeLabel != null) "${item.name} • $episodeLabel" else item.name,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp)
+            )
         }
-        Text(
-            if (episodeLabel != null) "${item.name} • $episodeLabel" else item.name,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp)
-        )
     }
 }

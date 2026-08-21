@@ -61,6 +61,7 @@ import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.ChannelLogo
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.GlassChip
@@ -160,7 +161,7 @@ fun EpgGuideScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize().background(AppleTvTokens.Surface)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Üst bar: geri + başlık
             Row(
@@ -176,7 +177,8 @@ fun EpgGuideScreen(
                         .padding(start = 8.dp)
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.35f))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .border(1.dp, AppleTvTokens.Hairline, CircleShape)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), tint = Color.White)
                 }
@@ -205,10 +207,10 @@ fun EpgGuideScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(searchShape)
-                        .background(if (isTv && isFocused) Color(0xFF1E293B) else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                        .background(if (isTv && isFocused) AppleTvTokens.SurfaceRaised else Color.Black.copy(alpha = 0.60f))
                         .border(
                             width = if (isTv && isFocused) 2.5.dp else 1.dp,
-                            color = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                            color = if (isTv && isFocused) AppleTvTokens.FocusBorder else AppleTvTokens.Hairline,
                             shape = searchShape
                         )
                         .onFocusChanged { isFocused = it.isFocused }
@@ -226,7 +228,7 @@ fun EpgGuideScreen(
                     Icon(
                         Icons.Default.Search,
                         contentDescription = null,
-                        tint = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isTv && isFocused) Color.White else Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.size(18.dp)
                     )
                     if (isTv) {
@@ -282,7 +284,7 @@ fun EpgGuideScreen(
                         },
                         confirmButton = {
                             androidx.compose.material3.TextButton(onClick = { isInputModalOpen = false }) {
-                                Text(str(lang, "Tamam"), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                                Text(str(lang, "Tamam"), color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
@@ -293,7 +295,7 @@ fun EpgGuideScreen(
                                 Text(str(lang, "Temizle"), color = Color.White.copy(0.6f))
                             }
                         },
-                        containerColor = Color(0xFF131722),
+                        containerColor = AppleTvTokens.Surface,
                         shape = RoundedCornerShape(14.dp)
                     )
                 }
@@ -429,7 +431,7 @@ fun EpgGuideScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (programs.isEmpty() || programs.firstOrNull()?.isDefault == true)
                                         Color.White.copy(alpha = 0.4f)
-                                    else MaterialTheme.colorScheme.primary
+                                    else Color.White.copy(alpha = 0.85f)
                                 )
                             }
                             if (now != null) {
@@ -440,12 +442,12 @@ fun EpgGuideScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(
                                             if (now.isDefault) Color.White.copy(alpha = 0.08f)
-                                            else Color(0xFF1E3A8A).copy(alpha = 0.55f)
+                                            else Color.White.copy(alpha = 0.14f)
                                         )
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Kanalın altında şu an oynanan program adı.
+                                    // Kanalın altında şu an oynayan program adı.
                                     Text(
                                         "● ${now.name}",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -459,9 +461,10 @@ fun EpgGuideScreen(
                                         Text(
                                             "${vm.repository.formatEpoch(now.startTs)} — ${vm.repository.formatEpoch(now.stopTs)}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF8AB4F8)
+                                            color = Color.White.copy(alpha = 0.6f)
                                         )
                                     }
+                                }
                                 }
                             }
                             if (next != null && !next.isDefault) {
@@ -521,7 +524,7 @@ private fun EpgGridView(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(hScroll)
-                .background(Color(0xFF101418))
+                .background(AppleTvTokens.SurfaceRaised)
                 .height(26.dp)
         ) {
             Box(modifier = Modifier.width(totalWidthDp).height(26.dp)) {
@@ -558,7 +561,7 @@ private fun EpgGridView(
                         modifier = Modifier
                             .width(148.dp)
                             .height(rowHeight)
-                            .background(Color(0xFF0C0F12))
+                            .background(AppleTvTokens.Surface)
                             .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -599,7 +602,7 @@ private fun EpgGridView(
                                                 .height(rowHeight - 6.dp)
                                                 .clip(RoundedCornerShape(5.dp))
                                                 .background(
-                                                    if (p.isCurrent) Color(0xFF1E3A8A).copy(alpha = 0.85f)
+                                                    if (p.isCurrent) Color.White.copy(alpha = 0.20f)
                                                     else if (p.stopTs < now && ch.isTvArchive && ch.archiveDuration > 0) Color(0xFF2E7D32).copy(alpha = 0.5f)
                                                     else Color.White.copy(alpha = 0.10f)
                                                 )

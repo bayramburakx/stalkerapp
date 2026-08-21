@@ -3,11 +3,10 @@ package com.stalkerapp.ui.account
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,12 +20,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -36,8 +31,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,7 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +49,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -71,7 +63,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.stalkerapp.data.FirebaseSyncManager
-import com.stalkerapp.ui.theme.accentBrush
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvTokens
+import com.stalkerapp.ui.components.GlassSurface
 import kotlinx.coroutines.launch
 
 /**
@@ -179,11 +174,29 @@ fun LoginScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
+    val textFieldColors = TextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        disabledTextColor = Color.White.copy(alpha = 0.4f),
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        disabledContainerColor = Color.Transparent,
+        cursorColor = Color.White,
+        focusedIndicatorColor = AppleTvTokens.HairlineStrong,
+        unfocusedIndicatorColor = AppleTvTokens.Hairline,
+        focusedLabelColor = Color.White.copy(alpha = 0.8f),
+        unfocusedLabelColor = Color.White.copy(alpha = 0.5f),
+        focusedLeadingIconColor = Color.White,
+        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.7f),
+        focusedTrailingIconColor = Color.White,
+        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.7f)
+    )
+
+    Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(accentBrush()),
+                .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -191,10 +204,9 @@ fun LoginScreen(
                     .fillMaxHeight()
                     .widthIn(max = 500.dp)
                     .fillMaxWidth()
-                    .statusBarsPadding()
                     .imePadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (onBack != null) {
@@ -203,16 +215,16 @@ fun LoginScreen(
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = t("Geri"),
-                                tint = MaterialTheme.colorScheme.onSurface
+                                tint = Color.White
                             )
                         }
                     }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(32.dp))
 
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(76.dp)
                         .clip(CircleShape)
                 ) {
                     Image(
@@ -221,187 +233,199 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
                 Text(
                     text = if (mode == "login") t("Hesabına Giriş Yap") else t("Hesap Oluştur"),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = Color.White
                 )
                 Text(
                     text = t("Verilerin bulutta senkronlanır — başka cihazda kaldığın yerden devam et"),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(40.dp))
 
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text(t("E-posta")) },
-                    leadingIcon = { Icon(Icons.Filled.Email, null) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                GlassSurface(
                     modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text(t("Şifre")) },
-                    leadingIcon = { Icon(Icons.Filled.Lock, null) },
-                    singleLine = true,
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(
-                                if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                contentDescription = null
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = { Text(t("E-posta")) },
+                            leadingIcon = { Icon(Icons.Filled.Email, null) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            colors = textFieldColors,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text(t("Şifre")) },
+                            leadingIcon = { Icon(Icons.Filled.Lock, null) },
+                            singleLine = true,
+                            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showPassword = !showPassword }) {
+                                    Icon(
+                                        if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = null
+                                    )
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            colors = textFieldColors,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (mode == "register") {
+                            OutlinedTextField(
+                                value = password2,
+                                onValueChange = { password2 = it },
+                                label = { Text(t("Şifre (tekrar)")) },
+                                leadingIcon = { Icon(Icons.Filled.Lock, null) },
+                                singleLine = true,
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                colors = textFieldColors,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (mode == "register") {
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = password2,
-                        onValueChange = { password2 = it },
-                        label = { Text(t("Şifre (tekrar)")) },
-                        leadingIcon = { Icon(Icons.Filled.Lock, null) },
-                        singleLine = true,
-                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
 
-                if (error != null) {
-                    Text(
-                        text = error.orEmpty(),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
-                }
-                if (info != null) {
-                    Text(
-                        text = info.orEmpty(),
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
-                }
-
-                Spacer(Modifier.height(20.dp))
-                var isSubmitFocused by remember { mutableStateOf(false) }
-                Button(
-                    onClick = { submit() },
-                    enabled = !busy,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .onFocusChanged { isSubmitFocused = it.isFocused }
-                        .border(
-                            width = if (isSubmitFocused) 3.dp else 0.dp,
-                            color = if (isSubmitFocused) Color(0xFF00E5FF) else Color.Transparent,
-                            shape = RoundedCornerShape(24.dp)
-                        )
-                ) {
-                    if (busy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(if (mode == "login") t("Giriş Yap") else t("Kayıt Ol"), fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                if (mode == "login") {
-                    TextButton(onClick = {
-                        if (email.isBlank()) { error = t("Önce e-posta adresini girin"); return@TextButton }
-                        scope.launch {
-                            firebase.sendPasswordReset(email.trim())
-                                .onSuccess { info = t("Şifre sıfırlama bağlantısı e-postana gönderildi") }
-                                .onFailure { e -> error = e.message ?: t("Şifre sıfırlama başarısız") }
+                        if (error != null) {
+                            Text(
+                                text = error.orEmpty(),
+                                color = Color(0xFFFF6B6B),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
                         }
-                    }) {
-                        Text(t("Şifremi unuttum"))
+                        if (info != null) {
+                            Text(
+                                text = info.orEmpty(),
+                                color = Color.White.copy(alpha = 0.8f),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        AppleTvButton(
+                            onClick = { submit() },
+                            enabled = !busy,
+                            style = AppleTvButtonStyle.Primary,
+                            modifier = Modifier.fillMaxWidth().height(54.dp)
+                        ) { isFocused ->
+                            if (busy) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = Color.Black,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    if (mode == "login") t("Giriş Yap") else t("Kayıt Ol"),
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+
+                        if (mode == "login") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(AppleTvTokens.CardShapeSmall)
+                                    .clickable {
+                                        if (email.isBlank()) { error = t("Önce e-posta adresini girin"); return@clickable }
+                                        scope.launch {
+                                            firebase.sendPasswordReset(email.trim())
+                                                .onSuccess { info = t("Şifre sıfırlama bağlantısı e-postana gönderildi") }
+                                                .onFailure { e -> error = e.message ?: t("Şifre sıfırlama başarısız") }
+                                        }
+                                    }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    t("Şifremi unuttum"),
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = AppleTvTokens.Hairline)
+                            Text(
+                                " ${t("veya")} ",
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = AppleTvTokens.Hairline)
+                        }
+
+                        AppleTvButton(
+                            onClick = { launchGoogle() },
+                            enabled = googleAvailable && !busy,
+                            style = AppleTvButtonStyle.Secondary,
+                            modifier = Modifier.fillMaxWidth().height(54.dp)
+                        ) {
+                            Text(
+                                if (!googleAvailable) t("Google ile devam et (kurulum gerekli)") else t("Google ile devam et"),
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        if (!googleAvailable) {
+                            Text(
+                                t("Google girişi henüz yapılandırılmadı. Firebase konsolunda Google oturumunu etkinleştirip Web client ID'yi doldur."),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
                     }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-                    Text(
-                        " ${t("veya")} ",
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-                }
-
-                var isGoogleFocused by remember { mutableStateOf(false) }
-                Button(
-                    onClick = { launchGoogle() },
-                    enabled = googleAvailable && !busy,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .onFocusChanged { isGoogleFocused = it.isFocused }
-                        .border(
-                            width = if (isGoogleFocused) 3.dp else 0.dp,
-                            color = if (isGoogleFocused) Color(0xFF00E5FF) else Color.Transparent,
-                            shape = RoundedCornerShape(24.dp)
-                        ),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Text(
-                        if (!googleAvailable) t("Google ile devam et (kurulum gerekli)") else t("Google ile devam et"),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                if (!googleAvailable) {
-                    Text(
-                        t("Google girişi henüz yapılandırılmadı. Firebase konsolunda Google oturumunu etkinleştirip Web client ID'yi doldur."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
                 }
 
                 Spacer(Modifier.height(24.dp))
-                TextButton(onClick = { mode = if (mode == "login") "register" else "login"; error = null; info = null }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(AppleTvTokens.CardShapeSmall)
+                        .clickable { mode = if (mode == "login") "register" else "login"; error = null; info = null }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
                         if (mode == "login") t("Hesabın yok mu? Kayıt ol") else t("Zaten hesabın var mı? Giriş yap"),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
-                Spacer(Modifier.height(8.dp))
-                var isGuestFocused by remember { mutableStateOf(false) }
-                TextButton(
+                Spacer(Modifier.height(12.dp))
+                AppleTvButton(
                     onClick = { onSignedIn() },
-                    modifier = Modifier
-                        .onFocusChanged { isGuestFocused = it.isFocused }
-                        .border(
-                            width = if (isGuestFocused) 2.dp else 0.dp,
-                            color = if (isGuestFocused) Color(0xFF00E5FF) else Color.Transparent,
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                    style = AppleTvButtonStyle.Glass,
+                    modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
                     Text(
                         t("Giriş Yapmadan Devam Et (Misafir)"),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color.White,
                         fontWeight = FontWeight.SemiBold
                     )
                 }

@@ -10,25 +10,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,9 +43,13 @@ import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
-import com.stalkerapp.ui.components.GlassChip
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
 
@@ -178,34 +181,45 @@ fun LibraryScreen(
         activeList?.itemIds?.mapNotNull { byId[it] } ?: emptyList()
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        Text(
-            str(lang, "Kütüphanem"),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+    Column(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        SectionHeader(str(lang, "Kütüphanem"))
         // Başlık ile filtre çipleri arasında nefes payı.
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Filtre çipleri (arama ekranındaki gibi).
+        // Filtre çipleri (Apple TV dili: yuvarlak cam pill butonları).
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(LibFilter.entries.toList()) { f ->
-                GlassChip(
-                    selected = filter == f && activeListId == null,
+                val selected = filter == f && activeListId == null
+                AppleTvButton(
                     onClick = { filter = f; activeListId = null },
-                    label = str(lang, f.label)
-                )
+                    style = if (selected) AppleTvButtonStyle.Secondary else AppleTvButtonStyle.Glass,
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    Text(
+                        str(lang, f.label),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
             }
             items(userLists) { l ->
-                GlassChip(
-                    selected = activeListId == l.id,
+                val selected = activeListId == l.id
+                AppleTvButton(
                     onClick = { activeListId = l.id; filter = LibFilter.ALL },
-                    label = "📁 ${l.name}"
-                )
+                    style = if (selected) AppleTvButtonStyle.Secondary else AppleTvButtonStyle.Glass,
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    Text(
+                        "📁 ${l.name}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
             }
         }
 
@@ -226,49 +240,57 @@ fun LibraryScreen(
         }
 
         LazyColumn(
-            contentPadding = PaddingValues(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(34.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             when {
                 // Favori kanallar her filtrenin üstünde sabit gösterilir
                 // (Kütüphanem'de canlı TV favorileri de görünmeli).
                 favChannels.isNotEmpty() && activeList == null && filter == LibFilter.ALL -> {
+                    item { SectionHeader(str(lang, "Favori Kanallar") + " (${favChannels.size})") }
                     item {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            Text(
-                                str(lang, "Favori Kanallar") + " (${favChannels.size})",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GlassChip(
-                                selected = isReorderingChannels,
+                            AppleTvButton(
                                 onClick = { isReorderingChannels = !isReorderingChannels },
-                                label = if (isReorderingChannels) str(lang, "Tamam") else str(lang, "Sırala")
-                            )
+                                style = if (isReorderingChannels) AppleTvButtonStyle.Secondary else AppleTvButtonStyle.Glass,
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text(
+                                    if (isReorderingChannels) str(lang, "Tamam") else str(lang, "Sırala"),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
                     if (isReorderingChannels) {
                         item {
-                            Text(
-                                str(lang, "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
+                            GlassSurface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    str(lang, "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                )
+                            }
                         }
                     }
                     itemsIndexed(favChannels, key = { _, ch -> ch.id }) { index, ch ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(if (isReorderingChannels) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f) else Color.Transparent),
+                                .background(if (isReorderingChannels) AppleTvTokens.SurfaceRaised.copy(alpha = 0.6f) else Color.Transparent),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (isReorderingChannels) {
@@ -281,14 +303,14 @@ fun LibraryScreen(
                                         enabled = index > 0,
                                         modifier = Modifier.size(32.dp)
                                     ) {
-                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = if (index > 0) MaterialTheme.colorScheme.primary else Color.Gray)
+                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = if (index > 0) Color.White else Color.Gray)
                                     }
                                     IconButton(
                                         onClick = { moveChannel(index, index + 1) },
                                         enabled = index < favChannels.size - 1,
                                         modifier = Modifier.size(32.dp)
                                     ) {
-                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = if (index < favChannels.size - 1) MaterialTheme.colorScheme.primary else Color.Gray)
+                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = if (index < favChannels.size - 1) Color.White else Color.Gray)
                                     }
                                 }
                             }
@@ -307,7 +329,7 @@ fun LibraryScreen(
                                 )
                             }
                         }
-                        HorizontalDivider()
+                        HorizontalDivider(color = AppleTvTokens.Hairline)
                     }
                 }
                 activeList != null -> {
@@ -317,7 +339,7 @@ fun LibraryScreen(
                             Text(
                                 str(lang, "Bu listede henüz içerik yok. Bir içeriğin detayından listeye ekleyebilirsin."),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = Color.White.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(horizontal = 8.dp)
                             )
                         }
@@ -397,41 +419,49 @@ fun LibraryScreen(
                             item { PosterRow(favResolved, profile, catalog.isSeriesItem, onOpenVod, watchedOverrides, vodProgress) }
                         }
                         if (favChannels.isNotEmpty()) {
+                            item { SectionHeader(str(lang, "Favori Kanallar") + " (${favChannels.size})") }
                             item {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    horizontalArrangement = Arrangement.End
                                 ) {
-                                    Text(
-                                        str(lang, "Favori Kanallar") + " (${favChannels.size})",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    GlassChip(
-                                        selected = isReorderingChannels,
+                                    AppleTvButton(
                                         onClick = { isReorderingChannels = !isReorderingChannels },
-                                        label = if (isReorderingChannels) str(lang, "Tamam") else str(lang, "Sırala")
-                                    )
+                                        style = if (isReorderingChannels) AppleTvButtonStyle.Secondary else AppleTvButtonStyle.Glass,
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text(
+                                            if (isReorderingChannels) str(lang, "Tamam") else str(lang, "Sırala"),
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
                             }
                             if (isReorderingChannels) {
                                 item {
-                                    Text(
-                                        str(lang, "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir"),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
+                                    GlassSurface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            str(lang, "Favori kanalların sırasını yukarı/aşağı butonlarıyla değiştir"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                        )
+                                    }
                                 }
                             }
                             itemsIndexed(favChannels, key = { _, ch -> ch.id }) { index, ch ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(if (isReorderingChannels) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f) else Color.Transparent),
+                                        .background(if (isReorderingChannels) AppleTvTokens.SurfaceRaised.copy(alpha = 0.6f) else Color.Transparent),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (isReorderingChannels) {
@@ -444,14 +474,14 @@ fun LibraryScreen(
                                                 enabled = index > 0,
                                                 modifier = Modifier.size(32.dp)
                                             ) {
-                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = if (index > 0) MaterialTheme.colorScheme.primary else Color.Gray)
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = if (index > 0) Color.White else Color.Gray)
                                             }
                                             IconButton(
                                                 onClick = { moveChannel(index, index + 1) },
                                                 enabled = index < favChannels.size - 1,
                                                 modifier = Modifier.size(32.dp)
                                             ) {
-                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = if (index < favChannels.size - 1) MaterialTheme.colorScheme.primary else Color.Gray)
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = if (index < favChannels.size - 1) Color.White else Color.Gray)
                                             }
                                         }
                                     }
@@ -470,7 +500,7 @@ fun LibraryScreen(
                                         )
                                     }
                                 }
-                                HorizontalDivider()
+                                HorizontalDivider(color = AppleTvTokens.Hairline)
                             }
                         }
                     }
@@ -482,12 +512,7 @@ fun LibraryScreen(
 
 @Composable
 private fun SectionHeader(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-    )
+    AppleSectionHeader(title = title)
 }
 
 @Composable
@@ -495,7 +520,7 @@ private fun EmptyHint(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = Color.White.copy(alpha = 0.6f),
         modifier = Modifier.padding(16.dp)
     )
 }
@@ -513,7 +538,7 @@ private fun PosterRow(
     if (items.isEmpty()) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         items(items, key = { it.id }) { item ->
             val p = vodProgress[item.id]
@@ -523,16 +548,17 @@ private fun PosterRow(
                 VodPoster(
                     item = item,
                     baseUrl = profile?.baseUrl.orEmpty(),
+                    onClick = { onOpenVod(item.id, isSeries(item)) },
                     isSeries = isSeries(item),
-                    watched = watched,
-                    onClick = { onOpenVod(item.id, isSeries(item)) }
+                    watched = watched
                 )
                 subtitle?.invoke(item)?.let { s ->
                     Text(
                         s,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
             }

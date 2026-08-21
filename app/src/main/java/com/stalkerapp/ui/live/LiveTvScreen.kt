@@ -54,6 +54,7 @@ import com.stalkerapp.data.Genre
 import com.stalkerapp.data.Profile
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.rememberMainViewModel
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
 import com.stalkerapp.ui.components.GlassChip
@@ -82,19 +83,19 @@ fun LiveTvScreen(
 
     // Hiçbir kaynak eklenmemiş veya aktif kaynak türü Ayarlar'dan kapatılmış.
     if (vm.enabledSourceKind() == null) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxSize().background(AppleTvTokens.Surface), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                 Text(
                     t("Henüz bir kaynak eklemedin"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = Color.White
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     t("Ayarlar → Playlist & Kaynaklar bölümünden Stalker portal, M3U listesi veya Xtream Codes ekleyerek kanalları burada görebilirsin."),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -148,7 +149,7 @@ fun LiveTvScreen(
         nowPlaying = runCatching { vm.repository.nowPlayingTitles(ch) }.getOrDefault(emptyMap())
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+        Box(modifier = modifier.fillMaxSize().background(AppleTvTokens.Surface)) {
         // Kanal yönetimi özelleştirmeleri (özel gruplar / sıralama / ad / logo).
         // Veri hesapları Column dışında tutulur çünkü Multi View overlay'i de bu kapsamı kullanır.
         val customization = remember(customVersion) { app.store.channelCustomization() }
@@ -219,16 +220,16 @@ fun LiveTvScreen(
             var isFocused by remember { mutableStateOf(false) }
             val searchShape = RoundedCornerShape(50)
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(searchShape)
-                    .background(if (isTv && isFocused) Color(0xFF1E293B) else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
-                    .border(
-                        width = if (isTv && isFocused) 2.5.dp else 1.dp,
-                        color = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-                        shape = searchShape
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(searchShape)
+                        .background(if (isTv && isFocused) AppleTvTokens.SurfaceRaised else Color.Black.copy(alpha = 0.60f))
+                        .border(
+                            width = if (isTv && isFocused) 2.5.dp else 1.dp,
+                            color = if (isTv && isFocused) AppleTvTokens.FocusBorder else AppleTvTokens.Hairline,
+                            shape = searchShape
+                        )
                     .onFocusChanged { isFocused = it.isFocused }
                     .focusable(isTv)
                     .clickable(isTv) { isInputModalOpen = true }
@@ -244,7 +245,7 @@ fun LiveTvScreen(
                 Icon(
                     Icons.Default.Search,
                     contentDescription = null,
-                    tint = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isTv && isFocused) Color.White else Color.White.copy(alpha = 0.6f),
                     modifier = Modifier.size(18.dp)
                 )
                 if (isTv) {
@@ -300,7 +301,7 @@ fun LiveTvScreen(
                     },
                     confirmButton = {
                         androidx.compose.material3.TextButton(onClick = { isInputModalOpen = false }) {
-                            Text(t("Tamam"), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                            Text(t("Tamam"), color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     },
                     dismissButton = {
@@ -311,7 +312,7 @@ fun LiveTvScreen(
                             Text(t("Temizle"), color = Color.White.copy(0.6f))
                         }
                     },
-                    containerColor = Color(0xFF131722),
+                    containerColor = AppleTvTokens.Surface,
                     shape = RoundedCornerShape(14.dp)
                 )
             }

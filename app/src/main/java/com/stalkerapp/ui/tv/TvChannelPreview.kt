@@ -1,6 +1,7 @@
 package com.stalkerapp.ui.tv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -19,12 +20,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.stalkerapp.data.Channel
+import com.stalkerapp.ui.components.AppleTvTokens
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.components.resolveUrl
 import kotlinx.coroutines.delay
 
@@ -92,8 +94,10 @@ fun TvChannelPreview(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black),
+            .clip(AppleTvTokens.CardShape)
+            .background(AppleTvTokens.Surface)
+            .background(AppleTvTokens.GlassGradient)
+            .border(1.dp, AppleTvTokens.Hairline, AppleTvTokens.CardShape),
         contentAlignment = Alignment.Center
     ) {
         val currentPlayer = player
@@ -113,11 +117,21 @@ fun TvChannelPreview(
         }
 
         if (isLoading || channel == null) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                color = Color.White.copy(0.7f),
-                strokeWidth = 2.dp
-            )
+            GlassSurface(
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.size(52.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                }
+            }
         }
     }
 }

@@ -21,11 +21,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,7 +36,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.stalkerapp.data.OfflineDownloadManager
+import com.stalkerapp.ui.components.AppleHairline
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvCard
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassSurface
 
 /**
  * İndirilen ve indirilmekte olan içeriklerin listesi.
@@ -55,43 +59,37 @@ fun DownloadsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(AppleTvTokens.Surface)
             .statusBarsPadding()
     ) {
+        Spacer(Modifier.height(16.dp))
+
         // Başlık
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Download,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "İndirilenler",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        AppleSectionHeader(
+            title = "İndirilenler",
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
 
         // Disk kullanımı özeti
         val usedMb = OfflineDownloadManager.usedDiskBytes() / (1024 * 1024)
         if (usedMb > 0) {
-            Text(
-                "Kullanılan depolama: ${usedMb} MB",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(Modifier.height(8.dp))
+            GlassSurface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                shape = AppleTvTokens.CardShape
+            ) {
+                Text(
+                    "Kullanılan depolama: ${usedMb} MB",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
+                )
+            }
+            Spacer(Modifier.height(20.dp))
         }
 
-        HorizontalDivider()
+        AppleHairline(modifier = Modifier.padding(horizontal = 24.dp))
 
         if (downloads.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -102,15 +100,20 @@ fun DownloadsScreen(
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 items(downloads, key = { it.id }) { entry ->
                     DownloadItem(
                         entry = entry,
                         onPlay = { onPlayOffline(entry) },
                         onDelete = { OfflineDownloadManager.cancel(entry.id) }
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
+                item { Spacer(Modifier.height(40.dp)) }
             }
         }
     }
@@ -122,116 +125,159 @@ private fun DownloadItem(
     onPlay: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Row(
+    AppleTvCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        onClick = { },
+        cornerRadius = 18.dp
     ) {
-        // Küçük poster
-        if (entry.poster.isNotBlank()) {
-            AsyncImage(
-                model = entry.poster,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(56.dp, 80.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.DarkGray)
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(56.dp, 80.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.DarkGray),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Download, null, tint = Color.White.copy(0.5f))
-            }
-        }
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                entry.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (entry.episodeLabel.isNotBlank()) {
-                Text(
-                    entry.episodeLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Küçük poster
+            if (entry.poster.isNotBlank()) {
+                AsyncImage(
+                    model = entry.poster,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(64.dp, 92.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AppleTvTokens.SurfaceRaised)
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp, 92.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AppleTvTokens.SurfaceRaised),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Download,
+                        null,
+                        tint = Color.White.copy(0.5f),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
-            Spacer(Modifier.height(6.dp))
 
-            when (entry.state) {
-                "downloading" -> {
-                    LinearProgressIndicator(
-                        progress = { entry.progressPct / 100f },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    entry.title,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (entry.episodeLabel.isNotBlank()) {
                     Text(
-                        "${entry.progressPct.toInt()}% indiriliyor",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        entry.episodeLabel,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f)
                     )
                 }
-                "completed" -> {
-                    val sizeStr = if (entry.fileSizeBytes >= 1024L * 1024L * 1024L) {
-                        String.format(java.util.Locale.US, "%.2f GB", entry.fileSizeBytes / (1024.0 * 1024.0 * 1024.0))
-                    } else if (entry.fileSizeBytes > 0) {
-                        "${entry.fileSizeBytes / (1024 * 1024)} MB"
-                    } else ""
-                    Text(
-                        "✓ İndirildi${if (sizeStr.isNotBlank()) " · $sizeStr" else ""}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF4CAF50)
-                    )
-                }
-                "failed" -> {
-                    Text(
-                        "✗ İndirme başarısız",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                "queued" -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.height(10.dp))
+
+                when (entry.state) {
+                    "downloading" -> {
+                        LinearProgressIndicator(
+                            progress = { entry.progressPct / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.2f)
+                        )
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            "Sırada bekliyor",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "${entry.progressPct.toInt()}% indiriliyor",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.75f)
+                        )
+                    }
+                    "completed" -> {
+                        val sizeStr = if (entry.fileSizeBytes >= 1024L * 1024L * 1024L) {
+                            String.format(java.util.Locale.US, "%.2f GB", entry.fileSizeBytes / (1024.0 * 1024.0 * 1024.0))
+                        } else if (entry.fileSizeBytes > 0) {
+                            "${entry.fileSizeBytes / (1024 * 1024)} MB"
+                        } else ""
+                        Text(
+                            "✓ İndirildi${if (sizeStr.isNotBlank()) " · $sizeStr" else ""}",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = Color.White
+                        )
+                    }
+                    "failed" -> {
+                        Text(
+                            "✗ İndirme başarısız",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                    }
+                    "queued" -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Sırada bekliyor",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // İndirilmişse oynat butonu
+            if (entry.state == "completed") {
+                AppleTvButton(
+                    onClick = onPlay,
+                    style = AppleTvButtonStyle.Secondary,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Oynat",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
             }
-        }
 
-        // İndirilmişse oynat butonu
-        if (entry.state == "completed") {
-            IconButton(onClick = onPlay) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Oynat",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+            // Sil butonu
+            AppleTvButton(
+                onClick = onDelete,
+                style = AppleTvButtonStyle.Glass,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Sil",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
-        }
-
-        // Sil butonu
-        IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = "Sil",
-                tint = MaterialTheme.colorScheme.error
-            )
         }
     }
 }

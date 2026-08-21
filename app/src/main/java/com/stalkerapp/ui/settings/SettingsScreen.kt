@@ -132,7 +132,12 @@ import com.stalkerapp.data.XtreamSource
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.GlassChip
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.components.UpdateDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -694,14 +699,16 @@ fun SettingsScreen(
         if (showPinReset) {
             AlertDialog(
                 onDismissRequest = { showPinReset = false },
+                containerColor = Color.Black.copy(alpha = 0.6f),
+                modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
                 confirmButton = {
-                    TextButton(onClick = {
+                    AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                         showPinReset = false
                         vm.clearAllData()
                         pinUnlocked = true
                     }) { Text(str(lang, "Evet, Sıfırla")) }
                 },
-                dismissButton = { TextButton(onClick = { showPinReset = false }) { Text(str(lang, "Vazgeç")) } },
+                dismissButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showPinReset = false }) { Text(str(lang, "Vazgeç")) } },
                 title = { Text(str(lang, "Tüm veriler sıfırlanacak")) },
                 text = {
                     Text(str(lang, "PIN'i unuttuysan tek seçenek tüm verileri silmek: portallar, ayarlar, izleme geçmişi ve katalog silinir. Devam edilsin mi?"))
@@ -1240,7 +1247,7 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = {
+                            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                                 val c = vm.store.channelCustomization()
                                 vm.store.saveChannelCustomization(c.copy(
                                     customGroups = c.customGroups.filterNot { it.id == g.id },
@@ -1315,7 +1322,7 @@ fun SettingsScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = {
+                            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                                 vm.saveSettings(
                                     settings.copy(hiddenFromHome = settings.hiddenFromHome - item.id)
                                 )
@@ -1341,14 +1348,16 @@ fun SettingsScreen(
                 if (showClearHistory) {
                     AlertDialog(
                         onDismissRequest = { showClearHistory = false },
+                        containerColor = Color.Black.copy(alpha = 0.6f),
+                        modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
                         confirmButton = {
-                            TextButton(onClick = {
+                            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                                 showClearHistory = false
                                 vm.clearWatchHistory()
                                 vm.showMessage(str(lang, "İzleme geçmişi temizlendi"))
                             }) { Text(str(lang, "Temizle")) }
                         },
-                        dismissButton = { TextButton(onClick = { showClearHistory = false }) { Text(str(lang, "Vazgeç")) } },
+                        dismissButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showClearHistory = false }) { Text(str(lang, "Vazgeç")) } },
                         title = { Text(str(lang, "İzleme geçmişi temizlensin mi?")) },
                         text = { Text(str(lang, "Tüm ilerlemeler ve izlendi işaretleri silinir. Bu işlem geri alınamaz.")) }
                     )
@@ -1398,7 +1407,7 @@ fun SettingsScreen(
                         }
                     }
                     if (hiddenCatSet.isNotEmpty()) {
-                        TextButton(onClick = {
+                        AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                             vm.saveSettings(settings.copy(hiddenCategories = emptyList()))
                             vm.showMessage(str(lang, "Gizlenen kategoriler tekrar gösteriliyor"))
                         }) { Text(str(lang, "Hepsini Göster (") + hiddenCatSet.size.toString() + ")") }
@@ -1479,7 +1488,7 @@ fun SettingsScreen(
                         Icon(
                             Icons.Default.ListAlt,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = Color.White,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
@@ -1671,7 +1680,7 @@ fun SettingsScreen(
                         Text(
                             "✓ ${catalog.loadedCount} " + str(lang, "içerik senkronize edildi"),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color.White
                         )
                         if (catalog.portalTotal > 0 && catalog.loadedCount < catalog.portalTotal * 0.95) {
                             Text(
@@ -2551,7 +2560,7 @@ fun SettingsScreen(
                     }) { Text("GitHub") }
                 }
                 if (updateMessage != null) {
-                    Text(updateMessage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(updateMessage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = Color.White)
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -2567,7 +2576,9 @@ fun SettingsScreen(
                 if (showLicense) {
                     AlertDialog(
                         onDismissRequest = { showLicense = false },
-                        confirmButton = { TextButton(onClick = { showLicense = false }) { Text(str(lang, "Kapat")) } },
+                        containerColor = Color.Black.copy(alpha = 0.6f),
+                        modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
+                        confirmButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showLicense = false }) { Text(str(lang, "Kapat")) } },
                         title = { Text(str(lang, "Lisans")) },
                         text = {
                             Text(
@@ -2686,10 +2697,10 @@ private fun ToggleRow(
             .clip(RoundedCornerShape(16.dp))
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
-            .background(if (isFocused) Color(0xFF1E293B) else Color(0xFF161B26).copy(alpha = 0.75f))
+            .background(if (isFocused) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.55f))
             .border(
                 width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.08f),
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.08f),
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable { onCheckedChange(!checked) }
@@ -2705,14 +2716,14 @@ private fun ToggleRow(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
-                .border(1.dp, if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                .background(if (isFocused) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                .border(1.dp, if (isFocused) Color.White else Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                tint = if (isFocused) Color.White else Color.White,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -2736,7 +2747,7 @@ private fun ToggleRow(
             onCheckedChange = onCheckedChange,
             colors = androidx.compose.material3.SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF00E5FF),
+                checkedTrackColor = Color.White,
                 uncheckedThumbColor = Color.White.copy(alpha = 0.7f),
                 uncheckedTrackColor = Color.White.copy(alpha = 0.15f)
             )
@@ -2756,11 +2767,11 @@ private fun SectionHeader(icon: ImageVector, title: String) {
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
-                .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                .background(Color.White.copy(alpha = 0.18f))
+                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
         Text(
             text = title,
@@ -2778,14 +2789,7 @@ private fun SettingsCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp)),
-        color = Color(0xFF131824).copy(alpha = 0.85f),
-        shape = RoundedCornerShape(20.dp)
-    ) {
+    GlassSurface(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2823,7 +2827,7 @@ private fun SettingsNavRow(
                     .background(Color.White.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = if (isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.primary)
+                Icon(icon, contentDescription = null, tint = if (isFocused) Color.White else Color.White)
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -2831,7 +2835,7 @@ private fun SettingsNavRow(
                     title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (isFocused) Color(0xFF00E5FF) else Color.Unspecified
+                    color = if (isFocused) Color.White else Color.Unspecified
                 )
                 Text(
                     desc,
@@ -2871,8 +2875,8 @@ private fun SettingsPage(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(if (isBackFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.10f))
-                    .border(1.dp, if (isBackFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f), CircleShape)
+                    .background(if (isBackFocused) Color.White else Color.White.copy(alpha = 0.10f))
+                    .border(1.dp, if (isBackFocused) Color.White else Color.White.copy(alpha = 0.15f), CircleShape)
                     .onFocusChanged { isBackFocused = it.isFocused }
                     .focusable()
                     .clickable(onClick = onBack)
@@ -2895,11 +2899,11 @@ private fun SettingsPage(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
-                    .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                    .background(Color.White.copy(alpha = 0.18f))
+                    .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -2946,11 +2950,11 @@ private fun PinLockOverlay(
             modifier = Modifier
                 .size(68.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
-                .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f), RoundedCornerShape(20.dp)),
+                .background(Color.White.copy(alpha = 0.18f))
+                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(32.dp))
+            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(16.dp))
         Text(str(lang, "PIN Kilidi"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
@@ -2975,18 +2979,18 @@ private fun PinLockOverlay(
             modifier = Modifier.fillMaxWidth(0.8f)
         )
         Spacer(Modifier.height(16.dp))
-        Button(
+        AppleTvButton(
             onClick = { onUnlock(pin) },
+            style = AppleTvButtonStyle.Primary,
             enabled = pin.length == 4,
-            shape = RoundedCornerShape(50),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = Color.Black
-            ),
             modifier = Modifier.fillMaxWidth(0.8f).height(48.dp)
-        ) { Text(str(lang, "Kilidi Aç"), fontWeight = FontWeight.Bold) }
+        ) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(str(lang, "Kilidi Aç"), fontWeight = FontWeight.Bold)
+            }
+        }
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onResetRequest) {
+        AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = onResetRequest) {
             Text(str(lang, "PIN'i unuttum — tüm verileri sıfırla"), color = Color(0xFFFF5252))
         }
     }
@@ -2997,7 +3001,7 @@ private fun SourceGroupTitle(lang: String, title: String, isActive: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
         if (isActive) {
-            Text(str(lang, "● Aktif"), color = Color(0xFF00E5FF), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(str(lang, "● Aktif"), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -3020,10 +3024,10 @@ private fun SourceRow(
             .clip(RoundedCornerShape(16.dp))
             .border(
                 width = if (isActive) 1.5.dp else 1.dp,
-                color = if (isActive) Color(0xFF00E5FF).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.08f),
+                color = if (isActive) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.08f),
                 shape = RoundedCornerShape(16.dp)
             ),
-        color = Color(0xFF161B26).copy(alpha = 0.6f),
+        color = Color.Black.copy(alpha = 0.55f),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
@@ -3032,7 +3036,7 @@ private fun SourceRow(
                     text = name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
-                    color = if (isActive) Color(0xFF00E5FF) else Color.White,
+                    color = if (isActive) Color.White else Color.White,
                     maxLines = 1,
                     modifier = Modifier.weight(1f)
                 )
@@ -3040,10 +3044,10 @@ private fun SourceRow(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
+                            .background(Color.White.copy(alpha = 0.2f))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Text("AKTİF", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("AKTİF", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -3063,8 +3067,8 @@ private fun SourceRow(
             if (testing) {
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFF00E5FF))
-                    Text(str(lang, "Test ediliyor…"), style = MaterialTheme.typography.labelSmall, color = Color(0xFF00E5FF))
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
+                    Text(str(lang, "Test ediliyor…"), style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             } else if (testState != null) {
                 val ok = testState == "ok"
@@ -3083,12 +3087,15 @@ private fun SourceRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (!isActive) {
-                    Button(
+                    AppleTvButton(
                         onClick = onActivate,
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color.Black),
+                        style = AppleTvButtonStyle.Primary,
                         modifier = Modifier.weight(1f).height(38.dp)
-                    ) { Text("Aktif Yap", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                    ) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("Aktif Yap", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
                 }
                 if (onRefresh != null) {
                     var refreshing by remember { mutableStateOf(false) }
@@ -3158,15 +3165,15 @@ private fun SliderSetting(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp)),
-        color = Color(0xFF161B26).copy(alpha = 0.6f),
+        color = Color.Black.copy(alpha = 0.55f),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(icon, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                 Spacer(Modifier.weight(1f))
-                Text(valueText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = Color(0xFF00E5FF))
+                Text(valueText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = Color.White)
             }
             if (description.isNotBlank()) {
                 Text(description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
@@ -3178,7 +3185,7 @@ private fun SliderSetting(
                 steps = steps,
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = Color.White,
-                    activeTrackColor = Color(0xFF00E5FF),
+                    activeTrackColor = Color.White,
                     inactiveTrackColor = Color.White.copy(alpha = 0.15f)
                 )
             )
@@ -3190,7 +3197,9 @@ private fun SliderSetting(
 private fun PrivacyDialog(lang: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(str(lang, "Kapat")) } },
+        containerColor = Color.Black.copy(alpha = 0.6f),
+        modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
+        confirmButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = onDismiss) { Text(str(lang, "Kapat")) } },
         title = { Text(str(lang, "Gizlilik Anlaşması")) },
         text = {
             Text(
@@ -3226,8 +3235,10 @@ private fun PortalEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = Color.Black.copy(alpha = 0.6f),
+        modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
         confirmButton = {
-            TextButton(onClick = {
+            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                 val trimmed = url.trim()
                 if (trimmed.isBlank()) { error = "Portal adresi gerekli"; return@TextButton }
                 val id = initial?.id ?: ("p_" + trimmed.hashCode().toString() + System.currentTimeMillis().toString().takeLast(4))
@@ -3243,7 +3254,7 @@ private fun PortalEditDialog(
                 )
             }) { Text(str(lang, "Kaydet")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) } },
+        dismissButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = onDismiss) { Text(str(lang, "İptal")) } },
         title = { Text(if (initial == null) str(lang, "Yeni Stalker Portal") else str(lang, "Portal Düzenle")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3269,7 +3280,9 @@ private fun PortalEditDialog(
         var newMacAddress by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showMacProfilesDialog = false },
-            confirmButton = { TextButton(onClick = { showMacProfilesDialog = false }) { Text(str(lang, "Kapat")) } },
+            containerColor = Color.Black.copy(alpha = 0.6f),
+            modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
+            confirmButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showMacProfilesDialog = false }) { Text(str(lang, "Kapat")) } },
             title = { Text(str(lang, "MAC Profilleri")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3326,8 +3339,10 @@ private fun M3uDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = Color.Black.copy(alpha = 0.6f),
+        modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
         confirmButton = {
-            TextButton(onClick = {
+            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                 val trimmed = url.trim()
                 if (!trimmed.startsWith("http")) { error = str(lang, "Geçerli bir http(s) URL girin"); return@TextButton }
                 val id = initial?.id ?: ("m3u_" + trimmed.hashCode().toString() + System.currentTimeMillis().toString().takeLast(4))
@@ -3341,7 +3356,7 @@ private fun M3uDialog(
                 )
             }) { Text(str(lang, "Kaydet")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) } },
+        dismissButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = onDismiss) { Text(str(lang, "İptal")) } },
         title = { Text(if (initial == null) str(lang, "M3U Ekle") else str(lang, "M3U Düzenle")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3384,8 +3399,10 @@ private fun XtreamDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = Color.Black.copy(alpha = 0.6f),
+        modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
         confirmButton = {
-            TextButton(onClick = {
+            AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                 val srv = server.trim()
                 if (!srv.startsWith("http")) { error = str(lang, "Geçerli bir http(s) sunucu adresi girin"); return@TextButton }
                 if (username.trim().isBlank()) { error = str(lang, "Kullanıcı adı gerekli"); return@TextButton }
@@ -3409,7 +3426,7 @@ private fun XtreamDialog(
                 }
             }) { Text(if (checking) str(lang, "Kontrol ediliyor…") else str(lang, "Kaydet")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(str(lang, "İptal")) } },
+        dismissButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = onDismiss) { Text(str(lang, "İptal")) } },
         title = { Text(if (initial == null) str(lang, "Xtream Ekle") else str(lang, "Xtream Düzenle")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3516,12 +3533,14 @@ private fun CacheSettingsSection(
     if (showClearCacheConfirm) {
         AlertDialog(
             onDismissRequest = { showClearCacheConfirm = false },
+            containerColor = Color.Black.copy(alpha = 0.6f),
+            modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
             title = { Text(str(lang, "Önbelleği Temizle")) },
             text = {
                 Text(str(lang, "Uygulama resim önbelleği, geçici dosyalar ve bellek verileri silinecek. İçerikleriniz veya hesaplarınız silinmez."))
             },
             confirmButton = {
-                TextButton(onClick = {
+                AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                     showClearCacheConfirm = false
                     scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching {
@@ -3534,7 +3553,7 @@ private fun CacheSettingsSection(
                 }) { Text(str(lang, "Temizle")) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearCacheConfirm = false }) { Text(str(lang, "İptal")) }
+                AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showClearCacheConfirm = false }) { Text(str(lang, "İptal")) }
             }
         )
     }
@@ -3542,19 +3561,21 @@ private fun CacheSettingsSection(
     if (showClearDownloadsConfirm) {
         AlertDialog(
             onDismissRequest = { showClearDownloadsConfirm = false },
+            containerColor = Color.Black.copy(alpha = 0.6f),
+            modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
             title = { Text(str(lang, "İndirilenleri Sıfırla")) },
             text = {
                 Text(str(lang, "Cihaza indirilmiş tüm çevrimdışı film ve diziler tamamen silinecek. Emin misiniz?"))
             },
             confirmButton = {
-                TextButton(onClick = {
+                AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                     showClearDownloadsConfirm = false
                     com.stalkerapp.data.OfflineDownloadManager.clearAllDownloads()
                     vm.showMessage(str(lang, "İndirilenler temizlendi ✓"))
                 }) { Text(str(lang, "Tümünü Sil"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDownloadsConfirm = false }) { Text(str(lang, "İptal")) }
+                AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showClearDownloadsConfirm = false }) { Text(str(lang, "İptal")) }
             }
         )
     }
@@ -3584,7 +3605,7 @@ private fun AccountSettingsSection(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                .background(Color.White.copy(alpha = 0.2f)),
             contentAlignment = Alignment.Center
         ) {
             Text(profile.avatar, style = MaterialTheme.typography.headlineSmall)
@@ -3711,7 +3732,7 @@ private fun AccountSettingsSection(
         Text(
             restoreMessage,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary
+            color = Color.White
         )
     }
     OutlinedButton(
@@ -3721,14 +3742,16 @@ private fun AccountSettingsSection(
     if (showResetAll) {
         AlertDialog(
             onDismissRequest = { showResetAll = false },
+            containerColor = Color.Black.copy(alpha = 0.6f),
+            modifier = Modifier.border(1.dp, AppleTvTokens.Hairline, RoundedCornerShape(18.dp)),
             confirmButton = {
-                TextButton(onClick = {
+                AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = {
                     showResetAll = false
                     vm.clearAllData()
                     vm.showMessage(t("Tüm veriler silindi"))
                 }) { Text(t("Evet, Sil"), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { showResetAll = false }) { Text(t("Vazgeç")) } },
+            dismissButton = { AppleTvButton(style = AppleTvButtonStyle.Glass,onClick = { showResetAll = false }) { Text(t("Vazgeç")) } },
             title = { Text(t("Tüm veriler silinecek")) },
             text = { Text(t("Kaynaklar, ayarlar, favoriler, izleme geçmişi ve katalog kalıcı olarak silinir. Bu işlem geri alınamaz.")) }
         )

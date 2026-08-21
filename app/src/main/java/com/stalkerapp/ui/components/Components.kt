@@ -250,14 +250,14 @@ fun ChannelRow(
             .clip(RoundedCornerShape(10.dp))
             .background(
                 when {
-                    isFocused -> Color(0xFF00E5FF).copy(alpha = 0.28f)
+                    isFocused -> Color.White.copy(alpha = 0.22f)
                     highlight -> MaterialTheme.colorScheme.primaryContainer
                     else -> Color.Transparent
                 }
             )
             .border(
                 width = if (isFocused) 2.5.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                color = if (isFocused) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(10.dp)
             )
             .onFocusChanged { isFocused = it.isFocused }
@@ -458,7 +458,7 @@ fun GlassChip(
             .clip(pillShape)
             .background(
                 when {
-                    isFocused -> Color(0xFF00E5FF)
+                    isFocused -> Color.White
                     selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
                     else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
                 }

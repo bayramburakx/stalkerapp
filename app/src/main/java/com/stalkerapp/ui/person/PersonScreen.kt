@@ -9,18 +9,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,14 +33,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.TmdbClient
 import com.stalkerapp.ui.MainViewModel
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvButtonStyle
+import com.stalkerapp.ui.components.AppleTvTokens
 import com.stalkerapp.ui.components.EmptyState
+import com.stalkerapp.ui.components.GlassSurface
 import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
 import com.stalkerapp.ui.vod.VodPoster
@@ -111,52 +112,53 @@ fun PersonScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 84.dp, bottom = 20.dp),
+                        .padding(top = 96.dp, bottom = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
+                    GlassSurface(
+                        modifier = Modifier.size(132.dp),
+                        shape = AppleTvTokens.CardShape
                     ) {
-                        if (photoUrl.isNotBlank()) {
-                            AsyncImage(
-                                model = photoUrl,
-                                contentDescription = tmdbName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(120.dp)
-                            )
-                        } else {
-                            Text(
-                                initials(tmdbName),
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (photoUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = photoUrl,
+                                    contentDescription = tmdbName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(
+                                    initials(tmdbName),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                     Text(
                         tmdbName,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        modifier = Modifier.padding(top = 14.dp)
+                        modifier = Modifier.padding(top = 18.dp)
                     )
                     Text(
                         if (isDirector) str(lang, "Yönetmen") else str(lang, "Oyuncu"),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.6f)
                     )
                 }
             }
             item {
-                Text(
-                    "${works.size} ${str(lang, "içerik")}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                AppleSectionHeader(
+                    title = "${works.size} ${str(lang, "içerik")}",
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
             if (works.isEmpty()) {
@@ -187,22 +189,24 @@ fun PersonScreen(
             }
         }
 
-        // Üst bar: şeffaf, sadece geri tuşu.
+        // Üst bar: şeffaf, sadece geri tuşu (Apple TV glass pill).
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(top = 6.dp)
+                .padding(top = 6.dp, start = 8.dp)
         ) {
-            IconButton(
+            AppleTvButton(
                 onClick = onBack,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.35f))
+                style = AppleTvButtonStyle.Glass,
+                modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), tint = Color.White)
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = str(lang, "Geri"),
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
     }

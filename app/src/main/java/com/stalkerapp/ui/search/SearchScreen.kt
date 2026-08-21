@@ -1,5 +1,6 @@
 package com.stalkerapp.ui.search
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,10 +11,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -51,19 +52,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
 import com.stalkerapp.ui.VodCatalogStatus
+import com.stalkerapp.ui.components.AppleSectionHeader
+import com.stalkerapp.ui.components.AppleTvCard
 import com.stalkerapp.ui.components.ChannelRow
 import com.stalkerapp.ui.components.EmptyState
-import com.stalkerapp.ui.components.LoadingBox
 import com.stalkerapp.ui.components.GlassChip
+import com.stalkerapp.ui.components.LoadingBox
+import com.stalkerapp.ui.components.resolveUrl
 import com.stalkerapp.ui.rememberMainViewModel
-import com.stalkerapp.ui.vod.VodPoster
 import kotlinx.coroutines.delay
 
 private val L10nLocal: Map<String, String> = mapOf(
@@ -82,6 +88,11 @@ private val L10nLocal: Map<String, String> = mapOf(
     "Tür" to "Genre",
     "Kategori: Tümü" to "Category: All",
     "İçerik bulunamadı" to "No content found",
+    "Arama" to "Search",
+    "Film, dizi, kanal adı yazın…" to "Type a movie, series or channel name…",
+    "Tamam" to "OK",
+    "Temizle" to "Clear",
+    "DİZİ" to "SERIES",
 )
 private fun str(lang: String, text: String): String =
     if (lang == "en") L10nLocal[text] ?: text else text
@@ -149,11 +160,17 @@ fun SearchScreen(
     }
 
     Scaffold(
+        containerColor = Color.Black,
         topBar = {
             TopAppBar(
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Black,
+                    navigationIconContentColor = Color.White,
+                    titleContentColor = Color.White
+                ),
                 title = {
-                    // Anasayfa dili: cam arama çubuğu.
-                    val searchShape = RoundedCornerShape(50)
+                    // Anasayfa dili: cam arama çubuğu (18.dp yuvarlak, ince beyaz çerçeve).
+                    val searchShape = RoundedCornerShape(18.dp)
                     val ctx = LocalContext.current
                     val isTv = com.stalkerapp.ui.tv.isTvDevice(ctx)
                     var isInputModalOpen by remember { mutableStateOf(false) }
@@ -163,10 +180,10 @@ fun SearchScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(searchShape)
-                            .background(if (isTv && isFocused) Color(0xFF1E293B) else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                            .background(Color.Black.copy(alpha = 0.5f))
                             .border(
-                                width = if (isTv && isFocused) 2.5.dp else 1.dp,
-                                color = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                                width = if (isFocused) 2.5.dp else 1.dp,
+                                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.18f),
                                 shape = searchShape
                             )
                             .onFocusChanged { isFocused = it.isFocused }
@@ -177,21 +194,21 @@ fun SearchScreen(
                                     isInputModalOpen = true; true
                                 } else false
                             }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Icon(
                             Icons.Default.Search,
                             contentDescription = null,
-                            tint = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
+                            tint = if (isFocused) Color.White else Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.size(20.dp)
                         )
                         if (isTv) {
                             Text(
                                 text = if (query.isNotBlank()) query else str(lang, "Film, dizi, kanal ara… (OK tuşuna basın)"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (query.isNotBlank()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (query.isNotBlank()) Color.White else Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.weight(1f)
                             )
                         } else {
@@ -199,14 +216,14 @@ fun SearchScreen(
                                 value = query,
                                 onValueChange = { query = it },
                                 singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
                                 modifier = Modifier.weight(1f),
                                 decorationBox = { inner ->
                                     if (query.isBlank()) {
                                         Text(
                                             str(lang, "Film, dizi, kanal ara…"),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = Color.White.copy(alpha = 0.5f)
                                         )
                                     }
                                     inner()
@@ -221,7 +238,7 @@ fun SearchScreen(
                             title = { Text(str(lang, "Arama"), color = Color.White, fontWeight = FontWeight.Bold) },
                             text = {
                                 var tempText by remember { mutableStateOf(query) }
-                                val focusReq = remember { androidx.compose.ui.focus.FocusRequester() }
+                                val focusReq = remember { FocusRequester() }
                                 Column {
                                     androidx.compose.material3.OutlinedTextField(
                                         value = tempText,
@@ -240,7 +257,7 @@ fun SearchScreen(
                             },
                             confirmButton = {
                                 androidx.compose.material3.TextButton(onClick = { isInputModalOpen = false }) {
-                                    Text(str(lang, "Tamam"), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                                    Text(str(lang, "Tamam"), color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             },
                             dismissButton = {
@@ -251,8 +268,8 @@ fun SearchScreen(
                                     Text(str(lang, "Temizle"), color = Color.White.copy(0.6f))
                                 }
                             },
-                            containerColor = Color(0xFF131722),
-                            shape = RoundedCornerShape(14.dp)
+                            containerColor = Color(0xFF16161C),
+                            shape = RoundedCornerShape(18.dp)
                         )
                     }
                 },
@@ -264,61 +281,138 @@ fun SearchScreen(
             )
         }
     ) { padding ->
-        if (query.isBlank()) {
-            DiscoverContent(
-                catalog = catalog,
-                baseUrl = profile?.baseUrl.orEmpty(),
-                onOpenVod = onOpenVod,
-                lang = lang,
-                modifier = Modifier.fillMaxSize().padding(padding)
-            )
-            return@Scaffold
-        }
-
-        val vodList = vodResults
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (liveFiltered.isNotEmpty()) {
-                item {
-                    Text("${str(lang, "Kanallar")} (${liveFiltered.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                }
-                items(liveFiltered, key = { it.id }) { ch ->
-                    val isFav = favChannels.any { it.id == ch.id }
-                    ChannelRow(
-                        channel = ch,
-                        baseUrl = profile?.baseUrl.orEmpty(),
-                        isFavorite = isFav,
-                        onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
-                        onClick = {
-                            val list = liveFiltered
-                            val idx = list.indexOfFirst { it.id == ch.id }
-                            if (idx >= 0) {
-                                PlaybackManager.playChannel(list, idx, profile)
-                                onOpenPlayer()
-                            }
-                        }
-                    )
-                }
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black).padding(padding)) {
+            if (query.isBlank()) {
+                DiscoverContent(
+                    catalog = catalog,
+                    baseUrl = profile?.baseUrl.orEmpty(),
+                    onOpenVod = onOpenVod,
+                    lang = lang,
+                    modifier = Modifier.fillMaxSize()
+                )
+                return@Scaffold
             }
-            if (loadingVod && vodList == null) {
-                item { LoadingBox() }
-            } else if (vodList != null && vodList.isNotEmpty()) {
-                item {
-                    Text("${str(lang, "Film & Dizi")} (${vodList.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                }
-                item {
-                    LazyRow(contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(vodList, key = { it.id }) { item ->
-                            val isSeries = item.isSeries || item.seriesRef.isNotBlank()
-                            VodPoster(item = item, baseUrl = profile?.baseUrl.orEmpty(),
-                                isSeries = isSeries, onClick = { onOpenVod(item.id, isSeries) }, posterWidth = 120)
-                        }
+
+            val vodList = vodResults
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                if (liveFiltered.isNotEmpty()) {
+                    item {
+                        AppleSectionHeader(
+                            str(lang, "Kanallar") + " (${liveFiltered.size})",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+                    items(liveFiltered, key = { it.id }) { ch ->
+                        val isFav = favChannels.any { it.id == ch.id }
+                        ChannelRow(
+                            channel = ch,
+                            baseUrl = profile?.baseUrl.orEmpty(),
+                            isFavorite = isFav,
+                            onToggleFavorite = { vm.toggleFavoriteChannel(ch) },
+                            onClick = {
+                                val list = liveFiltered
+                                val idx = list.indexOfFirst { it.id == ch.id }
+                                if (idx >= 0) {
+                                    PlaybackManager.playChannel(list, idx, profile)
+                                    onOpenPlayer()
+                                }
+                            }
+                        )
                     }
                 }
-            } else if (liveFiltered.isEmpty() && vodList != null && vodList.isEmpty() && !loadingVod) {
-                item { EmptyState(vodMessage ?: str(lang, "Sonuç bulunamadı")) }
+                if (loadingVod && vodList == null) {
+                    item { LoadingBox() }
+                } else if (vodList != null && vodList.isNotEmpty()) {
+                    item {
+                        AppleSectionHeader(
+                            str(lang, "Film & Dizi") + " (${vodList.size})",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+                    item {
+                        val colCount = 3
+                        val rows = (vodList.size + colCount - 1) / colCount
+                        val gridHeight: Dp = (rows * 172 + (rows - 1) * 10).dp
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(colCount),
+                            modifier = Modifier.fillMaxWidth().height(gridHeight),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(vodList, key = { it.id }) { item ->
+                                val isSeries = item.isSeries || item.seriesRef.isNotBlank()
+                                PosterCard(
+                                    item = item,
+                                    baseUrl = profile?.baseUrl.orEmpty(),
+                                    isSeries = isSeries,
+                                    onClick = { onOpenVod(item.id, isSeries) }
+                                )
+                            }
+                        }
+                    }
+                } else if (liveFiltered.isEmpty() && vodList != null && vodList.isEmpty() && !loadingVod) {
+                    item { EmptyState(vodMessage ?: str(lang, "Sonuç bulunamadı")) }
+                }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PosterCard(
+    item: VodItem,
+    baseUrl: String,
+    isSeries: Boolean,
+    onClick: () -> Unit
+) {
+    val app = LocalContext.current.applicationContext as StalkerApp
+    val settings = app.store.settings()
+    var resolvedPoster by remember(item.id, item.poster) {
+        mutableStateOf(app.tmdb.getCachedPoster(item.name, isSeries) ?: item.poster)
+    }
+    LaunchedEffect(item.name, item.poster, item.year, isSeries, settings.tmdbApiKey) {
+        if (settings.tmdbApiKey.isNotBlank()) {
+            val p = app.tmdb.resolvePoster(item.name, item.year, isSeries, item.poster, settings.tmdbApiKey)
+            if (p.isNotBlank()) resolvedPoster = p
+        }
+    }
+    AppleTvCard(onClick = onClick, cornerRadius = 18.dp) { focused ->
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                AsyncImage(
+                    model = resolveUrl(resolvedPoster.ifBlank { item.poster }, baseUrl),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                        .clip(RoundedCornerShape(14.dp))
+                )
+                if (isSeries) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .background(Color.White, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            str(settings.language, "DİZİ"),
+                            color = Color.Black,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp, start = 2.dp, end = 2.dp)
+            )
         }
     }
 }
@@ -332,47 +426,20 @@ private fun DropdownFilterChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        // Anasayfa dili: cam pill filtre + açılır ok.
-        val pillShape = RoundedCornerShape(50)
-        Row(
-            modifier = Modifier
-                .clip(pillShape)
-                .background(
-                    if (selected > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
-                )
-                .border(
-                    1.dp,
-                    if (selected > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-                    pillShape
-                )
-                .clickable { expanded = true }
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // Anasayfa dili: cam çip (GlassChip) + açılır ok menüsü.
+        GlassChip(
+            selected = selected > 0,
+            onClick = { expanded = true },
+            label = label
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = Color(0xFF16161C)
         ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected > 0) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected > 0) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            Icon(
-                Icons.Default.ArrowDropDown,
-                contentDescription = null,
-                tint = if (selected > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEachIndexed { i, opt ->
                 DropdownMenuItem(
-                    text = { Text(opt) },
+                    text = { Text(opt, color = Color.White) },
                     onClick = { onSelect(i); expanded = false }
                 )
             }
@@ -442,15 +509,13 @@ private fun DiscoverContent(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Text(
+        AppleSectionHeader(
             str(lang, "Keşfet"),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
         )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             DropdownFilterChip(
                 label = "${str(lang, "Tür")}: ${types.getOrElse(selectedTypeIndex) { types.firstOrNull() ?: "" }}",
@@ -469,20 +534,20 @@ private fun DiscoverContent(
                 )
             }
         }
-        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+        Box(modifier = Modifier.fillMaxSize().weight(1f).padding(top = 8.dp)) {
             when {
                 catalog.status == VodCatalogStatus.Syncing && catalog.allItems.isEmpty() -> LoadingBox()
                 discover.isEmpty() -> EmptyState(str(lang, "İçerik bulunamadı"))
                 else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    columns = GridCells.Fixed(4),
+                    contentPadding = PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(discover, key = { it.id }) { item ->
                         val isSeries = item.isSeries || item.seriesRef.isNotBlank()
-                        VodPoster(
+                        PosterCard(
                             item = item,
                             baseUrl = baseUrl,
                             isSeries = isSeries,
