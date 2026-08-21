@@ -635,7 +635,7 @@ private fun TvLiveSection(
 
     val filteredChannels = remember(channelList, selectedGenreId) {
         if (selectedGenreId == 0L) channelList
-        else channelList.filter { it.tvGenreId == selectedGenreId || it.genreId == selectedGenreId }
+        else channelList.filter { it.tvGenreId == selectedGenreId }
     }
 
     Row(modifier = Modifier.fillMaxSize().padding(12.dp)) {
@@ -657,7 +657,7 @@ private fun TvLiveSection(
             }
             items(genreList, key = { it.id }) { g ->
                 val count = remember(channelList, g.id) {
-                    channelList.count { it.tvGenreId == g.id || it.genreId == g.id }
+                    channelList.count { it.tvGenreId == g.id }
                 }
                 TvCategoryItem(
                     title = "${g.title} ($count)",
