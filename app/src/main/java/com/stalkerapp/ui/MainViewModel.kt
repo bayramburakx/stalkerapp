@@ -753,6 +753,28 @@ class MainViewModel(private val app: StalkerApp) : ViewModel() {
      */
     private val categoryItemsCache = java.util.concurrent.ConcurrentHashMap<String, List<VodItem>>()
 
+    suspend fun loadVodCategories(profile: Profile?, isSeries: Boolean): List<Genre> {
+        val kind = enabledSourceKind()
+        return withContext(Dispatchers.IO) {
+            try {
+                if (kind == "m3u" || kind == "xtream") {
+                    val allCats = _externalCatalog.value.categories
+                    allCats.filter { c ->
+                        val isS = com.stalkerapp.data.ExternalVod.isSeriesCat(c.id) ||
+                            VodCatalogState.isSeriesCatTitle(c.title)
+                        if (isSeries) isS else !isS
+                    }
+                } else {
+                    val p = profile ?: return@withContext emptyList<Genre>()
+                    if (isSeries) repository.loadSeriesCategories(p)
+                    else repository.loadVodCategories(p)
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+
     /**
      * TiviMate / OTT Navigator tarzı hızlı talep üzerine (on-demand) VOD kategori yükleyici.
      * Tüm 80.000 filmi aynı anda indirip belleği şişirmek yerine, yalnızca seçili

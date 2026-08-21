@@ -86,7 +86,6 @@ import coil.compose.AsyncImage
 import com.stalkerapp.StalkerApp
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.Genre
-import com.stalkerapp.data.VodCategory
 import com.stalkerapp.data.VodItem
 import com.stalkerapp.playback.PlaybackManager
 import com.stalkerapp.ui.MainViewModel
@@ -854,7 +853,7 @@ private fun TvVodSection(
     onOpenVod: (Long) -> Unit
 ) {
     val profile = vm.repository.cachedProfile()
-    var categories by remember { mutableStateOf<List<VodCategory>>(emptyList()) }
+    var categories by remember { mutableStateOf<List<Genre>>(emptyList()) }
     var selectedCatId by remember { mutableStateOf(0L) }
     var items by remember { mutableStateOf<List<VodItem>>(emptyList()) }
     var loadingCats by remember { mutableStateOf(true) }
