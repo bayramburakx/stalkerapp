@@ -1,9 +1,11 @@
 package com.stalkerapp.ui.tv
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -28,12 +30,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
@@ -48,6 +55,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -234,9 +245,18 @@ fun TvHomeScreen(
         )
     }
 
-    val heroItem = remember(popularMovies, popularSeries, continueWatching) {
-        continueWatching.firstOrNull() ?: popularMovies.firstOrNull() ?: popularSeries.firstOrNull()
+    val heroItems = remember(popularMovies, popularSeries, continueWatching) {
+        val list = mutableListOf<VodItem>()
+        list.addAll(continueWatching.take(2))
+        list.addAll(popularMovies.take(4))
+        list.addAll(popularSeries.take(4))
+        list.distinctBy { it.id }.take(8)
     }
+
+    var quickActionVodItem by remember { mutableStateOf<VodItem?>(null) }
+    var quickActionChannel by remember { mutableStateOf<Channel?>(null) }
+    val favVods by vm.favoriteVods.collectAsStateWithLifecycle()
+    val favChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -378,7 +398,8 @@ fun TvHomeScreen(
                 1 -> {
                     TvLiveSection(
                         vm = vm,
-                        onOpenChannel = onOpenChannel
+                        onOpenChannel = onOpenChannel,
+                        onLongClickChannel = { ch -> quickActionChannel = ch }
                     )
                 }
                 2 -> {
@@ -386,7 +407,8 @@ fun TvHomeScreen(
                         vm = vm,
                         isSeries = false,
                         tmdbApiKey = settings.tmdbApiKey,
-                        onOpenVod = { id -> onOpenVod(id, false) }
+                        onOpenVod = { id -> onOpenVod(id, false) },
+                        onLongClickVod = { item -> quickActionVodItem = item }
                     )
                 }
                 3 -> {
@@ -394,7 +416,8 @@ fun TvHomeScreen(
                         vm = vm,
                         isSeries = true,
                         tmdbApiKey = settings.tmdbApiKey,
-                        onOpenVod = { id -> onOpenVod(id, true) }
+                        onOpenVod = { id -> onOpenVod(id, true) },
+                        onLongClickVod = { item -> quickActionVodItem = item }
                     )
                 }
                 4 -> {
@@ -412,17 +435,17 @@ fun TvHomeScreen(
                         contentPadding = PaddingValues(bottom = 48.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        // A) APPLE TV HERO BILLBOARD (ÖNE ÇIKAN SİNEMATİK AFİŞ)
-                        if (heroItem != null) {
-                            item(key = "apple_tv_hero_billboard") {
+                        // A) APPLE TV HERO BILLBOARD SLIDER (ÖNE ÇIKAN SİNEMATİK AFİŞLER)
+                        if (heroItems.isNotEmpty()) {
+                            item(key = "apple_tv_hero_billboard_slider") {
                                 AppleTvHeroBillboard(
-                                    item = heroItem,
+                                    items = heroItems,
                                     tmdbApiKey = settings.tmdbApiKey,
-                                    onPlayClick = {
-                                        onOpenVod(heroItem.id, catalog.isSeriesItem(heroItem))
+                                    onPlayClick = { item ->
+                                        onOpenVod(item.id, catalog.isSeriesItem(item))
                                     },
-                                    onDetailsClick = {
-                                        onOpenVod(heroItem.id, catalog.isSeriesItem(heroItem))
+                                    onDetailsClick = { item ->
+                                        onOpenVod(item.id, catalog.isSeriesItem(item))
                                     }
                                 )
                             }
@@ -440,7 +463,8 @@ fun TvHomeScreen(
                                             TvVodCard(
                                                 item = item,
                                                 tmdbApiKey = settings.tmdbApiKey,
-                                                onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) }
+                                                onClick = { onOpenVod(item.id, catalog.isSeriesItem(item)) },
+                                                onLongClick = { quickActionVodItem = item }
                                             )
                                         }
                                     }
@@ -459,7 +483,8 @@ fun TvHomeScreen(
                                         itemsIndexed(liveChannels, key = { index, ch -> "live_${ch.id}_$index" }) { _, channel ->
                                             TvChannelCard(
                                                 channel = channel,
-                                                onClick = { onOpenChannel(channel) }
+                                                onClick = { onOpenChannel(channel) },
+                                                onLongClick = { quickActionChannel = channel }
                                             )
                                         }
                                     }
@@ -479,7 +504,8 @@ fun TvHomeScreen(
                                             TvVodCard(
                                                 item = item,
                                                 tmdbApiKey = settings.tmdbApiKey,
-                                                onClick = { onOpenVod(item.id, false) }
+                                                onClick = { onOpenVod(item.id, false) },
+                                                onLongClick = { quickActionVodItem = item }
                                             )
                                         }
                                     }
@@ -499,7 +525,8 @@ fun TvHomeScreen(
                                             TvVodCard(
                                                 item = item,
                                                 tmdbApiKey = settings.tmdbApiKey,
-                                                onClick = { onOpenVod(item.id, true) }
+                                                onClick = { onOpenVod(item.id, true) },
+                                                onLongClick = { quickActionVodItem = item }
                                             )
                                         }
                                     }
@@ -518,7 +545,8 @@ fun TvHomeScreen(
                                         itemsIndexed(recentChannelList, key = { index, ch -> "rec_${ch.id}_$index" }) { _, channel ->
                                             TvChannelCard(
                                                 channel = channel,
-                                                onClick = { onOpenChannel(channel) }
+                                                onClick = { onOpenChannel(channel) },
+                                                onLongClick = { quickActionChannel = channel }
                                             )
                                         }
                                     }
@@ -530,172 +558,254 @@ fun TvHomeScreen(
             }
         }
     }
+
+    // Quick Actions Modalları (TV için Basılı Tutma Menüsü)
+    if (quickActionVodItem != null) {
+        val qItem = quickActionVodItem!!
+        val isSeries = catalog.isSeriesItem(qItem)
+        val isFav = favVods.any { it.id == qItem.id }
+        val isWatched = app.store.isVodWatched(qItem.id)
+
+        TvVodQuickActionsDialog(
+            item = qItem,
+            isSeries = isSeries,
+            isFavorite = isFav,
+            isWatched = isWatched,
+            onPlay = { onOpenVod(qItem.id, isSeries) },
+            onDetails = { onOpenVod(qItem.id, isSeries) },
+            onToggleFavorite = { vm.toggleFavoriteVod(qItem) },
+            onToggleWatched = {
+                if (isWatched) app.store.clearVodProgress(qItem.id)
+                else app.store.markVodWatched(qItem.id)
+                vm.bumpWatched()
+            },
+            onHideFromHome = {
+                val currentHidden = settings.hiddenFromHome.toMutableList()
+                if (qItem.id !in currentHidden) {
+                    currentHidden.add(qItem.id)
+                    vm.saveSettings(settings.copy(hiddenFromHome = currentHidden))
+                }
+            },
+            onDismiss = { quickActionVodItem = null }
+        )
+    }
+
+    if (quickActionChannel != null) {
+        val qChannel = quickActionChannel!!
+        val isFav = favChannels.any { it.id == qChannel.id }
+        TvChannelQuickActionsDialog(
+            channel = qChannel,
+            isFavorite = isFav,
+            onPlay = { onOpenChannel(qChannel) },
+            onToggleFavorite = { vm.toggleFavoriteChannel(qChannel) },
+            onDismiss = { quickActionChannel = null }
+        )
+    }
 }
 
 // =========================================================================
-// APPLE TV HERO BILLBOARD (ÖNE ÇIKAN SİNEMATİK AFİŞ)
+// APPLE TV HERO BILLBOARD SLIDER (ÖNE ÇIKAN SİNEMATİK SLIDER)
 // =========================================================================
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppleTvHeroBillboard(
-    item: VodItem,
+    items: List<VodItem>,
     tmdbApiKey: String,
-    onPlayClick: () -> Unit,
-    onDetailsClick: () -> Unit
+    onPlayClick: (VodItem) -> Unit,
+    onDetailsClick: (VodItem) -> Unit
 ) {
-    val app = LocalContext.current.applicationContext as StalkerApp
-    var resolvedBackdrop by remember(item.id, item.poster) {
-        mutableStateOf(app.tmdb.getCachedPoster(item.name, item.isSeries) ?: item.poster)
-    }
+    if (items.isEmpty()) return
+    val pagerState = rememberPagerState(pageCount = { items.size })
 
-    LaunchedEffect(item.name, item.poster, item.year, item.isSeries, tmdbApiKey) {
-        if (tmdbApiKey.isNotBlank() && item.poster.isBlank()) {
-            val p = app.tmdb.resolvePoster(item.name, item.year, item.isSeries, item.poster, tmdbApiKey)
-            if (p.isNotBlank()) resolvedBackdrop = p
+    LaunchedEffect(pagerState) {
+        if (items.size > 1) {
+            while (true) {
+                delay(5500)
+                val next = (pagerState.currentPage + 1) % items.size
+                pagerState.animateScrollToPage(next)
+            }
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(340.dp)
+            .height(350.dp)
             .padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(Color(0xFF0D1117))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
     ) {
-        // Arka Plan Resmi
-        AsyncImage(
-            model = resolveUrl(resolvedBackdrop.ifBlank { item.poster }),
-            contentDescription = item.name,
-            contentScale = ContentScale.Crop,
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier.fillMaxSize()
-        )
+        ) { page ->
+            val item = items[page]
+            val app = LocalContext.current.applicationContext as StalkerApp
+            var resolvedBackdrop by remember(item.id, item.poster) {
+                mutableStateOf(app.tmdb.getCachedPoster(item.name, item.isSeries) ?: item.poster)
+            }
 
-        // Apple TV Gradyan Karartması (Sol ve Alt)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.95f),
-                            Color.Black.copy(alpha = 0.75f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.90f)
-                        )
-                    )
-                )
-        )
-
-        // Başlık ve Bilgiler
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.65f)
-                .padding(32.dp),
-            verticalArrangement = Arrangement.Bottom
-        ) {
-            // Rozetler: 4K UHD, HDR, Dizi/Film, IMDb
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (item.isSeries) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFE50914))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("DİZİ", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.25f))
-                            .border(0.5.dp, Color(0xFF00E5FF), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("4K UHD", color = Color(0xFF00E5FF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                val rating = item.rating.trim().trimEnd('/').takeIf { it.isNotBlank() && it != "0" && it != "0.0" }
-                if (rating != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.Black.copy(alpha = 0.7f))
-                            .border(0.5.dp, Color(0xFFFFC107).copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("★ $rating IMDb", color = Color(0xFFFFC107), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                if (item.year.isNotBlank() && item.year != "0") {
-                    Text(item.year, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            LaunchedEffect(item.name, item.poster, item.year, item.isSeries, tmdbApiKey) {
+                if (tmdbApiKey.isNotBlank() && item.poster.isBlank()) {
+                    val p = app.tmdb.resolvePoster(item.name, item.year, item.isSeries, item.poster, tmdbApiKey)
+                    if (p.isNotBlank()) resolvedBackdrop = p
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            // Büyük Başlık
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                fontSize = 28.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 32.sp
-            )
-
-            if (item.description.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = item.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 12.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp
+            Box(modifier = Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = resolveUrl(resolvedBackdrop.ifBlank { item.poster }),
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
+
+                // Apple TV Gradyan Karartması (Sol ve Alt)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.95f),
+                                    Color.Black.copy(alpha = 0.70f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.90f)
+                                )
+                            )
+                        )
+                )
+
+                // Başlık ve Bilgiler
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.68f)
+                        .padding(28.dp),
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (item.isSeries) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFE50914))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("DİZİ", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF00E5FF).copy(alpha = 0.25f))
+                                    .border(0.5.dp, Color(0xFF00E5FF), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("4K UHD", color = Color(0xFF00E5FF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        val rating = item.rating.trim().trimEnd('/').takeIf { it.isNotBlank() && it != "0" && it != "0.0" }
+                        if (rating != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.Black.copy(alpha = 0.7f))
+                                    .border(0.5.dp, Color(0xFFFFC107).copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("★ $rating IMDb", color = Color(0xFFFFC107), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (item.year.isNotBlank() && item.year != "0") {
+                            Text(item.year, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 30.sp
+                    )
+
+                    if (item.description.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = item.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        AppleTvActionButton(
+                            text = "Hemen İzle",
+                            icon = Icons.Default.PlayArrow,
+                            isPrimary = true,
+                            onClick = { onPlayClick(item) }
+                        )
+                        AppleTvActionButton(
+                            text = "Detaylar",
+                            icon = Icons.Default.Info,
+                            isPrimary = false,
+                            onClick = { onDetailsClick(item) }
+                        )
+                    }
+                }
             }
+        }
 
-            Spacer(Modifier.height(16.dp))
-
-            // Butonlar: ▷ Hemen İzle, ℹ️ Detaylar
+        // Apple TV Dot Pager Indicators (Sağ Alt)
+        if (items.size > 1) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                AppleTvActionButton(
-                    text = "Hemen İzle",
-                    icon = Icons.Default.PlayArrow,
-                    isPrimary = true,
-                    onClick = onPlayClick
-                )
-                AppleTvActionButton(
-                    text = "Detaylar",
-                    icon = Icons.Default.Info,
-                    isPrimary = false,
-                    onClick = onDetailsClick
-                )
+                repeat(items.size) { index ->
+                    val isCurrent = pagerState.currentPage == index
+                    Box(
+                        modifier = Modifier
+                            .size(if (isCurrent) 8.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(if (isCurrent) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.35f))
+                    )
+                }
             }
         }
     }
@@ -760,7 +870,8 @@ private fun AppleTvActionButton(
 @Composable
 private fun TvLiveSection(
     vm: MainViewModel,
-    onOpenChannel: (Channel) -> Unit
+    onOpenChannel: (Channel) -> Unit,
+    onLongClickChannel: ((Channel) -> Unit)? = null
 ) {
     val profile = vm.repository.cachedProfile()
     var genres by remember { mutableStateOf<List<Genre>?>(null) }
@@ -835,7 +946,8 @@ private fun TvLiveSection(
             itemsIndexed(displayedChannels, key = { index, ch -> "ch_${ch.id}_$index" }) { _, channel ->
                 TvChannelGridCard(
                     channel = channel,
-                    onClick = { onOpenChannel(channel) }
+                    onClick = { onOpenChannel(channel) },
+                    onLongClick = { onLongClickChannel?.invoke(channel) }
                 )
             }
         }
@@ -850,7 +962,8 @@ private fun TvVodSection(
     vm: MainViewModel,
     isSeries: Boolean,
     tmdbApiKey: String,
-    onOpenVod: (Long) -> Unit
+    onOpenVod: (Long) -> Unit,
+    onLongClickVod: ((VodItem) -> Unit)? = null
 ) {
     val profile = vm.repository.cachedProfile()
     var categories by remember { mutableStateOf<List<Genre>>(emptyList()) }
@@ -932,7 +1045,8 @@ private fun TvVodSection(
                     TvVodCard(
                         item = item,
                         tmdbApiKey = tmdbApiKey,
-                        onClick = { onOpenVod(item.id) }
+                        onClick = { onOpenVod(item.id) },
+                        onLongClick = { onLongClickVod?.invoke(item) }
                     )
                 }
                 if (displayedItems.size < items.size) {
@@ -988,99 +1102,103 @@ private fun TvSearchSection(
             value = Triple(emptyList(), emptyList(), emptyList())
             return@produceState
         }
-        value = withContext(Dispatchers.Default) {
-            val chMatches = (homeChannels ?: emptyList()).filter { it.name.contains(q, ignoreCase = true) }.take(20)
-            val movMatches = catalog.allItems.filter { !catalog.isSeriesItem(it) && it.name.contains(q, ignoreCase = true) }.take(20)
-            val serMatches = catalog.allItems.filter { catalog.isSeriesItem(it) && it.name.contains(q, ignoreCase = true) }.take(20)
-            Triple(chMatches, movMatches, serMatches)
-        }
+        val channels = (homeChannels ?: emptyList()).filter { it.name.contains(q, ignoreCase = true) }.take(20)
+        val movies = catalog.movies.filter { it.name.contains(q, ignoreCase = true) }.take(20)
+        val series = catalog.series.filter { it.name.contains(q, ignoreCase = true) }.take(20)
+        value = Triple(channels, movies, series)
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Box(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        // Arama Çubuğu (Kumanda ile tıklayınca klavye modalı açılır)
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (searchFocused) Color(0xFF1E293B) else Color(0xFF131722))
-                .border(
-                    width = if (searchFocused) 3.dp else 1.dp,
-                    color = if (searchFocused) Color(0xFF00E5FF) else Color.White.copy(0.12f),
-                    shape = RoundedCornerShape(14.dp)
-                )
+                .clip(RoundedCornerShape(16.dp))
                 .onFocusChanged { searchFocused = it.isFocused }
                 .focusable()
+                .border(
+                    width = if (searchFocused) 3.dp else 1.dp,
+                    color = if (searchFocused) Color(0xFF00E5FF) else Color.White.copy(0.15f),
+                    shape = RoundedCornerShape(16.dp)
+                )
                 .clickable { isInputDialogOpen = true }
                 .onKeyEvent { ev ->
                     if (isTvSelectKey(ev)) {
-                        isInputDialogOpen = true
-                        true
+                        isInputDialogOpen = true; true
                     } else false
-                }
-                .padding(horizontal = 18.dp, vertical = 14.dp)
+                },
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF131824)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = if (searchFocused) Color(0xFF00E5FF) else Color.White.copy(0.7f))
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = if (query.isNotBlank()) query else "Film, dizi veya kanal ara… (Seçmek için Kumandadan OK'a basın)",
-                    color = if (query.isNotBlank()) Color.White else Color.White.copy(0.5f),
-                    fontSize = 15.sp,
-                    fontWeight = if (query.isNotBlank()) FontWeight.Bold else FontWeight.Normal
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = if (searchFocused) Color(0xFF00E5FF) else Color.White.copy(0.6f),
+                    modifier = Modifier.size(24.dp)
                 )
-                if (query.isNotBlank()) {
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { query = "" }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Clear, contentDescription = "Temizle", tint = Color.White.copy(0.6f))
-                    }
-                }
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = query.ifBlank { "Aramak istediğiniz film, dizi veya kanal adı yazın…" },
+                    color = if (query.isNotBlank()) Color.White else Color.White.copy(0.4f),
+                    fontSize = 15.sp
+                )
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
 
-        val (chResults, movResults, serResults) = searchResults
+        // Arama Sonuçları
         if (query.isNotBlank()) {
-            if (chResults.isEmpty() && movResults.isEmpty() && serResults.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Sonuç bulunamadı: \"$query\"", color = Color.White.copy(0.6f), fontSize = 15.sp)
+            val (channels, movies, series) = searchResults
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                if (channels.isNotEmpty()) {
+                    item {
+                        TvSection(title = "Kanallar (${channels.size})") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                itemsIndexed(channels, key = { index, ch -> "s_ch_${ch.id}_$index" }) { _, ch ->
+                                    TvChannelCard(channel = ch, onClick = { onOpenChannel(ch) })
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp)
-                ) {
-                    if (chResults.isNotEmpty()) {
-                        item {
-                            TvSection(title = "Kanallar (${chResults.size})") {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    itemsIndexed(chResults, key = { index, ch -> "sr_ch_${ch.id}_$index" }) { _, ch ->
-                                        TvChannelCard(channel = ch, onClick = { onOpenChannel(ch) })
-                                    }
+                if (movies.isNotEmpty()) {
+                    item {
+                        TvSection(title = "Filmler (${movies.size})") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                itemsIndexed(movies, key = { index, m -> "s_mov_${m.id}_$index" }) { _, m ->
+                                    TvVodCard(item = m, onClick = { onOpenVod(m.id, false) })
                                 }
                             }
                         }
                     }
-                    if (movResults.isNotEmpty()) {
-                        item {
-                            TvSection(title = "Filmler (${movResults.size})") {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    itemsIndexed(movResults, key = { index, mov -> "sr_mov_${mov.id}_$index" }) { _, mov ->
-                                        TvVodCard(item = mov, onClick = { onOpenVod(mov.id, false) })
-                                    }
+                }
+                if (series.isNotEmpty()) {
+                    item {
+                        TvSection(title = "Diziler (${series.size})") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                itemsIndexed(series, key = { index, s -> "s_ser_${s.id}_$index" }) { _, s ->
+                                    TvVodCard(item = s, onClick = { onOpenVod(s.id, true) })
                                 }
                             }
                         }
                     }
-                    if (serResults.isNotEmpty()) {
-                        item {
-                            TvSection(title = "Diziler (${serResults.size})") {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    itemsIndexed(serResults, key = { index, ser -> "sr_ser_${ser.id}_$index" }) { _, ser ->
-                                        TvVodCard(item = ser, onClick = { onOpenVod(ser.id, true) })
-                                    }
-                                }
-                            }
+                }
+                if (channels.isEmpty() && movies.isEmpty() && series.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            Text("Sonuç bulunamadı.", color = Color.White.copy(0.6f))
                         }
                     }
                 }
@@ -1089,146 +1207,20 @@ private fun TvSearchSection(
     }
 
     if (isInputDialogOpen) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { isInputDialogOpen = false },
-            title = { Text("Arama Yapın", color = Color.White, fontWeight = FontWeight.Bold) },
-            text = {
-                var tempText by remember { mutableStateOf(query) }
-                val focusReq = remember { FocusRequester() }
-                Column {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = tempText,
-                        onValueChange = { tempText = it; query = it },
-                        singleLine = true,
-                        placeholder = { Text("Aramak istediğiniz adı yazın…") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusReq)
-                    )
-                    LaunchedEffect(Unit) {
-                        kotlinx.coroutines.delay(100)
-                        runCatching { focusReq.requestFocus() }
-                    }
-                }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { isInputDialogOpen = false }) {
-                    Text("Ara", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    query = ""
-                    isInputDialogOpen = false
-                }) {
-                    Text("Temizle", color = Color.White.copy(0.6f))
-                }
-            },
-            containerColor = Color(0xFF131722),
-            shape = RoundedCornerShape(14.dp)
+        TvSearchInputDialog(
+            initialQuery = query,
+            onDismiss = { isInputDialogOpen = false },
+            onConfirm = {
+                query = it
+                isInputDialogOpen = false
+            }
         )
     }
 }
 
 // =========================================================================
-// YARDIMCI APPLE TV BİLEŞENLERİ
+// TV YARDIMCI BİLEŞENLERİ (APPLE TV STİLİNDE)
 // =========================================================================
-
-@Composable
-private fun AppleTvTabButton(
-    tab: AppleTvTab,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isFocused) 1.10f else 1.0f, label = "tab_scale")
-
-    Surface(
-        modifier = Modifier
-            .scale(scale)
-            .clip(RoundedCornerShape(50))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
-                shape = RoundedCornerShape(50)
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        shape = RoundedCornerShape(50),
-        color = if (isFocused) Color(0xFF00E5FF)
-        else if (selected) Color.White.copy(alpha = 0.20f)
-        else Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = tab.title,
-                tint = if (isFocused) Color.Black else if (selected) Color.White else Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = tab.title,
-                color = if (isFocused) Color.Black else if (selected) Color.White else Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-                fontWeight = if (selected || isFocused) FontWeight.Bold else FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-private fun AppleTvCircleAction(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isFocused) 1.15f else 1.0f, label = "act_scale")
-
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            .scale(scale)
-            .clip(CircleShape)
-            .background(if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.10f))
-            .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.15f),
-                shape = CircleShape
-            )
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (isFocused) Color.Black else Color.White,
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
 @Composable
 private fun TvCategoryItem(
     title: String,
@@ -1236,41 +1228,40 @@ private fun TvCategoryItem(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
-    Box(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                when {
-                    focused -> Color(0xFF00E5FF)
-                    selected -> Color(0xFF1E293B)
-                    else -> Color.Transparent
-                }
-            )
-            .border(
-                width = if (focused) 2.dp else 0.dp,
-                color = if (focused) Color.White else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
-            )
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) Color(0xFF00E5FF) else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
             )
+            .clickable(onClick = onClick)
             .onKeyEvent { ev ->
                 if (isTvSelectKey(ev)) {
                     onClick(); true
                 } else false
-            }
-            .padding(horizontal = 12.dp, vertical = 9.dp)
+            },
+        color = when {
+            focused -> Color(0xFF00E5FF)
+            selected -> Color(0xFF1E293B)
+            else -> Color.Transparent
+        },
+        shape = RoundedCornerShape(10.dp)
     ) {
         Text(
-            title,
-            color = if (focused) Color.Black else if (selected) Color(0xFF00E5FF) else Color.White.copy(0.85f),
+            text = title,
+            color = when {
+                focused -> Color.Black
+                selected -> Color(0xFF00E5FF)
+                else -> Color.White.copy(0.85f)
+            },
             fontSize = 13.sp,
             fontWeight = if (focused || selected) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1342,10 +1333,12 @@ private fun TvSection(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TvChannelCard(
     channel: Channel,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(targetValue = if (focused) 1.10f else 1.0f, label = "ch_scale")
@@ -1363,13 +1356,16 @@ private fun TvChannelCard(
             )
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
+                onLongClick = onLongClick
             )
             .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
+                if (ev.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU && ev.type == KeyEventType.KeyUp) {
+                    onLongClick?.invoke(); true
+                } else if (isTvSelectKey(ev)) {
                     onClick(); true
                 } else false
             },
@@ -1403,10 +1399,12 @@ private fun TvChannelCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TvChannelGridCard(
     channel: Channel,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(targetValue = if (focused) 1.05f else 1.0f, label = "ch_grid_scale")
@@ -1424,13 +1422,16 @@ private fun TvChannelGridCard(
             )
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
+                onLongClick = onLongClick
             )
             .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
+                if (ev.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU && ev.type == KeyEventType.KeyUp) {
+                    onLongClick?.invoke(); true
+                } else if (isTvSelectKey(ev)) {
                     onClick(); true
                 } else false
             }
@@ -1465,11 +1466,13 @@ private fun TvChannelGridCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TvVodCard(
     item: VodItem,
     tmdbApiKey: String = "",
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
     var focused by remember { mutableStateOf(false) }
@@ -1503,13 +1506,16 @@ private fun TvVodCard(
                 )
                 .onFocusChanged { focused = it.isFocused }
                 .focusable()
-                .clickable(
+                .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onClick
+                    onClick = onClick,
+                    onLongClick = onLongClick
                 )
                 .onKeyEvent { ev ->
-                    if (isTvSelectKey(ev)) {
+                    if (ev.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU && ev.type == KeyEventType.KeyUp) {
+                        onLongClick?.invoke(); true
+                    } else if (isTvSelectKey(ev)) {
                         onClick(); true
                     } else false
                 }
@@ -1556,5 +1562,196 @@ private fun TvVodCard(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+// =========================================================================
+// TV QUICK ACTIONS MODAL DIALOGS (APPLE TV FROSTED GLASS)
+// =========================================================================
+@Composable
+private fun TvVodQuickActionsDialog(
+    item: VodItem,
+    isSeries: Boolean,
+    isFavorite: Boolean,
+    isWatched: Boolean,
+    onPlay: () -> Unit,
+    onDetails: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onToggleWatched: () -> Unit,
+    onHideFromHome: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF131824).copy(alpha = 0.96f),
+            modifier = Modifier
+                .width(380.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
+                .padding(24.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Header
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isSeries) Icons.Default.VideoLibrary else Icons.Default.Movie,
+                            contentDescription = null,
+                            tint = Color(0xFF00E5FF),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.name,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = if (isSeries) "Dizi Seçenekleri" else "Film Seçenekleri",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                TvDialogActionRow(icon = Icons.Default.PlayArrow, title = "Hemen Oynat", onClick = { onPlay(); onDismiss() })
+                TvDialogActionRow(icon = Icons.Default.Info, title = "Detayları Gör", onClick = { onDetails(); onDismiss() })
+                TvDialogActionRow(
+                    icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    title = if (isFavorite) "Favorilerden Çıkar" else "Favorilere Ekle",
+                    iconColor = if (isFavorite) Color(0xFFFF5252) else Color.White,
+                    onClick = { onToggleFavorite(); onDismiss() }
+                )
+                TvDialogActionRow(
+                    icon = Icons.Default.Check,
+                    title = if (isWatched) "İzlenmedi Olarak İşaretle" else "İzlendi Olarak İşaretle",
+                    onClick = { onToggleWatched(); onDismiss() }
+                )
+                TvDialogActionRow(
+                    icon = Icons.Default.Clear,
+                    title = "Ana Sayfadan Gizle",
+                    iconColor = Color(0xFFFF7043),
+                    onClick = { onHideFromHome(); onDismiss() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TvChannelQuickActionsDialog(
+    channel: Channel,
+    isFavorite: Boolean,
+    onPlay: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF131824).copy(alpha = 0.96f),
+            modifier = Modifier
+                .width(360.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
+                .padding(24.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ChannelLogo(
+                        logo = channel.logo,
+                        channelName = channel.name,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = channel.name,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = channel.tvGenreTitle.ifBlank { "Canlı TV Kanalı" },
+                            color = Color(0xFF00E5FF),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                TvDialogActionRow(icon = Icons.Default.PlayArrow, title = "Kanalı Aç", onClick = { onPlay(); onDismiss() })
+                TvDialogActionRow(
+                    icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    title = if (isFavorite) "Favorilerden Çıkar" else "Favorilere Ekle",
+                    iconColor = if (isFavorite) Color(0xFFFF5252) else Color.White,
+                    onClick = { onToggleFavorite(); onDismiss() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TvDialogActionRow(
+    icon: ImageVector,
+    title: String,
+    iconColor: Color = Color.White,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
+        color = if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isFocused) Color(0xFF00E5FF) else iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = title,
+                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.9f),
+                fontSize = 14.sp,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium
+            )
+        }
     }
 }

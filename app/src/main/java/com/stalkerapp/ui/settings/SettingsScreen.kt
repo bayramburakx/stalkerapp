@@ -5,9 +5,11 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +28,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -2743,8 +2750,8 @@ private fun SettingsCard(
 }
 
 /**
- * Ayarlar bölüm listesindeki satır: ikonlu cam kutu + başlık + açıklama + sağ ok.
- * Tıklayınca ilgili bölüm sayfası açılır.
+ * Ayarlar bölüm listesindeki satır: Apple TV cam kart + ikonlu kutu + başlık + açıklama + sağ ok.
+ * D-Pad ile odaklanıldığında pürüzsüz scale ve parlayan cam çerçeve efekti verir.
  */
 @Composable
 private fun SettingsNavRow(
@@ -2753,37 +2760,69 @@ private fun SettingsNavRow(
     desc: String,
     onClick: () -> Unit
 ) {
-    SettingsCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.02f else 1.0f, label = "set_scale")
+
+    androidx.compose.material3.Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .clip(RoundedCornerShape(18.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .border(
+                width = if (isFocused) 2.5.dp else 1.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick)
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onClick(); true
+                } else false
+            },
+        color = if (isFocused) Color(0xFF1E293B) else Color(0xFF131722).copy(alpha = 0.85f),
+        shape = RoundedCornerShape(18.dp)
+    ) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                    .background(if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                    .border(1.dp, if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    title,
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
                 Text(
-                    desc,
+                    text = desc,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.6f)
                 )
             }
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.4f),
                 modifier = Modifier.size(22.dp)
             )
         }

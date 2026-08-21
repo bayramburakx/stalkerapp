@@ -762,40 +762,52 @@ fun VodDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Oynat: beyaz zemin, siyah kalın yazı (TV kumandasıyla odaklanabilir ve seçilebilir).
-                            Button(
-                                onClick = { onPlayPressed() },
-                                enabled = !playing,
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isPlayFocused) Color(0xFF38BDF8) else Color.White,
-                                    contentColor = Color.Black
-                                ),
+                            // Oynat: Apple TV hap butonu, beyaz zemin, siyah kalın yazı, cyan odak çerçevesi
+                            val playScale by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (isPlayFocused) 1.08f else 1.0f,
+                                label = "play_scale"
+                            )
+                            Surface(
                                 modifier = Modifier
-                                    .height(48.dp)
+                                    .scale(playScale)
+                                    .clip(RoundedCornerShape(50))
                                     .focusRequester(playButtonFocusRequester)
                                     .onFocusChanged { isPlayFocused = it.isFocused }
+                                    .focusable()
                                     .border(
                                         width = if (isPlayFocused) 3.dp else 0.dp,
-                                        color = if (isPlayFocused) Color.White else Color.Transparent,
-                                        shape = RoundedCornerShape(10.dp)
+                                        color = if (isPlayFocused) Color(0xFF00E5FF) else Color.Transparent,
+                                        shape = RoundedCornerShape(50)
                                     )
+                                    .clickable(enabled = !playing, onClick = { onPlayPressed() })
                                     .onKeyEvent { ev ->
                                         if (isTvSelectKey(ev)) {
                                             onPlayPressed(); true
                                         } else false
-                                    }
+                                    },
+                                shape = RoundedCornerShape(50),
+                                color = if (isPlayFocused) Color(0xFF00E5FF) else Color.White
                             ) {
-                                if (playing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color.Black
-                                    )
-                                } else {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(str(lang, "Oynat"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (playing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Color.Black
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = str(lang, "Hemen İzle"),
+                                            fontWeight = FontWeight.Black,
+                                            color = Color.Black,
+                                            fontSize = 15.sp
+                                        )
+                                    }
                                 }
                             }
                             // Favori: Oynat'ın hemen sağında, yuvarlak içinde kalp.

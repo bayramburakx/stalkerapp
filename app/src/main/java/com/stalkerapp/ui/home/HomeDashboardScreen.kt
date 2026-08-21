@@ -795,14 +795,32 @@ private fun HeroBanner(
                 // 3) Detayları Gör butonu (beyaz zemin, siyah kalın yazı, ortada)
                 Button(
                     onClick = { onOpenVod(item.id, isSeries) },
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,
                         contentColor = Color.Black
                     ),
-                    modifier = Modifier.height(46.dp)
+                    modifier = Modifier.height(44.dp)
                 ) {
                     Text(str(lang, "Detayları Gör"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                }
+
+                if (items.size > 1) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        repeat(items.size) { index ->
+                            val isCurrent = pagerState.currentPage == index
+                            Box(
+                                modifier = Modifier
+                                    .size(if (isCurrent) 7.dp else 5.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isCurrent) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.4f))
+                            )
+                        }
+                    }
                 }
             }
         }
