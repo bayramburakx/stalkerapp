@@ -1721,52 +1721,84 @@ private fun TvVodQuickActionsDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF131824).copy(alpha = 0.96f),
+            shape = RoundedCornerShape(22.dp),
+            color = Color(0xFF131722).copy(alpha = 0.98f),
             modifier = Modifier
-                .width(380.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
-                .padding(24.dp)
+                .width(360.dp)
+                .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(22.dp))
+                .padding(20.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Header
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Apple TV Header: Mini Poster + Başlık + Rozetler
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
+                            .width(44.dp)
+                            .height(64.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
                     ) {
-                        Icon(
-                            imageVector = if (isSeries) Icons.Default.VideoLibrary else Icons.Default.Movie,
-                            contentDescription = null,
-                            tint = Color(0xFF00E5FF),
-                            modifier = Modifier.size(24.dp)
+                        AsyncImage(
+                            model = resolveUrl(item.poster),
+                            contentDescription = item.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = item.name,
                             color = Color.White,
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = if (isSeries) "Dizi Seçenekleri" else "Film Seçenekleri",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 12.sp
-                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isSeries) "DİZİ" else "FİLM",
+                                    color = Color(0xFF00E5FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            if (item.year.isNotBlank() && item.year != "0") {
+                                Text(
+                                    text = item.year,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                Spacer(Modifier.height(2.dp))
 
-                TvDialogActionRow(icon = Icons.Default.PlayArrow, title = "Hemen Oynat", onClick = { onPlay(); onDismiss() })
-                TvDialogActionRow(icon = Icons.Default.Info, title = "Detayları Gör", onClick = { onDetails(); onDismiss() })
+                TvDialogActionRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Hemen Oynat",
+                    isPrimary = true,
+                    onClick = { onPlay(); onDismiss() }
+                )
+                TvDialogActionRow(
+                    icon = Icons.Default.Info,
+                    title = "Detayları Gör",
+                    onClick = { onDetails(); onDismiss() }
+                )
                 TvDialogActionRow(
                     icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     title = if (isFavorite) "Favorilerden Çıkar" else "Favorilere Ekle",
@@ -1781,7 +1813,7 @@ private fun TvVodQuickActionsDialog(
                 TvDialogActionRow(
                     icon = Icons.Default.Clear,
                     title = "Ana Sayfadan Gizle",
-                    iconColor = Color(0xFFFF7043),
+                    iconColor = Color(0xFFFF5252),
                     onClick = { onHideFromHome(); onDismiss() }
                 )
             }
@@ -1799,27 +1831,27 @@ private fun TvChannelQuickActionsDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF131824).copy(alpha = 0.96f),
+            shape = RoundedCornerShape(22.dp),
+            color = Color(0xFF131722).copy(alpha = 0.98f),
             modifier = Modifier
-                .width(360.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
-                .padding(24.dp)
+                .width(350.dp)
+                .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(22.dp))
+                .padding(20.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ChannelLogo(
                         logo = channel.logo,
                         channelName = channel.name,
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(48.dp)
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = channel.name,
                             color = Color.White,
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Black,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1831,9 +1863,16 @@ private fun TvChannelQuickActionsDialog(
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                Spacer(Modifier.height(2.dp))
 
-                TvDialogActionRow(icon = Icons.Default.PlayArrow, title = "Kanalı Aç", onClick = { onPlay(); onDismiss() })
+                TvDialogActionRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Kanalı Aç",
+                    isPrimary = true,
+                    onClick = { onPlay(); onDismiss() }
+                )
                 TvDialogActionRow(
                     icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     title = if (isFavorite) "Favorilerden Çıkar" else "Favorilere Ekle",
@@ -1850,12 +1889,16 @@ private fun TvDialogActionRow(
     icon: ImageVector,
     title: String,
     iconColor: Color = Color.White,
+    isPrimary: Boolean = false,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.03f else 1.0f, label = "act_row_scale")
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .scale(scale)
             .clip(RoundedCornerShape(12.dp))
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
@@ -1870,25 +1913,36 @@ private fun TvDialogActionRow(
                     onClick(); true
                 } else false
             },
-        color = if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
+        color = when {
+            isFocused -> Color(0xFF00E5FF)
+            isPrimary -> Color(0xFF1E293B)
+            else -> Color.White.copy(alpha = 0.05f)
+        },
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isFocused) Color(0xFF00E5FF) else iconColor,
+                tint = if (isFocused) Color.Black else iconColor,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(12.dp))
             Text(
                 text = title,
-                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.9f),
+                color = if (isFocused) Color.Black else Color.White,
                 fontSize = 14.sp,
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium
+                fontWeight = if (isFocused || isPrimary) FontWeight.Bold else FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = if (isFocused) Color.Black.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.25f),
+                modifier = Modifier.size(16.dp)
             )
         }
     }

@@ -2674,77 +2674,121 @@ private fun ToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.02f else 1.0f, label = "tgl_scale")
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .background(if (isFocused) Color(0xFF1E293B) else Color(0xFF161B26).copy(alpha = 0.75f))
+            .border(
+                width = if (isFocused) 2.5.dp else 1.dp,
+                color = if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable { onCheckedChange(!checked) }
+            .onKeyEvent { ev ->
+                if (isTvSelectKey(ev)) {
+                    onCheckedChange(!checked); true
+                } else false
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        }
-        Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-/** Ana ekranla aynı dil: ikonlu cam kutu + kalın büyük başlık. */
-@Composable
-private fun SectionHeader(icon: ImageVector, title: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
+                .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                .background(if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                .border(1.dp, if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isFocused) Color(0xFF00E5FF) else Color.White,
+                modifier = Modifier.size(20.dp)
+            )
         }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            if (desc.isNotBlank()) {
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            }
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Color(0xFF00E5FF),
+                uncheckedThumbColor = Color.White.copy(alpha = 0.7f),
+                uncheckedTrackColor = Color.White.copy(alpha = 0.15f)
+            )
         )
     }
 }
 
-/** Uygulama kart diliyle uyumlu ayar kartı: yumuşak köşe + ince çerçeve. */
+/** Apple TV Bölüm Başlığı: İkonlu cam rozet + kalın başlık. */
+@Composable
+private fun SectionHeader(icon: ImageVector, title: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(vertical = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
+                .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = Color.White,
+            fontSize = 18.sp
+        )
+    }
+}
+
+/** Apple TV Ayar Kartı: Yüzen buzlu cam kutu. */
 @Composable
 private fun SettingsCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    androidx.compose.material3.Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp)),
+        color = Color(0xFF131824).copy(alpha = 0.85f),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) { content() }
     }
 }
@@ -2763,7 +2807,7 @@ private fun SettingsNavRow(
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(targetValue = if (isFocused) 1.02f else 1.0f, label = "set_scale")
 
-    androidx.compose.material3.Surface(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
@@ -2830,9 +2874,7 @@ private fun SettingsNavRow(
 }
 
 /**
- * Bölüm sayfası kabuğu: geri oku + ikonlu başlık + açıklama + kaydırılabilir
- * içerik kartı. İçerik tek büyük kart yerine bölümlere ayrılmış kartlardan
- * oluşur (her ayar grubu kendi kartında — daha okunaklı ve kullanışlı).
+ * Bölüm sayfası kabuğu: Apple TV yüzen üst bar + ikonlu başlık + açıklama + kaydırılabilir içerik.
  */
 @Composable
 private fun SettingsPage(
@@ -2845,51 +2887,71 @@ private fun SettingsPage(
     content: @Composable () -> Unit
 ) {
     Column(
-        // Üst ekran içi boşluk (status bar) dahil dış modifier uygulanır;
-        // aksi halde başlık/geri tuşu bildirim paneliyle iç içe kalır.
         modifier = modifier
             .fillMaxSize()
+            .background(Color(0xFF000000))
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Sabit başlık satırı: geri oku + ikonlu büyük başlık.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(42.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = str(lang, "Geri"), modifier = Modifier.size(24.dp))
-            }
+            var isBackFocused by remember { mutableStateOf(false) }
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(11.dp)),
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(if (isBackFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.10f))
+                    .border(1.dp, if (isBackFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f), CircleShape)
+                    .onFocusChanged { isBackFocused = it.isFocused }
+                    .focusable()
+                    .clickable(onClick = onBack)
+                    .onKeyEvent { ev ->
+                        if (isTvSelectKey(ev)) {
+                            onBack(); true
+                        } else false
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = str(lang, "Geri"),
+                    tint = if (isBackFocused) Color.Black else Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
+                    .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    title,
+                    text = title,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    fontSize = 22.sp
                 )
                 if (subtitle.isNotBlank()) {
                     Text(
-                        subtitle,
+                        text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.6f)
                     )
                 }
             }
         }
-        HorizontalDivider()
-        // Bölüm içerikleri: her mantıksal grup kendi kartında görünür.
-        // (Bölümler zaten SectionHeader ile ayrılmış — kartlar arası boşluk
-        // okunabilirliği artırır.)
+
         content()
         Spacer(modifier = Modifier.height(96.dp))
     }
@@ -2908,27 +2970,28 @@ private fun PinLockOverlay(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .background(Color(0xFF000000))
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(18.dp)),
+                .size(68.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
+                .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f), RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(16.dp))
-        Text(str(lang, "PIN Kilidi"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(str(lang, "PIN Kilidi"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
         Spacer(Modifier.height(6.dp))
         Text(
             str(lang, "Ayarlara erişmek için PIN'i gir."),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White.copy(alpha = 0.6f)
         )
         Spacer(Modifier.height(20.dp))
         OutlinedTextField(
@@ -2940,19 +3003,24 @@ private fun PinLockOverlay(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             isError = error,
             supportingText = if (error) {
-                { Text(str(lang, "Yanlış PIN"), color = MaterialTheme.colorScheme.error) }
+                { Text(str(lang, "Yanlış PIN"), color = Color(0xFFFF5252)) }
             } else null,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(0.8f)
         )
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = { onUnlock(pin) },
             enabled = pin.length == 4,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(str(lang, "Kilidi Aç")) }
+            shape = RoundedCornerShape(50),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = Color.Black
+            ),
+            modifier = Modifier.fillMaxWidth(0.8f).height(48.dp)
+        ) { Text(str(lang, "Kilidi Aç"), fontWeight = FontWeight.Bold) }
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onResetRequest) {
-            Text(str(lang, "PIN'i unuttum — tüm verileri sıfırla"), color = MaterialTheme.colorScheme.error)
+            Text(str(lang, "PIN'i unuttum — tüm verileri sıfırla"), color = Color(0xFFFF5252))
         }
     }
 }
@@ -2960,9 +3028,9 @@ private fun PinLockOverlay(
 @Composable
 private fun SourceGroupTitle(lang: String, title: String, isActive: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(title, style = MaterialTheme.typography.titleSmall, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
         if (isActive) {
-            Text(str(lang, "● Aktif"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+            Text(str(lang, "● Aktif"), color = Color(0xFF00E5FF), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -2979,97 +3047,129 @@ private fun SourceRow(
     onTest: (suspend () -> String?)? = null,
     onRefresh: (suspend () -> Unit)? = null
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-            if (isActive) {
-                Text("●", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-            }
-        }
-        Text(
-            subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
-        // Test durumu: başarılı/başarısız göstergesi (Test butonundan sonra dolar).
-        var testState by remember { mutableStateOf<String?>(null) } // null=boş, "ok", hata mesajı
-        var testing by remember { mutableStateOf(false) }
-        val scope = rememberCoroutineScope()
-        if (testing) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                Text(str(lang, "Test ediliyor…"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else if (testState != null) {
-            val ok = testState == "ok"
-            Text(
-                if (ok) str(lang, "✓ Bağlantı başarılı") else "✗ $testState",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (ok) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
-            )
-        }
-        // 1. satır: etkinleştir + yenile (varsa).
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (!isActive) {
-                OutlinedButton(onClick = onActivate, modifier = Modifier.weight(1f)) {
-                    Text("Aktif Yap")
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(
+                width = if (isActive) 1.5.dp else 1.dp,
+                color = if (isActive) Color(0xFF00E5FF).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        color = Color(0xFF161B26).copy(alpha = 0.6f),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (isActive) FontWeight.Black else FontWeight.Bold,
+                    color = if (isActive) Color(0xFF00E5FF) else Color.White,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("AKTİF", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-            if (onRefresh != null) {
-                var refreshing by remember { mutableStateOf(false) }
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            refreshing = true
-                            onRefresh()
-                            refreshing = false
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !refreshing
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(if (refreshing) "…" else str(lang, "Yenile"))
+            if (subtitle.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.55f),
+                    maxLines = 1
+                )
+            }
+
+            var testState by remember { mutableStateOf<String?>(null) }
+            var testing by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            if (testing) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFF00E5FF))
+                    Text(str(lang, "Test ediliyor…"), style = MaterialTheme.typography.labelSmall, color = Color(0xFF00E5FF))
+                }
+            } else if (testState != null) {
+                val ok = testState == "ok"
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = if (ok) str(lang, "✓ Bağlantı başarılı") else "✗ $testState",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (ok) Color(0xFF4CAF50) else Color(0xFFFF5252),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (!isActive) {
+                    Button(
+                        onClick = onActivate,
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color.Black),
+                        modifier = Modifier.weight(1f).height(38.dp)
+                    ) { Text("Aktif Yap", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                }
+                if (onRefresh != null) {
+                    var refreshing by remember { mutableStateOf(false) }
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                refreshing = true
+                                onRefresh()
+                                refreshing = false
+                            }
+                        },
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        enabled = !refreshing
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (refreshing) "…" else str(lang, "Yenile"), fontSize = 12.sp)
+                    }
                 }
             }
-        }
-        // 2. satır: test + düzenle + sil.
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (onTest != null) {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            testing = true
-                            testState = null
-                            val err = onTest()
-                            testState = err ?: "ok"
-                            testing = false
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !testing
-                ) { Text(if (testing) "…" else "Test Et") }
-            }
-            OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                Text(str(lang, "Düzenle"))
-            }
-            OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                Text(str(lang, "Sil"))
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (onTest != null) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                testing = true
+                                testState = null
+                                val err = onTest()
+                                testState = err ?: "ok"
+                                testing = false
+                            }
+                        },
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        enabled = !testing
+                    ) { Text(if (testing) "…" else "Test Et", fontSize = 11.sp) }
+                }
+                OutlinedButton(onClick = onEdit, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f).height(36.dp)) {
+                    Text(str(lang, "Düzenle"), fontSize = 11.sp)
+                }
+                OutlinedButton(onClick = onDelete, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f).height(36.dp)) {
+                    Text(str(lang, "Sil"), fontSize = 11.sp, color = Color(0xFFFF5252))
+                }
             }
         }
     }
@@ -3086,14 +3186,36 @@ private fun SliderSetting(
     valueText: String,
     onChange: (Float) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            Text(title, style = MaterialTheme.typography.titleSmall)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp)),
+        color = Color(0xFF161B26).copy(alpha = 0.6f),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(icon, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(Modifier.weight(1f))
+                Text(valueText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = Color(0xFF00E5FF))
+            }
+            if (description.isNotBlank()) {
+                Text(description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+            }
+            Slider(
+                value = value,
+                onValueChange = onChange,
+                valueRange = valueRange,
+                steps = steps,
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color(0xFF00E5FF),
+                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                )
+            )
         }
-        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Slider(value = value, onValueChange = onChange, valueRange = valueRange, steps = steps)
-        Text(valueText, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

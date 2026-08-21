@@ -1408,16 +1408,17 @@ fun PlayerScreen(navController: NavHostController) {
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 if (!isLive) {
-                    // Film/Dizi alt barı: solda süre, sağda yalnızca ses + altyazı
+                    // Apple TV Film/Dizi alt barı: Kalan süre + İnce sinematik Scrubber + Ses/Altyazı
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "${formatMs(position)} / ${formatMs(duration)}",
-                            color = Color.White.copy(alpha = 0.85f),
-                            style = MaterialTheme.typography.labelMedium
+                            text = formatMs(position),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
                         )
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1427,31 +1428,38 @@ fun PlayerScreen(navController: NavHostController) {
                                 onClick = { showTracks = true },
                                 icon = Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = str(lang, "Ses Dili"),
-                                iconSize = 24.dp,
-                                modifier = Modifier.size(46.dp)
+                                iconSize = 22.dp,
+                                modifier = Modifier.size(42.dp)
                             )
                             PlayerTvIconButton(
                                 onClick = { showSubs = true },
                                 icon = Icons.Default.Subtitles,
                                 contentDescription = str(lang, "Altyazı"),
-                                iconSize = 24.dp,
-                                modifier = Modifier.size(46.dp)
+                                iconSize = 22.dp,
+                                modifier = Modifier.size(42.dp)
                             )
                         }
+                        val remainingMs = (duration - position).coerceAtLeast(0L)
+                        Text(
+                            text = if (duration > 0) "-${formatMs(remainingMs)}" else "",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Netflix tarzı ince progress çizgisi: dokun/sürükle → atla.
+                    // Apple TV minimalist scrubber track: dokun/sürükle → atla.
                     val progressFraction = if (duration > 0) {
                         (position.toFloat() / duration).coerceIn(0f, 1f)
                     } else 0f
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(5.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color.White.copy(alpha = 0.25f))
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White.copy(alpha = 0.20f))
                             .pointerInput(duration) {
                                 detectTapGestures { offset ->
                                     if (duration > 0) {
@@ -1483,7 +1491,11 @@ fun PlayerScreen(navController: NavHostController) {
                             modifier = Modifier
                                 .fillMaxWidth(progressFraction)
                                 .fillMaxHeight()
-                                .background(Color(0xFFE50914))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFF00B4D8), Color(0xFF00E5FF))
+                                    )
+                                )
                         )
                     }
                 } else {
