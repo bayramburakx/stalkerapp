@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,12 +44,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.UpdateInfo
@@ -174,7 +178,7 @@ fun ChannelLogo(
             4 -> listOf(Color(0xFF7C2D12), Color(0xFFF97316)) // Turuncu
             else -> listOf(Color(0xFF0F172A), Color(0xFF334155)) // Koyu Gri
         }
-        androidx.compose.ui.graphics.Brush.linearGradient(colors)
+        Brush.linearGradient(colors)
     }
 
     Box(
@@ -208,11 +212,11 @@ fun ChannelLogo(
                 Text(
                     text = cleanTitle.take(8).ifBlank { "TV" },
                     color = Color.White,
-                    fontSize = 10.androidx.compose.ui.unit.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Black,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    textAlign = TextAlign.Center,
                     maxLines = 2,
-                    lineHeight = 11.androidx.compose.ui.unit.sp
+                    lineHeight = 11.sp
                 )
             }
         }

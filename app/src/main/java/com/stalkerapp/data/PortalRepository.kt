@@ -1453,7 +1453,7 @@ class PortalRepository(
      * global cooldown is waited out at most once per variant so a rate-limited
      * portal doesn't silently kill the enumeration.
      */
-    private suspend fun fetchVodPage(
+    suspend fun fetchVodPage(
         profile: Profile,
         page: Int,
         perPage: Int,
