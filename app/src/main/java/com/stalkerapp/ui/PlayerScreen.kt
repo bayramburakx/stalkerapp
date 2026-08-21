@@ -875,27 +875,20 @@ fun PlayerScreen(navController: NavHostController) {
                         }
                     }
                     Key.DirectionUp -> {
-                        if (!overlayVisible) {
-                            if (isLive && settings.remoteChannelKeys && ChannelQueue.index > 0) {
-                                switchTo(ChannelQueue.index - 1)
-                                true
-                            } else {
+                        if (isLive) {
+                            showChannels = true
+                            true
+                        } else {
+                            if (!overlayVisible) {
                                 overlayVisible = true
                                 true
-                            }
-                        } else {
-                            false // Overlay açıkken üst bara odaklanma
+                            } else false
                         }
                     }
                     Key.DirectionDown -> {
                         if (!overlayVisible) {
-                            if (isLive && settings.remoteChannelKeys && ChannelQueue.index + 1 < ChannelQueue.channels.size) {
-                                switchTo(ChannelQueue.index + 1)
-                                true
-                            } else {
-                                overlayVisible = true
-                                true
-                            }
+                            overlayVisible = true
+                            true
                         } else {
                             false // Overlay açıkken alt bara odaklanma
                         }
@@ -1186,48 +1179,6 @@ fun PlayerScreen(navController: NavHostController) {
             }
         }
 
-        // ---------- CENTER CONTROLS (Film/Dizi) ----------
-        if (overlayVisible && !isLive && !isBuffering) {
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                PlayerTvIconButton(
-                    onClick = { PlaybackManager.seekBack(10_000L) },
-                    icon = Icons.Default.Replay10,
-                    contentDescription = str(lang, "10 sn Geri"),
-                    iconSize = 36.dp,
-                    modifier = Modifier.size(64.dp)
-                )
-                PlayerTvIconButton(
-                    onClick = { PlaybackManager.togglePlayPause() },
-                    icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = str(lang, "Oynat/Duraklat"),
-                    iconSize = 48.dp,
-                    focusRequester = centerPlayFocusRequester,
-                    modifier = Modifier.size(80.dp)
-                )
-                PlayerTvIconButton(
-                    onClick = { PlaybackManager.seekForward(10_000L) },
-                    icon = Icons.Default.Forward10,
-                    contentDescription = str(lang, "10 sn İleri"),
-                    iconSize = 36.dp,
-                    modifier = Modifier.size(64.dp)
-                )
-                // Sonraki Bölüm: yalnızca dizilerde gösterilir.
-                val queueIsSeries = VodQueue.item?.isSeries == true || (VodQueue.item?.seriesId ?: 0L) > 0
-                if (VodQueue.hasNext && queueIsSeries) {
-                    PlayerTvIconButton(
-                        onClick = { PlaybackManager.playNextEpisode() },
-                        icon = Icons.Default.SkipNext,
-                        contentDescription = str(lang, "Sonraki Bölüm"),
-                        iconSize = 36.dp,
-                        modifier = Modifier.size(64.dp)
-                    )
-                }
-            }
-        }
 
         if (overlayVisible) {
             // ---------- TOP BAR ----------
@@ -1408,6 +1359,44 @@ fun PlayerScreen(navController: NavHostController) {
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 if (!isLive) {
+                    // Transport Controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PlayerTvIconButton(
+                            onClick = { PlaybackManager.seekBack(10_000L) },
+                            icon = Icons.Default.Replay10,
+                            contentDescription = str(lang, "10 sn Geri"),
+                            iconSize = 28.dp, modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(Modifier.width(24.dp))
+                        PlayerTvIconButton(
+                            onClick = { PlaybackManager.togglePlayPause() },
+                            icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = str(lang, "Oynat/Duraklat"),
+                            iconSize = 36.dp, focusRequester = centerPlayFocusRequester, modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(Modifier.width(24.dp))
+                        PlayerTvIconButton(
+                            onClick = { PlaybackManager.seekForward(10_000L) },
+                            icon = Icons.Default.Forward10,
+                            contentDescription = str(lang, "10 sn İleri"),
+                            iconSize = 28.dp, modifier = Modifier.size(48.dp)
+                        )
+                        val queueIsSeries = VodQueue.item?.isSeries == true || (VodQueue.item?.seriesId ?: 0L) > 0
+                        if (VodQueue.hasNext && queueIsSeries) {
+                            Spacer(Modifier.width(24.dp))
+                            PlayerTvIconButton(
+                                onClick = { PlaybackManager.playNextEpisode() },
+                                icon = Icons.Default.SkipNext,
+                                contentDescription = str(lang, "Sonraki Bölüm"),
+                                iconSize = 28.dp, modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
+
                     // Apple TV Film/Dizi alt barı: Kalan süre + İnce sinematik Scrubber + Ses/Altyazı
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -2795,7 +2784,6 @@ fun ChannelListPanel(
     val isTv = remember(context) { isTvDevice(context) }
     val channels = ChannelQueue.channels
     val profile = ChannelQueue.profile
-    var query by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val listFocusRequester = remember { FocusRequester() }
 
@@ -2812,21 +2800,21 @@ fun ChannelListPanel(
 
     AnimatedVisibility(
         visible = visible,
-        enter = slideInHorizontally(initialOffsetX = { -it }),
-        exit = slideOutHorizontally(targetOffsetX = { -it })
+        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
+        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
     ) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))) {
             Box(modifier = Modifier.fillMaxSize().clickable { onClose() })
             Surface(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .width(360.dp)
-                    .align(Alignment.CenterStart),
-                color = Color(0xFF141414)
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .align(Alignment.BottomCenter),
+                color = Color.Black.copy(alpha = 0.7f)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -2839,33 +2827,49 @@ fun ChannelListPanel(
                             Icon(Icons.Default.Close, contentDescription = str(lang, "Kapat"), tint = Color.White)
                         }
                     }
-                    if (!isTv) {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            placeholder = { Text(str(lang, "Kanal ara…")) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
-                    val filtered = if (query.isBlank()) channels else channels.filter {
-                        it.name.contains(query.trim(), ignoreCase = true)
-                    }
-                    LazyColumn(
+                    LazyRow(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .focusRequester(listFocusRequester)
+                            .focusRequester(listFocusRequester),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
                     ) {
-                        items(filtered, key = { it.id }) { ch ->
-                            ChannelRow(
-                                channel = ch,
-                                baseUrl = profile?.baseUrl.orEmpty(),
-                                highlight = ch.id == currentId
+                        items(channels, key = { it.id }) { ch ->
+                            var isFocused by remember { mutableStateOf(false) }
+                            val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label="scale")
+                            Box(
+                                modifier = Modifier
+                                    .width(140.dp)
+                                    .fillMaxHeight()
+                                    .padding(bottom = 16.dp)
+                                    .scale(scale)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (ch.id == currentId) Color(0xFF00E5FF).copy(alpha=0.2f) else Color.White.copy(alpha = 0.1f))
+                                    .border(
+                                        width = if (isFocused) 2.dp else if (ch.id == currentId) 1.dp else 0.dp,
+                                        color = if (isFocused) Color.White else if (ch.id == currentId) Color(0xFF00E5FF) else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .onFocusChanged { isFocused = it.isFocused }
+                                    .focusable()
+                                    .clickable {
+                                        onSelect(channels.indexOfFirst { c -> c.id == ch.id })
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                onSelect(channels.indexOfFirst { c -> c.id == ch.id })
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
+                                    ChannelLogo(url = ch.logo, modifier = Modifier.size(60.dp))
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = ch.name,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }

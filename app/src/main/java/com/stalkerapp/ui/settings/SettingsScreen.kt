@@ -2806,79 +2806,43 @@ private fun SettingsNavRow(
     desc: String,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isFocused) 1.02f else 1.0f, label = "set_scale")
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clip(RoundedCornerShape(18.dp))
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(18.dp)
-            )
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        color = if (isFocused) Color(0xFF1E293B) else Color(0xFF131722).copy(alpha = 0.85f),
-        shape = RoundedCornerShape(18.dp)
-    ) {
+    com.stalkerapp.ui.components.AppleTvCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) { isFocused ->
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isFocused) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
-                    .border(1.dp, if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isFocused) Color(0xFF00E5FF) else Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
+                Icon(icon, contentDescription = null, tint = if (isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.primary)
             }
+            Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
+                    title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = if (isFocused) Color(0xFF00E5FF) else Color.Unspecified
                 )
                 Text(
-                    text = desc,
+                    desc,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = if (isFocused) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.size(22.dp)
-            )
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
-
-/**
- * Bölüm sayfası kabuğu: Apple TV yüzen üst bar + ikonlu başlık + açıklama + kaydırılabilir içerik.
- */
-@Composable
 private fun SettingsPage(
     lang: String,
     icon: ImageVector,

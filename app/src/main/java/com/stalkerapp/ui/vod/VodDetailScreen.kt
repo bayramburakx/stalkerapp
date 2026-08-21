@@ -16,6 +16,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import com.stalkerapp.ui.components.AppleTvButton
+import com.stalkerapp.ui.components.AppleTvCard
 import com.stalkerapp.ui.tv.isTvSelectKey
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -679,6 +682,13 @@ fun VodDetailScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        AsyncImage(
+            model = posterUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().blur(60.dp)
+        )
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             // ---------- Hero: poster, yarım ekran, anasayfadaki gibi ----------
             item {

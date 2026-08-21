@@ -271,26 +271,14 @@ private fun ProfileCard(
     onDelete: () -> Unit
 ) {
     fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.18f else 1.0f,
-        label = "profile_scale"
-    )
-
+    com.stalkerapp.ui.components.AppleTvCard(
+        modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+        onClick = if (editing) onEdit else onClick,
+        onLongClick = onEdit
+    ) { isFocused ->
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .scale(scale)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick()
-                    true
-                } else false
-            }
+        modifier = Modifier.padding(16.dp)
     ) {
         Box(
             modifier = Modifier
@@ -345,28 +333,16 @@ private fun ProfileCard(
     }
 }
 
-@Composable
+@Composable}
+
 private fun AddProfileCard(lang: String, onClick: () -> Unit) {
     fun t(text: String) = com.stalkerapp.util.L10n.t(lang, text)
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.18f else 1.0f,
-        label = "add_profile_scale"
-    )
-
+    com.stalkerapp.ui.components.AppleTvCard(
+        onClick = onClick
+    ) { isFocused ->
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .scale(scale)
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .clickable(onClick = onClick)
-            .onKeyEvent { ev ->
-                if (isTvSelectKey(ev)) {
-                    onClick()
-                    true
-                } else false
-            }
+        modifier = Modifier.padding(16.dp)
     ) {
         Box(
             modifier = Modifier
@@ -400,7 +376,8 @@ private fun AddProfileCard(lang: String, onClick: () -> Unit) {
     }
 }
 
-@Composable
+@Composable}
+
 private fun AddProfileDialog(
     lang: String,
     title: String,

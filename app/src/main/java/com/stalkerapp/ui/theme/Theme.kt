@@ -15,37 +15,35 @@ import androidx.compose.ui.unit.Density
 import com.stalkerapp.StalkerApp
 
 private val DarkColors = darkColorScheme(
-    // Kullanıcı isteği: mavi yok — siyah / beyaz / açık gri palet.
-    primary = Color(0xFFE9EEF5),
-    onPrimary = Color(0xFF10151C),
-    primaryContainer = Color(0xFF2A3340),
-    onPrimaryContainer = Color(0xFFE9EEF5),
-    secondary = Color(0xFFC7CFDA),
-    // Kullanıcı isteği: uygulama arka planı tam siyah (hero altı dahil).
+    primary = Color.White,
+    onPrimary = Color.Black,
+    primaryContainer = Color(0x33FFFFFF),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0x80FFFFFF),
     background = Color.Black,
-    onBackground = Color(0xFFE9EEF5),
+    onBackground = Color.White,
     surface = Color.Black,
-    onSurface = Color(0xFFE9EEF5),
-    surfaceVariant = Color(0xFF1F2630),
-    onSurfaceVariant = Color(0xFF9AA6B5),
-    outline = Color(0xFF2A3340),
-    error = Color(0xFFFF5C5C)
+    onSurface = Color.White,
+    surfaceVariant = Color(0x1AFFFFFF),
+    onSurfaceVariant = Color(0xB3FFFFFF),
+    outline = Color(0x33FFFFFF),
+    error = Color(0xFFFF453A)
 )
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF10151C),
+    primary = Color.Black,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE2E7EE),
-    onPrimaryContainer = Color(0xFF10151C),
-    secondary = Color(0xFF56616F),
-    background = Color(0xFFF4F6FB),
-    onBackground = Color(0xFF10151C),
+    primaryContainer = Color(0x1A000000),
+    onPrimaryContainer = Color.Black,
+    secondary = Color(0x80000000),
+    background = Color(0xFFF2F2F7),
+    onBackground = Color.Black,
     surface = Color.White,
-    onSurface = Color(0xFF10151C),
-    surfaceVariant = Color(0xFFEAEFF6),
-    onSurfaceVariant = Color(0xFF56616F),
-    outline = Color(0xFFD5DCE6),
-    error = Color(0xFFD32F2F)
+    onSurface = Color.Black,
+    surfaceVariant = Color(0x1A000000),
+    onSurfaceVariant = Color(0xB3000000),
+    outline = Color(0x33000000),
+    error = Color(0xFFFF3B30)
 )
 
 /**

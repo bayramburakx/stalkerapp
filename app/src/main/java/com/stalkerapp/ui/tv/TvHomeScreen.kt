@@ -1480,43 +1480,17 @@ private fun TvChannelCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null
 ) {
-    var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (focused) 1.10f else 1.0f, label = "ch_scale")
-
-    Box(
-        modifier = Modifier
-            .size(130.dp, 84.dp)
-            .scale(scale)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (focused) Color(0xFF1E293B) else Color(0xFF131722))
-            .border(
-                width = if (focused) 3.dp else 1.dp,
-                color = if (focused) Color(0xFF00E5FF) else Color.White.copy(0.08f),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .onKeyEvent { ev ->
-                if (ev.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU && ev.type == KeyEventType.KeyUp) {
-                    onLongClick?.invoke(); true
-                } else if (isTvSelectKey(ev)) {
-                    onClick(); true
-                } else false
-            },
-        contentAlignment = Alignment.Center
-    ) {
+    com.stalkerapp.ui.components.AppleTvCard(
+        modifier = Modifier.size(130.dp, 84.dp),
+        onClick = onClick,
+        onLongClick = onLongClick
+    ) { isFocused ->
         ChannelLogo(
             logo = channel.logo,
             channelName = channel.name,
-            modifier = Modifier.size(86.dp, 52.dp)
+            modifier = Modifier.size(86.dp, 52.dp).align(Alignment.Center)
         )
-        if (focused) {
+        if (isFocused) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1615,9 +1589,6 @@ private fun TvVodCard(
     onLongClick: (() -> Unit)? = null
 ) {
     val app = LocalContext.current.applicationContext as StalkerApp
-    var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (focused) 1.08f else 1.0f, label = "vod_scale")
-
     var resolvedPoster by remember(item.id, item.poster) {
         mutableStateOf(app.tmdb.getCachedPoster(item.name, item.isSeries) ?: item.poster)
     }
@@ -1632,34 +1603,13 @@ private fun TvVodCard(
     }
 
     Column(modifier = Modifier.width(135.dp)) {
-        Box(
+        com.stalkerapp.ui.components.AppleTvCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .scale(scale)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF131722))
-                .border(
-                    width = if (focused) 3.dp else 0.dp,
-                    color = if (focused) Color(0xFF00E5FF) else Color.Transparent,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .onFocusChanged { focused = it.isFocused }
-                .focusable()
-                .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick,
-                    onLongClick = onLongClick
-                )
-                .onKeyEvent { ev ->
-                    if (ev.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU && ev.type == KeyEventType.KeyUp) {
-                        onLongClick?.invoke(); true
-                    } else if (isTvSelectKey(ev)) {
-                        onClick(); true
-                    } else false
-                }
-        ) {
+                .aspectRatio(2f / 3f),
+            onClick = onClick,
+            onLongClick = onLongClick
+        ) { isFocused ->
             AsyncImage(
                 model = resolveUrl(resolvedPoster.ifBlank { item.poster }),
                 contentDescription = item.name,
@@ -1696,9 +1646,9 @@ private fun TvVodCard(
         Spacer(Modifier.height(6.dp))
         Text(
             item.name,
-            color = Color.White.copy(if (focused) 1f else 0.8f),
+            color = Color.White,
             fontSize = 12.sp,
-            fontWeight = if (focused) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = FontWeight.Normal,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
