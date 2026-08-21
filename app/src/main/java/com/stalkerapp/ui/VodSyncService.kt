@@ -35,22 +35,34 @@ class VodSyncService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (com.stalkerapp.ui.tv.isTvDevice(this)) {
+            stopSelf()
+            return
+        }
         createChannel()
-        runCatching {
+        val notif = buildNotification(l10n("VOD senkronize ediliyor..."))
+        try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 androidx.core.app.ServiceCompat.startForeground(
                     this,
                     NOTIF_ID,
-                    buildNotification(l10n("VOD senkronize ediliyor...")),
+                    notif,
                     android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 )
             } else {
-                startForeground(NOTIF_ID, buildNotification(l10n("VOD senkronize ediliyor...")))
+                startForeground(NOTIF_ID, notif)
             }
+        } catch (e: Throwable) {
+            android.util.Log.w("VodSyncService", "Could not start foreground service: ${e.message}")
+            stopSelf()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (com.stalkerapp.ui.tv.isTvDevice(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val profile = StalkerApp.instance.repository.cachedProfile()
         if (profile == null) {
             stopSelf()
@@ -116,6 +128,14 @@ class VodSyncService : Service() {
         const val NOTIF_ID = 1002
         const val CHANNEL_ID = "vod_sync"
         fun start(ctx: Context) {
+            if (com.stalkerapp.ui.tv.isTvDevice(ctx)) {
+                // TV cihazlarında ForegroundService / Notification yerine doğrudan AppScope kullanılır
+                val profile = StalkerApp.instance.repository.cachedProfile()
+                if (profile != null) {
+                    StalkerApp.instance.vodSyncManager.ensureSynced(profile)
+                }
+                return
+            }
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     ctx.startForegroundService(Intent(ctx, VodSyncService::class.java))

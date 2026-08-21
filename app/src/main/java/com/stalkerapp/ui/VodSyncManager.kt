@@ -341,22 +341,9 @@ class VodSyncManager(
     ): VodCatalogState {
         val prev = _progress.value
         if (status == VodCatalogStatus.Syncing) {
-            val now = System.currentTimeMillis()
-            val publish = now - lastUiPublish >= 2000L
-            if (publish) {
-                lastUiPublish = now
-                val items = allItems ?: itemsProvider?.invoke() ?: prev.allItems
-                return VodCatalogState.of(
-                    status = status,
-                    doneCategories = doneCategories,
-                    totalCategories = totalCategories,
-                    loadedCount = loadedCount,
-                    allItems = items,
-                    categories = categories,
-                    portalTotal = portalTotal,
-                    lastSync = lastSync
-                )
-            }
+            // Senkron sırasında tam listeyi kopyalayıp Compose'a basmak belleği şişirip
+            // Android TV'de OOM çökmesine yol açıyordu. Senkron sürerken yalnızca sayaçlar
+            // güncellenir; tam liste yalnızca senkron bitince (Ready) oluşturulur.
             return prev.copy(
                 status = status,
                 doneCategories = doneCategories,

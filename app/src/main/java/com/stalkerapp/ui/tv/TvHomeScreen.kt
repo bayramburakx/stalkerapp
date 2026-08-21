@@ -159,21 +159,13 @@ fun TvHomeScreen(
     val popularMovies by produceState(
         initialValue = emptyList<VodItem>(),
         catalog.movies.size,
-        catalog.allItems.size,
         catalog.status
     ) {
+        if (catalog.status == VodCatalogStatus.Syncing && value.isNotEmpty()) return@produceState
         value = withContext(Dispatchers.Default) {
             val list = if (catalog.movies.isNotEmpty()) catalog.movies
-            else catalog.allItems.filter { !catalog.isSeriesItem(it) }
-            list.filter { it.id > 0 }
-                .distinctBy { it.id }
-                .sortedWith(
-                    compareByDescending<VodItem> {
-                        it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
-                    }.thenByDescending { it.year.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
-                     .thenByDescending { it.id }
-                )
-                .take(30)
+            else catalog.allItems.take(100).filter { !catalog.isSeriesItem(it) }
+            list.take(40).filter { it.id > 0 }.distinctBy { it.id }.take(30)
         }
     }
 
@@ -181,21 +173,13 @@ fun TvHomeScreen(
     val popularSeries by produceState(
         initialValue = emptyList<VodItem>(),
         catalog.series.size,
-        catalog.allItems.size,
         catalog.status
     ) {
+        if (catalog.status == VodCatalogStatus.Syncing && value.isNotEmpty()) return@produceState
         value = withContext(Dispatchers.Default) {
             val list = if (catalog.series.isNotEmpty()) catalog.series
-            else catalog.allItems.filter { catalog.isSeriesItem(it) }
-            list.filter { it.id > 0 }
-                .distinctBy { it.id }
-                .sortedWith(
-                    compareByDescending<VodItem> {
-                        it.rating.replace(',', '.').substringBefore('/').trim().toFloatOrNull() ?: 0f
-                    }.thenByDescending { it.year.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
-                     .thenByDescending { it.id }
-                )
-                .take(30)
+            else catalog.allItems.take(100).filter { catalog.isSeriesItem(it) }
+            list.take(40).filter { it.id > 0 }.distinctBy { it.id }.take(30)
         }
     }
 
@@ -632,10 +616,19 @@ private fun TvLiveSection(
 
     val channelList = allChannels ?: emptyList()
     val genreList = genres ?: emptyList()
+    var visibleChannelsLimit by remember { mutableIntStateOf(60) }
+
+    val genreCounts = remember(channelList) {
+        channelList.groupingBy { it.tvGenreId }.eachCount()
+    }
 
     val filteredChannels = remember(channelList, selectedGenreId) {
         if (selectedGenreId == 0L) channelList
         else channelList.filter { it.tvGenreId == selectedGenreId }
+    }
+
+    val displayedChannels = remember(filteredChannels, visibleChannelsLimit) {
+        filteredChannels.take(visibleChannelsLimit)
     }
 
     Row(modifier = Modifier.fillMaxSize().padding(12.dp)) {
@@ -652,17 +645,21 @@ private fun TvLiveSection(
                 TvCategoryItem(
                     title = "Tümü (${channelList.size})",
                     selected = selectedGenreId == 0L,
-                    onClick = { selectedGenreId = 0L }
+                    onClick = {
+                        selectedGenreId = 0L
+                        visibleChannelsLimit = 60
+                    }
                 )
             }
             items(genreList, key = { it.id }) { g ->
-                val count = remember(channelList, g.id) {
-                    channelList.count { it.tvGenreId == g.id }
-                }
+                val count = genreCounts[g.id] ?: 0
                 TvCategoryItem(
                     title = "${g.title} ($count)",
                     selected = selectedGenreId == g.id,
-                    onClick = { selectedGenreId = g.id }
+                    onClick = {
+                        selectedGenreId = g.id
+                        visibleChannelsLimit = 60
+                    }
                 )
             }
         }
@@ -677,11 +674,31 @@ private fun TvLiveSection(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(filteredChannels, key = { it.id }) { ch ->
+            items(displayedChannels, key = { it.id }) { ch ->
                 TvChannelGridCard(
                     channel = ch,
                     onClick = { onOpenChannel(ch) }
                 )
+            }
+            if (displayedChannels.size < filteredChannels.size) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF1E293B))
+                            .clickable { visibleChannelsLimit += 60 },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Daha fazla kanal (${filteredChannels.size - displayedChannels.size})…",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }
