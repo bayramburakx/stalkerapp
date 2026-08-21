@@ -272,7 +272,7 @@ fun EpgGuideScreen(
                                     placeholder = { Text(str(lang, "Kanal adı yazın…")) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .androidx.compose.ui.focus.focusRequester(focusReq)
+                                        .focusRequester(focusReq)
                                 )
                                 LaunchedEffect(Unit) {
                                     kotlinx.coroutines.delay(100)

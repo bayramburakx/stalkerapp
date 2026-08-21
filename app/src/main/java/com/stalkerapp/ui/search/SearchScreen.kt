@@ -230,7 +230,7 @@ fun SearchScreen(
                                         placeholder = { Text(str(lang, "Film, dizi, kanal adı yazın…")) },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .androidx.compose.ui.focus.focusRequester(focusReq)
+                                            .focusRequester(focusReq)
                                     )
                                     LaunchedEffect(Unit) {
                                         kotlinx.coroutines.delay(100)
