@@ -218,59 +218,31 @@ private fun AppNav() {
             )
         }
         composable("home") {
-            val ctx = LocalContext.current
-            val st = app.store.settings()
-            val isTv = when (st.preferredLayout) {
-                "tv" -> true
-                "mobile" -> false
-                else -> com.stalkerapp.ui.tv.isTvDevice(ctx)
-            }
-            if (isTv) {
-                com.stalkerapp.ui.tv.TvHomeScreen(
-                    vm = vm,
-                    onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
-                    onOpenChannel = { ch ->
-                        vm.playChannelById(ch.id)
-                        navController.navigate("player") { launchSingleTop = true }
-                    },
-                    onOpenSettings = { navController.navigate("settings") },
-                    onOpenSearch = { navController.navigate("search") },
-                    onOpenGuide = { navController.navigate("epg") },
-                    onOpenProfiles = {
-                        navController.navigate("profiles") {
+            HomeScreen(
+                onOpenPlayer = { navController.navigate("player") },
+                onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
+                onOpenSearch = { navController.navigate("search") },
+                onOpenGuide = { navController.navigate("epg") },
+                onOpenOnboarding = {
+                    if (firebase.isSignedIn) {
+                        navController.navigate("onboarding") {
                             popUpTo("home") { inclusive = false }
                             launchSingleTop = true
                         }
-                    },
-                    onOpenPlayer = { navController.navigate("player") }
-                )
-            } else {
-                HomeScreen(
-                    onOpenPlayer = { navController.navigate("player") },
-                    onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") },
-                    onOpenSearch = { navController.navigate("search") },
-                    onOpenGuide = { navController.navigate("epg") },
-                    onOpenOnboarding = {
-                        if (firebase.isSignedIn) {
-                            navController.navigate("onboarding") {
-                                popUpTo("home") { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        } else {
-                            navController.navigate("login") {
-                                popUpTo("home") { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        }
-                    },
-                    onOpenProfiles = {
-                        navController.navigate("profiles") {
+                    } else {
+                        navController.navigate("login") {
                             popUpTo("home") { inclusive = false }
                             launchSingleTop = true
                         }
                     }
-                )
-            }
+                },
+                onOpenProfiles = {
+                    navController.navigate("profiles") {
+                        popUpTo("home") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
         composable("epg") {
             EpgScreen(
@@ -308,7 +280,7 @@ private fun AppNav() {
             )
         ) { entry ->
             PersonDetailScreen(
-                name = Uri.decode(entry.arguments?.getString("name").orEmpty()),
+                personName = Uri.decode(entry.arguments?.getString("name").orEmpty()),
                 isDirector = entry.arguments?.getBoolean("isDirector") ?: false,
                 onBack = { safeBack() },
                 onOpenVod = { id, series -> navController.navigate("vod/$id?series=$series") }
