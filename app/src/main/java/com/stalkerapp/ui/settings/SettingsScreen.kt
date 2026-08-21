@@ -735,7 +735,7 @@ fun SettingsScreen(
             Text(
                 com.stalkerapp.util.L10n.t(settings.language, "Bir bölüm seç:"),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color.White.copy(alpha = 0.62f)
             )
             SettingsNavRow(Icons.Default.Tv, com.stalkerapp.util.L10n.t(settings.language, "Playlist & Kaynaklar"), com.stalkerapp.util.L10n.t(settings.language, "Stalker portal, M3U ve Xtream kaynakları")) { currentSection = "playlist" }
             SettingsNavRow(Icons.Default.VideoLibrary, com.stalkerapp.util.L10n.t(settings.language, "Kütüphane & İçerik"), com.stalkerapp.util.L10n.t(settings.language, "+18, gizlenen kategoriler, ana sayfa, VOD senkronu")) { currentSection = "content" }
@@ -825,7 +825,7 @@ fun SettingsScreen(
                     str(lang, "Stalker portal, M3U listesi ve Xtream Codes kaynaklarını buradan yönetirsin. ") +
                         str(lang, "Kapatılan kaynak türü Canlı TV, Filmler ve Dizilerde kullanılmaz."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
 
                 // ---- Aktif kaynak özeti ----
@@ -858,7 +858,7 @@ fun SettingsScreen(
                         "  •  " + str(lang, "Canlı") + ": ${activeStats.live}  •  " + str(lang, "Film") + ": ${activeStats.movies}  •  " + str(lang, "Dizi") + ": ${activeStats.series}"
                     } else "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 // Stalker dışı aktif kaynakta katalog boşsa yeniden çekme kısayolu.
                 if (activeKind == "m3u" || activeKind == "xtream") {
@@ -1135,7 +1135,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "İstemediğin kanal gruplarını tek tek kapat — Canlı TV listesinde ve ana sayfada görünmez."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 var channelGroups by remember { mutableStateOf<List<Genre>?>(null) }
                 LaunchedEffect(appProfile, activeKind, activeSourceId) {
@@ -1146,7 +1146,7 @@ fun SettingsScreen(
                     Text(
                         str(lang, "Kanal grupları yükleniyor…"),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.62f)
                     )
                 } else {
                     val visibleGroups = groups.filter { it.id != 0L }
@@ -1154,7 +1154,7 @@ fun SettingsScreen(
                         Text(
                             str(lang, "Aktif kaynakta grup bulunamadı. Canlı TV'ye kaynak eklerseniz gruplar burada listelenir."),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color.White.copy(alpha = 0.62f)
                         )
                     } else {
                         visibleGroups.forEach { g ->
@@ -1193,14 +1193,14 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Kanal adlarını düzenle, özel gruplar oluştur ve kanalları özel gruplara taşı."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
 
                 Text(str(lang, "Ad Düzenleyici (Önek / Sonek)"), style = MaterialTheme.typography.titleSmall)
                 Text(
                     str(lang, "Kanal adlarının başından/sonundan silinecek kısımlar (virgülle ayırın, ör. HD, FHD, TR)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedTextField(
                     value = stripPrefixesText,
@@ -1234,7 +1234,7 @@ fun SettingsScreen(
                     Text(
                         str(lang, "Henüz özel grup yok. Aşağıdan yeni bir grup oluşturabilirsin."),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.62f)
                     )
                 } else {
                     channelCust.customGroups.forEach { g ->
@@ -1308,7 +1308,7 @@ fun SettingsScreen(
                     Text(
                         str(lang, "Uzun bas → \"Ana Sayfadan Kaldır\" ile gizlenen medya buradan geri getirilebilir."),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.62f)
                     )
                     settings.hiddenFromHome.mapNotNull { id -> catalog.byId[id] }.forEach { item ->
                         Row(
@@ -1339,7 +1339,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Film/bölüm ilerlemeleri ve izlendi işaretleri silinir. Ana sayfadaki Son İzlenenler / İzlemeye Devam bölümleri boşalır."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedButton(
                     onClick = { showClearHistory = true },
@@ -1367,7 +1367,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "İstemediğin kategorileri tek tek kapat — Filmler/Diziler listelerinde ve ana sayfada görünmez."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 val allCats = catalog.categories.filter { it.id != 0L }
                 val hiddenCatSet = remember(settings.hiddenCategories) { settings.hiddenCategories.toSet() }
@@ -1375,7 +1375,7 @@ fun SettingsScreen(
                     Text(
                         str(lang, "Katalog yüklenince kategoriler burada listelenir (VOD senkronu bekleniyor)."),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.62f)
                     )
                 } else {
                     allCats.forEach { c ->
@@ -1440,7 +1440,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Popüler Filmler/Diziler ve favori bölümlerinde gösterilecek öğe sayısı."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(10 to "10", 20 to "20", 30 to "30").forEach { (key, label) ->
@@ -1455,7 +1455,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Uygulama açıldığında hangi sekme gösterilsin."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0 to str(lang, "Ana Sayfa"), 1 to str(lang, "Canlı TV"), 2 to str(lang, "Filmler"), 3 to str(lang, "Diziler")).forEach { (key, label) ->
@@ -1527,7 +1527,7 @@ fun SettingsScreen(
                     str(lang, "Portal kendi EPG'sini vermiyorsa harici XMLTV linki kullanılır (xmltv_id eşleşmesi). ") +
                         str(lang, "Ör: sağlayıcının EPG linki ya da iptv-org/epg çıktısı (.xml / .xml.gz)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedTextField(
                     value = epgUrl,
@@ -1544,7 +1544,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Önerilen: Türkiye EPG'si küçük (166KB) ve hızlıdır. epg.pw Lite dünya kanallarını içerir (1.7MB). İndirilen EPG cihaza kaydedilir, bir daha indirilmez."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GlassChip(
@@ -1577,7 +1577,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Harici XMLTV ne sıklıkta yeniden indirilsin (saat)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(1 to "1 saat", 6 to "6 saat", 12 to "12 saat", 24 to "24 saat").forEach { (key, label) ->
@@ -1593,7 +1593,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Rehberde bugünden önceki kaç günün programları gösterilsin (catch-up rehberi)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0 to str(lang, "Yok"), 1 to str(lang, "1 gün"), 3 to str(lang, "3 gün"), 7 to str(lang, "7 gün")).forEach { (key, label) ->
@@ -1609,7 +1609,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "\"Önce Harici\": portal EPG'si eksik/hatalıysa XMLTV önce denenir."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("portal" to str(lang, "Önce Portal"), "external" to str(lang, "Önce Harici")).forEach { (key, label) ->
@@ -1673,7 +1673,7 @@ fun SettingsScreen(
                         Text(
                             str(lang, "Arka planda devam ediyor; uygulama kapansa bile kaldığı yerden sürdürülür."),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color.White.copy(alpha = 0.62f)
                         )
                     }
                     VodCatalogStatus.Ready -> {
@@ -1694,7 +1694,7 @@ fun SettingsScreen(
                             Text(
                                 "Son senkron: ${if (ago < 60) "$ago sn önce" else "${ago / 60} dk önce"}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color.White.copy(alpha = 0.62f)
                             )
                         }
                     }
@@ -1715,7 +1715,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Sonra izle, izlediklerin, favorilerin ve özel listelerin tek ekranda."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Button(
                     onClick = onOpenLibrary,
@@ -1732,7 +1732,7 @@ fun SettingsScreen(
                     Text(
                         str(lang, "Henüz liste yok. Aşağıdan yeni bir liste oluştur; içerik detayından listeye ekleyebilirsin."),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.62f)
                     )
                 } else {
                     userLists.forEach { l ->
@@ -1876,7 +1876,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "ISO kodu (ör. tr, en, de). Boş bırakılırsa otomatik seçilir."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedTextField(
                     value = prefAudioLang,
@@ -1898,7 +1898,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "ISO kodu (ör. tr, en). Boş bırakılırsa otomatik seçilir."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedTextField(
                     value = prefSubtitleLang,
@@ -1947,7 +1947,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Sol/sağ yarıya çift dokununca ileri-geri atlama miktarı."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(10 to "10 sn", 20 to "20 sn", 30 to "30 sn").forEach { (key, label) ->
@@ -1965,7 +1965,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Her oynatmada bu hız uygulanır (oynatıcı içinden de değiştirilebilir)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0.75f to "0.75×", 1f to "1×", 1.25f to "1.25×", 1.5f to "1.5×", 2f to "2×").forEach { (key, label) ->
@@ -1998,7 +1998,7 @@ fun SettingsScreen(
                     str(lang, "Kapalı altyazılar (CC) ve yayın altyazıları (DVB/PGS) ayrı ayrı kapatılabilir. ") +
                         str(lang, "Kapatılan türler oynatıcıdaki altyazı listesinden de çıkar."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 ToggleRow(
                     icon = Icons.Default.Info,
@@ -2051,7 +2051,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Kanal açılmıyorsa veya takılıyorsa akışı zorla HLS ya da MPEG-TS olarak çözmeyi dener."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("auto" to str(lang, "Otomatik"), "hls" to str(lang, "HLS"), "ts" to str(lang, "MPEG-TS")).forEach { (key, label) ->
@@ -2075,7 +2075,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "İçerik kare hızına göre ekran yenileme modunu ayarlar (TV box'larda akıcılık)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
@@ -2101,7 +2101,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Sesin videoya göre gecikmesi (ms). Pozitif = ses gecikir. Oynatıcı içinden de ayarlanır."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2134,7 +2134,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "\"Harici\" seçilirse içerikler sistem oynatıcısında (MXPlayer/VLC vb.) açılır."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("builtin" to str(lang, "Yerleşik (ExoPlayer)"), "external" to str(lang, "Harici Oynatıcı")).forEach { (key, label) ->
@@ -2180,7 +2180,7 @@ fun SettingsScreen(
                     if (cooldown > 0) str(lang, "Sunucu istekleri engelledi") + ". " + str(lang, "Kalan süre") + ": ${cooldown}s"
                     else str(lang, "Sunucu engeli yok."),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (cooldown > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (cooldown > 0) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.62f)
                 )
                 Button(
                     onClick = { vm.clearCooldown() },
@@ -2192,7 +2192,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "EPG kaymalarını düzeltmek için sunucu ile kendi saatin arasındaki fark (+3, -2 vb.)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Slider(
                     value = timezoneOffset,
@@ -2211,7 +2211,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "AMOLED modda arka plan tam siyahtır (OLED ekranlar için)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
@@ -2232,7 +2232,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Ana aksan rengi; bileşenlerin seçili/kutucuk renklerini etkiler."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
@@ -2279,14 +2279,14 @@ fun SettingsScreen(
                     str(lang, "Uygulama TV box launcher'larında görünür ve kumanda ile gezinilebilir. ") +
                         str(lang, "Kanal +/- / medya tuşları zapping için kullanılır (Oynatıcı ayarlarından kapatılabilir)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
 
                 Text(str(lang, "Dil"), style = MaterialTheme.typography.titleSmall)
                 Text(
                     str(lang, "İngilizce şimdilik ana menü ve ayar başlıklarını çevirir (tam çeviri sonraki sürümde)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("tr" to str(lang, "Türkçe"), "en" to str(lang, "English")).forEach { (key, label) ->
@@ -2305,7 +2305,7 @@ fun SettingsScreen(
                     str(lang, "TMDB (themoviedb.org) anahtarı: oyuncu fotoğrafları, fragman ve gerçek bölüm adları. ") +
                         str(lang, "Boşsa özellikler kapalıdır."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedTextField(
                     value = tmdbKey,
@@ -2355,7 +2355,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Başlık, fragman ve oyuncu bilgilerinin dili (posterler etkilenmez)."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("tr" to str(lang, "Türkçe"), "en" to str(lang, "English")).forEach { (key, label) ->
@@ -2387,7 +2387,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "OpenSubtitles REST API anahtarı. Boş bırakırsanız uygulamanın sınırlı varsayılan anahtarı kullanılır."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 var osKey by remember(settings.openSubtitlesApiKey) { mutableStateOf(settings.openSubtitlesApiKey) }
                 OutlinedTextField(
@@ -2411,7 +2411,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "İnternet sağlayıcısı DNS bazlı engelleme yapıyorsa DoH ile bu engelleri aşabilirsiniz."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 ToggleRow(
                     icon = Icons.Default.Security,
@@ -2453,7 +2453,7 @@ fun SettingsScreen(
                 Text(
                     str(lang, "Tüm bağlantıyı bir SOCKS5 proxy üzerinden geçirir. Boş bırakırsanız proxy kullanılmaz."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 var socksProxy by remember(settings.socksProxy) { mutableStateOf(settings.socksProxy) }
                 var socksPort by remember(settings.socksPort) { mutableStateOf(settings.socksPort.toString()) }
@@ -2511,7 +2511,7 @@ fun SettingsScreen(
                         t("Tüm verilerin (portallar, izleme geçmişi, listeler) yalnızca bu cihazda saklanır. Hesap oluşturup giriş yaparsan verilerin buluta senkronlanır.")
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedButton(
                     onClick = { showPrivacy = true },
@@ -2523,7 +2523,7 @@ fun SettingsScreen(
                 Text(
                     t("Ayarlara giriş için 4 haneli PIN istenir. PIN boş bırakılırsa kilit kaldırılır. PIN unutulursa tek çözüm tüm verileri sıfırlamaktır."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedTextField(
                     value = pinNew,
@@ -2547,7 +2547,7 @@ fun SettingsScreen(
                 Text(
                     t("Stalker portal, M3U ve Xtream Codes destekli IPTV oynatıcı — tüm içeriğin tek uygulamada."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { checkForUpdate() }, enabled = !checkingUpdate) {
@@ -2567,7 +2567,7 @@ fun SettingsScreen(
                 Text(
                     t("Sürüm") + " ${BuildConfig.VERSION_NAME} (" + t("kod") + " ${BuildConfig.VERSION_CODE})",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
                 OutlinedButton(
                     onClick = { showLicense = true },
@@ -2840,10 +2840,10 @@ private fun SettingsNavRow(
                 Text(
                     desc,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color.White.copy(alpha = 0.62f)
                 )
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.White.copy(alpha = 0.62f))
         }
     }
 }
@@ -3619,7 +3619,7 @@ private fun AccountSettingsSection(
             Text(
                 appProfile?.portal?.name ?: appProfile?.baseUrl ?: t("Aktif kaynak yok"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color.White.copy(alpha = 0.62f)
             )
         }
     }
@@ -3641,7 +3641,7 @@ private fun AccountSettingsSection(
             t("Giriş yapıldı") + ": ${firebase.userEmail}\n" +
                 t("Verilerin bulutta senkronlanır — başka cihazda aynı hesapla giriş yapınca kaldığın yerden devam edersin."),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White.copy(alpha = 0.62f)
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
@@ -3681,7 +3681,7 @@ private fun AccountSettingsSection(
         Text(
             t("Hesap oluşturup giriş yaparsan favorilerin, izleme geçmişin ve ayarların bulutta saklanır; başka cihazda kaldığın yerden devam edersin."),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White.copy(alpha = 0.62f)
         )
         Button(
             onClick = { onRestartSetup() },
@@ -3718,7 +3718,7 @@ private fun AccountSettingsSection(
     Text(
         t("Tüm veriler (kaynaklar, ayarlar, favoriler, izleme geçmişi, listeler) tek JSON olarak dışa aktarılır. Telefon değiştirirken yedeği geri yükleyebilirsin."),
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        color = Color.White.copy(alpha = 0.62f)
     )
     Button(
         onClick = { shareBackup() },
