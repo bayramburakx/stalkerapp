@@ -147,7 +147,7 @@ private fun AppNav() {
         if (System.currentTimeMillis() < store.updateRemindTs()) return@LaunchedEffect
         updateInfo = info
     }
-    updateInfo?.let { info ->
+    updateInfo?.let { info: UpdateInfo ->
         UpdateDialog(
             info = info,
             lang = app.store.settings().language,
