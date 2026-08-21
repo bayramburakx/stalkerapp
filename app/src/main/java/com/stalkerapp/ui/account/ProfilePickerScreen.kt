@@ -333,6 +333,7 @@ private fun ProfileCard(
     }
 }
 
+}
 @Composable
 
 private fun AddProfileCard(lang: String, onClick: () -> Unit) {
@@ -376,6 +377,7 @@ private fun AddProfileCard(lang: String, onClick: () -> Unit) {
     }
 }
 
+}
 @Composable
 
 private fun AddProfileDialog(
@@ -486,4 +488,5 @@ private fun EditProfileDialog(
             }
         }
     )
+}
 }
