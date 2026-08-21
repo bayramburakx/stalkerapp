@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -75,7 +76,6 @@ import com.stalkerapp.ui.components.PortioBadge
 import com.stalkerapp.ui.components.PortioButton
 import com.stalkerapp.ui.components.PortioButtonStyle
 import com.stalkerapp.ui.components.PortioCard
-import com.stalkerapp.ui.components.PortioIconButton
 import com.stalkerapp.ui.components.PortioMediaCard
 import com.stalkerapp.ui.components.PortioPrimaryButton
 import com.stalkerapp.ui.components.PortioProgressBar
@@ -116,6 +116,7 @@ fun ContentDetailScreen(
 
     var vodItem by remember { mutableStateOf<VodItem?>(null) }
     var seasons by remember { mutableStateOf<List<Season>>(emptyList()) }
+    var episodesBySeason by remember { mutableStateOf<Map<Long, List<Episode>>>(emptyMap()) }
     var selectedSeasonIdx by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var isSeries by remember { mutableStateOf(isSeriesHint) }
@@ -123,19 +124,29 @@ fun ContentDetailScreen(
     LaunchedEffect(vodId) {
         loading = true
         val cat = vm.vodCatalog.value
-        var item = cat.allItems.firstOrNull { it.id == vodId }
-        if (item == null && profile != null) {
-            item = runCatching { vm.repository.loadVodDetail(profile, vodId) }.getOrNull()
-        }
+        val item = cat.allItems.firstOrNull { it.id == vodId }
         vodItem = item
         if (item != null) {
             isSeries = item.isSeries || isSeriesHint || cat.isSeriesItem(item)
             if (isSeries && profile != null) {
-                val loadedSeasons = runCatching { vm.repository.loadVodSeriesInfo(profile, item) }.getOrDefault(emptyList())
+                val loadedSeasons = runCatching { vm.repository.loadSeasons(profile, vodId) }.getOrDefault(emptyList())
                 seasons = loadedSeasons
+                if (loadedSeasons.isNotEmpty()) {
+                    val firstSeason = loadedSeasons[0]
+                    val eps = runCatching { vm.repository.loadEpisodes(profile, vodId, firstSeason.id) }.getOrDefault(emptyList())
+                    episodesBySeason = mapOf(firstSeason.id to eps)
+                }
             }
         }
         loading = false
+    }
+
+    LaunchedEffect(selectedSeasonIdx, seasons) {
+        val s = seasons.getOrNull(selectedSeasonIdx)
+        if (s != null && !episodesBySeason.containsKey(s.id) && profile != null) {
+            val eps = runCatching { vm.repository.loadEpisodes(profile, vodId, s.id) }.getOrDefault(emptyList())
+            episodesBySeason = episodesBySeason + (s.id to eps)
+        }
     }
 
     val item = vodItem
@@ -165,6 +176,9 @@ fun ContentDetailScreen(
         val progressPct = if (progress != null && progress.durationMs > 0) {
             (progress.positionMs.toFloat() / progress.durationMs.toFloat()).coerceIn(0f, 1f)
         } else 0f
+
+        val currentSeason = seasons.getOrNull(selectedSeasonIdx)
+        val currentEpisodes = if (currentSeason != null) episodesBySeason[currentSeason.id].orEmpty() else emptyList()
 
         LazyColumn(
             modifier = Modifier
@@ -289,14 +303,26 @@ fun ContentDetailScreen(
                             text = if (progressPct > 0f) "Devam Et" else "Hemen Oynat",
                             icon = Icons.Default.PlayArrow,
                             onClick = {
-                                if (isSeries && seasons.isNotEmpty()) {
-                                    val ep = seasons.firstOrNull()?.episodes?.firstOrNull()
-                                    if (ep != null) {
-                                        PlaybackManager.playVod(item, ep.url, profile)
-                                        onOpenPlayer()
-                                    }
+                                if (isSeries && currentEpisodes.isNotEmpty()) {
+                                    val ep = currentEpisodes.first()
+                                    PlaybackManager.playEpisode(
+                                        item = item,
+                                        profile = profile,
+                                        episodes = currentEpisodes,
+                                        season = (selectedSeasonIdx + 1).toLong(),
+                                        index = 0,
+                                        startPositionMs = if (progressPct > 0f) progress?.positionMs ?: 0L else 0L
+                                    )
+                                    onOpenPlayer()
                                 } else {
-                                    PlaybackManager.playVod(item, item.cmd, profile)
+                                    PlaybackManager.currentVodItem = item
+                                    PlaybackManager.currentVodId = item.id
+                                    PlaybackManager.play(
+                                        url = resolveUrl(item.cmd, baseUrl),
+                                        title = item.name,
+                                        artwork = resolveUrl(item.poster, baseUrl),
+                                        startPositionMs = if (progressPct > 0f) progress?.positionMs ?: 0L else 0L
+                                    )
                                     onOpenPlayer()
                                 }
                             },
@@ -308,13 +334,17 @@ fun ContentDetailScreen(
                                 text = "İndir",
                                 icon = Icons.Default.Download,
                                 onClick = {
-                                    OfflineDownloadManager.enqueue(
-                                        vodId = item.id,
-                                        title = item.name,
-                                        url = resolveUrl(item.cmd, baseUrl),
-                                        poster = resolveUrl(item.poster, baseUrl)
-                                    )
-                                    ToastManager.success("İndirme sıraya alındı")
+                                    scope.launch {
+                                        OfflineDownloadManager.enqueue(
+                                            OfflineDownloadManager.DownloadEntry(
+                                                id = "vod_${item.id}",
+                                                title = item.name,
+                                                url = resolveUrl(item.cmd, baseUrl),
+                                                poster = resolveUrl(item.poster, baseUrl)
+                                            )
+                                        )
+                                        ToastManager.success("İndirme sıraya alındı")
+                                    }
                                 },
                                 modifier = Modifier.height(48.dp)
                             )
@@ -403,25 +433,35 @@ fun ContentDetailScreen(
                     }
                 }
 
-                val currentEpisodes = seasons.getOrNull(selectedSeasonIdx)?.episodes.orEmpty()
-                items(currentEpisodes, key = { it.id }) { ep ->
+                itemsIndexed(currentEpisodes, key = { _, ep -> ep.id }) { idx, ep ->
                     EpisodeRow(
                         ep = ep,
                         item = item,
                         baseUrl = baseUrl,
                         onPlay = {
-                            PlaybackManager.playVod(item, ep.url, profile)
+                            PlaybackManager.playEpisode(
+                                item = item,
+                                profile = profile,
+                                episodes = currentEpisodes,
+                                season = (selectedSeasonIdx + 1).toLong(),
+                                index = idx
+                            )
                             onOpenPlayer()
                         },
                         onDownload = {
-                            OfflineDownloadManager.enqueue(
-                                vodId = item.id,
-                                title = item.name,
-                                url = resolveUrl(ep.url, baseUrl),
-                                poster = resolveUrl(item.poster, baseUrl),
-                                episodeLabel = ep.name
-                            )
-                            ToastManager.success("Bölüm indirmeye alındı")
+                            scope.launch {
+                                OfflineDownloadManager.enqueue(
+                                    OfflineDownloadManager.DownloadEntry(
+                                        id = "ep_${ep.id}",
+                                        title = item.name,
+                                        url = resolveUrl(if (ep.cmd.isNotBlank()) ep.cmd else ep.altCmd, baseUrl),
+                                        poster = resolveUrl(if (ep.thumb.isNotBlank()) ep.thumb else item.poster, baseUrl),
+                                        episodeLabel = ep.name.ifBlank { "Bölüm ${ep.episodeNumber}" },
+                                        isSeries = true
+                                    )
+                                )
+                                ToastManager.success("Bölüm indirmeye alındı")
+                            }
                         }
                     )
                 }
@@ -461,22 +501,13 @@ private fun EpisodeRow(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = ep.name.ifBlank { "Bölüm ${ep.number}" },
+                    text = ep.name.ifBlank { "Bölüm ${ep.episodeNumber}" },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (ep.overview.isNotBlank()) {
-                    Text(
-                        text = ep.overview,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = PortioColors.TextMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
             IconButton(onClick = onDownload, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Default.Download, contentDescription = "İndir", tint = PortioColors.TextMuted, modifier = Modifier.size(20.dp))
