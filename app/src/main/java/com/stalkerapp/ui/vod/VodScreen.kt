@@ -296,29 +296,48 @@ fun VodScreen(
         }
 
         // Anasayfa dili: cam arama çubuğu (yarı saydam, yuvarlak, ince çerçeve).
+        val searchShape = RoundedCornerShape(50)
+        val isTv = com.stalkerapp.ui.tv.isTvDevice(LocalContext.current)
+        var isInputModalOpen by remember { mutableStateOf(false) }
+        var isFocused by remember { mutableStateOf(false) }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val searchShape = RoundedCornerShape(50)
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(searchShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
-                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), searchShape)
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clip(searchShape)
+                .background(if (isTv && isFocused) Color(0xFF1E293B) else MaterialTheme.colorScheme.surface.copy(alpha = 0.60f))
+                .border(
+                    width = if (isTv && isFocused) 2.5.dp else 1.dp,
+                    color = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                    shape = searchShape
                 )
+                .onFocusChanged { isFocused = it.isFocused }
+                .focusable(isTv)
+                .clickable(isTv) { isInputModalOpen = true }
+                .onKeyEvent { ev ->
+                    if (isTv && com.stalkerapp.ui.tv.isTvSelectKey(ev)) {
+                        isInputModalOpen = true; true
+                    } else false
+                }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                tint = if (isTv && isFocused) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            if (isTv) {
+                Text(
+                    text = if (query.isNotBlank()) query else str(lang, "Film / dizi ara… (OK tuşuna basın)"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (query.isNotBlank()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
                 androidx.compose.foundation.text.BasicTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -337,6 +356,47 @@ fun VodScreen(
                     }
                 )
             }
+        }
+
+        if (isTv && isInputModalOpen) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { isInputModalOpen = false },
+                title = { Text(str(lang, "Film / Dizi Ara"), color = Color.White, fontWeight = FontWeight.Bold) },
+                text = {
+                    var tempText by remember { mutableStateOf(query) }
+                    val focusReq = remember { androidx.compose.ui.focus.FocusRequester() }
+                    Column {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = tempText,
+                            onValueChange = { tempText = it; query = it },
+                            singleLine = true,
+                            placeholder = { Text(str(lang, "Film veya dizi adı yazın…")) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .androidx.compose.ui.focus.focusRequester(focusReq)
+                        )
+                        LaunchedEffect(Unit) {
+                            kotlinx.coroutines.delay(100)
+                            runCatching { focusReq.requestFocus() }
+                        }
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { isInputModalOpen = false }) {
+                        Text(str(lang, "Tamam"), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        query = ""
+                        isInputModalOpen = false
+                    }) {
+                        Text(str(lang, "Temizle"), color = Color.White.copy(0.6f))
+                    }
+                },
+                containerColor = Color(0xFF131722),
+                shape = RoundedCornerShape(14.dp)
+            )
         }
 
         if (shownCats.isNotEmpty()) {
