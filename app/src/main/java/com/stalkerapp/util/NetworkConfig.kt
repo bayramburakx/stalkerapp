@@ -28,6 +28,64 @@ object NetworkConfig {
     // Ayar değişmediği sürece aynı istemci yeniden kullanılır.
     private val clientCache = ConcurrentHashMap<String, OkHttpClient>()
 
+    private val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+        override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
+        override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
+        override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+    })
+
+    private val unsafeSslContext by lazy {
+        javax.net.ssl.SSLContext.getInstance("TLS").apply {
+            init(null, trustAllCerts, java.security.SecureRandom())
+        }
+    }
+
+    /**
+     * Medya oynatma için özel OkHttpClient (ExoPlayer OkHttpDataSource).
+     * Kendinden imzalı/süresi geçmiş SSL sertifikalı IPTV sunucularını destekler,
+     * çapraz protokol yönlendirmelerini (http <-> https) izler.
+     */
+    fun buildMediaClient(settings: Settings, userAgent: String): OkHttpClient {
+        val key = buildString {
+            append("media|").append(userAgent).append('|')
+            append(settings.dohEnabled).append('|')
+            append(settings.dohUrl).append('|')
+            append(settings.socksProxy).append('|')
+            append(settings.socksPort).append('|')
+        }
+        return clientCache.getOrPut(key) {
+            val builder = OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .retryOnConnectionFailure(true)
+                .addNetworkInterceptor { chain ->
+                    val request = chain.request().newBuilder()
+                        .header("User-Agent", userAgent)
+                        .build()
+                    chain.proceed(request)
+                }
+
+            runCatching {
+                builder.sslSocketFactory(unsafeSslContext.socketFactory, trustAllCerts[0] as javax.net.ssl.X509TrustManager)
+                builder.hostnameVerifier { _, _ -> true }
+            }
+
+            if (settings.socksProxy.isNotBlank() && settings.socksPort > 0) {
+                builder.proxy(
+                    Proxy(Proxy.Type.SOCKS, InetSocketAddress(settings.socksProxy, settings.socksPort))
+                )
+            }
+
+            if (settings.dohEnabled && settings.dohUrl.isNotBlank()) {
+                builder.dns(DohDns(settings.dohUrl))
+            }
+
+            builder.build()
+        }
+    }
+
     /**
      * Uygulama ayarlarına göre istemci döner. Aynı yapılandırma için aynı
      * istemci önbellekten alınır; ayar değişince yenisi kurulur.

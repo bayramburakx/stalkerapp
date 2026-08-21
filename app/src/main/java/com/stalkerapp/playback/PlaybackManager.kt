@@ -355,21 +355,11 @@ object PlaybackManager {
         else
             "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
 
-        // VPN/DoH/proxy yapılandırması (Ayarlar → VPN & Ağ) aktifse HTTP veri
-        // kaynağı OkHttp + NetworkConfig (özel DNS/DoH/SOCKS) üzerinden kurulur.
-        val stNet = st
-        val netCfgOn = stNet.dohEnabled || stNet.socksProxy.isNotBlank()
-        val httpDataSourceFactory = if (netCfgOn) {
-            androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(
-                com.stalkerapp.util.NetworkConfig.buildClientFor(stNet)
-            )
-        } else {
-            androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(20_000)
-                .setReadTimeoutMs(40_000)
-                .setUserAgent(userAgent)
-        }
+        // VPN/DoH/proxy ve IPTV için kendinden imzalı SSL/yönlendirme destekli
+        // OkHttp veri kaynağı ile kurulur (DefaultHttpDataSource yerine).
+        val httpDataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(
+            com.stalkerapp.util.NetworkConfig.buildMediaClient(st, userAgent)
+        )
 
         // Çevrimdışı oynatma: veri kaynağı önbellek öncelikli CacheDataSource.
         val baseData = androidx.media3.datasource.DefaultDataSource.Factory(appContext, httpDataSourceFactory)
@@ -504,7 +494,7 @@ object PlaybackManager {
         // eski kanal sesi çalmamalı.
         releaseStandby()
         // Yeni içerik: önceki akışın uzantı fallback sayacı sıfırlanır.
-        seriesExtFallbackIndex = 0
+        vodExtFallbackIndex = 0
         // Çevrimdışı moddan çıkış: oyuncu bir sonraki istekte online kurulur.
         offlineMode = false
         // Film oynatımı: önceki bir diziden kalma bölüm kuyruğu temizlenir,
@@ -523,7 +513,7 @@ object PlaybackManager {
      */
     fun playOffline(url: String, title: String, artwork: String = "", episodeLabel: String = "") {
         releaseStandby()
-        seriesExtFallbackIndex = 0
+        vodExtFallbackIndex = 0
         offlineMode = true
         // Oyuncu, cache data source ile yeniden kurulsun.
         lastPlayerConfig = ""
@@ -619,7 +609,7 @@ object PlaybackManager {
     ) {
         val ep = episodes.getOrNull(index) ?: return
         // Yeni bölüm seçildi: önceki akışın uzantı fallback sayacı sıfırlanır.
-        seriesExtFallbackIndex = 0
+        vodExtFallbackIndex = 0
         offlineMode = false
         VodQueue.item = item
         VodQueue.profile = profile
@@ -651,7 +641,7 @@ object PlaybackManager {
     fun playNextEpisode(auto: Boolean = false): Boolean {
         if (!vodPlayback || !VodQueue.hasNext) return false
         if (auto) markCurrentEpisodeWatched()
-        seriesExtFallbackIndex = 0
+        vodExtFallbackIndex = 0
         VodQueue.index++
         val item = VodQueue.item ?: return false
         // Profil M3U/Xtream kaynaklarında null olabilir — URL'yi repository
@@ -1235,16 +1225,13 @@ object PlaybackManager {
                 // otomatik yeniden dene; diğer fatal hatalarda doğrudan hata göster.
                 val isConnectionOrTimeout = error.errorCodeName.contains("CONNECTION", ignoreCase = true) ||
                     error.errorCodeName.contains("TIMEOUT", ignoreCase = true) ||
+                    error.errorCodeName.contains("PARSING", ignoreCase = true) ||
                     error.cause is java.io.IOException
-                // Xtream dizi: panel uzantıya duyarlıysa .mkv ile başarısız olan
-                // akış .mp4/.ts/.m3u8 ile açılabilir; 401/Yetkisiz hatası ise panel
-                // standart sezon/bölüm yolunu reddediyor demektir — doğrudan
-                // bölüm-id URL'sine geçilir. İkisi de yedek URL kullanır.
-                if (vodPlayback && maybeRetrySeriesWithAltExtension(error)) return
-                // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener.
-                // Yeni bir create_link çağrısı taze play_token üretir; en fazla 3
-                // deneme, ardından hata kullanıcıya gösterilir. Ayarlardan kapatılabilir.
-                if (!vodPlayback && isConnectionOrTimeout && maybeAutoRetryLive()) return
+                // Xtream film / dizi: panel uzantıya duyarlıysa veya format reddediyorsa
+                // (.mkv/.mp4/.ts/.m3u8 veya bölüm-id formatı) otomatik olarak yedek formatları dene.
+                if (vodPlayback && maybeRetryVodWithAltExtension(error)) return
+                // Canlı TV (vod değil): geçici kesintilerde otomatik yeniden dener (.m3u8 -> .ts fallback dahil).
+                if (!vodPlayback && maybeAutoRetryLive()) return
                 liveRetryCount = 0
                 setError(error.message ?: l10n("Oynatma hatası"))
                 notifyStateChanged()
@@ -1331,59 +1318,70 @@ object PlaybackManager {
     // bölüm-id URL'si (`series/kullanıcı/şifre/BÖLÜM_ID.uzantı`) denenir.
     private var seriesExtFallbackIndex = 0
 
-    private val SERIES_EXT_FALLBACKS = listOf(".mp4", ".ts", ".mkv", ".m3u8")
+    private var vodExtFallbackIndex = 0
+    private val VOD_EXT_FALLBACKS = listOf(".mp4", ".mkv", ".ts", ".m3u8", ".avi")
 
-    /** URL bir Xtream dizi akışıysa yedek URL ile yeniden oynatmayı dener. */
-    private fun maybeRetrySeriesWithAltExtension(error: PlaybackException): Boolean {
+    /** URL bir Xtream film/dizi akışıysa yedek format/uzantı ile yeniden oynatmayı dener. */
+    private fun maybeRetryVodWithAltExtension(error: PlaybackException): Boolean {
         val url = currentStreamUrl
-        if (stopping || url.isBlank() || !url.contains("/series/")) return false
-        // 401/Yetkisiz: panel formatı reddediyor — uzantı denemelerini atlayıp
-        // doğrudan bölüm-id URL'sine geç (hızlı ve isabetli).
+        if (stopping || url.isBlank()) return false
+        val isXtream = url.contains("/series/") || url.contains("/movie/") || url.contains("/live/")
+        if (!isXtream) return false
+
+        // 401/Yetkisiz: panel formatı reddediyor — dizi için alternatif bölüm URL'sine geç.
         val authRejected = error.errorCodeName.contains("BAD_HTTP", ignoreCase = true) ||
             error.message?.contains("401", ignoreCase = true) == true ||
             error.message?.contains("Unauthorized", ignoreCase = true) == true ||
             error.message?.contains("403", ignoreCase = true) == true
-        if (authRejected) {
+
+        if (authRejected && url.contains("/series/")) {
             val cur = VodQueue.current
             val alt = cur?.altCmd?.takeIf { it.isNotBlank() && it != url }
             if (alt != null) {
-                seriesExtFallbackIndex = SERIES_EXT_FALLBACKS.size + 1
-                retrySeriesWith(url = alt)
+                vodExtFallbackIndex = VOD_EXT_FALLBACKS.size + 1
+                retryVodWith(url = alt)
                 return true
+            }
+        }
+
+        if (vodExtFallbackIndex >= VOD_EXT_FALLBACKS.size) {
+            if (url.contains("/series/")) {
+                val cur = VodQueue.current
+                val alt = cur?.altCmd?.takeIf { it.isNotBlank() && it != url }
+                if (alt != null) {
+                    vodExtFallbackIndex = VOD_EXT_FALLBACKS.size + 1
+                    retryVodWith(url = alt)
+                    return true
+                }
             }
             return false
         }
-        if (seriesExtFallbackIndex >= SERIES_EXT_FALLBACKS.size) {
-            // Uzantılar tükendi: son çare olarak bölüm-id URL'sini dene.
-            val cur = VodQueue.current
-            val alt = cur?.altCmd?.takeIf { it.isNotBlank() && it != url }
-            if (alt != null) {
-                seriesExtFallbackIndex = SERIES_EXT_FALLBACKS.size + 1
-                retrySeriesWith(url = alt)
-                return true
-            }
-            return false
-        }
+
         val idx = url.lastIndexOf('.')
-        if (idx <= url.lastIndexOf('/') + 1) return false
+        if (idx <= url.lastIndexOf('/') + 1) {
+            val alt = VOD_EXT_FALLBACKS.getOrNull(vodExtFallbackIndex) ?: return false
+            vodExtFallbackIndex++
+            retryVodWith(url + alt)
+            return true
+        }
         val base = url.substring(0, idx)
         val current = url.substring(idx).lowercase()
-        val candidates = SERIES_EXT_FALLBACKS.filter { it != current }
-        val alt = candidates.getOrNull(seriesExtFallbackIndex) ?: return false
-        seriesExtFallbackIndex++
-        retrySeriesWith(base + alt)
+        val candidates = VOD_EXT_FALLBACKS.filter { it != current }
+        val alt = candidates.getOrNull(vodExtFallbackIndex) ?: return false
+        vodExtFallbackIndex++
+        retryVodWith(base + alt)
         return true
     }
 
     /** Yedek URL'yi kısa bir bekleyişten sonra yeniden oynatmayı dener. */
-    private fun retrySeriesWith(url: String) {
+    private fun retryVodWith(url: String) {
         val resumePos = if (pendingStartPositionMs > 0) pendingStartPositionMs else (activePlayer?.currentPosition ?: 0L)
         setError(null)
         notifyStateChanged()
         scope.launch {
-            delay(800)
+            delay(600)
             if (stopping) return@launch
-            playInternal(url, currentTitle, currentArtwork, currentSubtitle, isVod = true, startPositionMs = resumePos)
+            playInternal(url, currentTitle, currentArtwork, currentSubtitle, isVod = vodPlayback, startPositionMs = resumePos)
         }
     }
 
@@ -1393,11 +1391,11 @@ object PlaybackManager {
         scope.launch {
             // Uyarlanabilir bekleme: paneller bağlantı limiti uyguladığında eski
             // oturumun sunucuda kapanması için daha uzun beklenir (2sn, 4sn, 6sn).
-            delay(2000L * liveRetryCount.coerceAtLeast(1))
+            delay(1500L * liveRetryCount.coerceAtLeast(1))
             // Bu sırada kullanıcı oynatmayı durdurduysa (stop() çağrıldıysa)
             // yeniden başlatma — oynatma öldürülmüş olabilir.
             if (stopping) return@launch
-            val url = try {
+            var url = try {
                 repository.channelStreamUrl(ch, ChannelQueue.profile)
             } catch (e: Exception) {
                 setError(l10n("Akış alınamadı") + ": ${e.message ?: e::class.simpleName}")
@@ -1407,6 +1405,15 @@ object PlaybackManager {
                 setError(l10n("Kanal akış URL'si boş"))
                 return@launch
             }
+            // Xtream canlı kanal: .m3u8 açılmadıysa 2. denemede .ts, 3. denemede uzantısız formatı dene
+            if (url.contains("/live/")) {
+                val base = if (url.contains('.')) url.substringBeforeLast('.') else url
+                if (liveRetryCount == 2) {
+                    url = "$base.ts"
+                } else if (liveRetryCount == 3) {
+                    url = base
+                }
+            }
             playInternal(url, ch.name, ch.logo, ch.tvGenreTitle, isVod = false)
         }
     }
@@ -1414,13 +1421,12 @@ object PlaybackManager {
     private fun mediaItem(url: String, title: String, artwork: String = ""): MediaItem {
         val builder = MediaItem.Builder().setUri(url)
         val lower = url.lowercase()
+        // Yalnızca adaptif akış formatları için açık MIME tipi belirt;
+        // progressive akışlarda (.mp4/.mkv/.ts) MIME tipini zorlamayarak
+        // DefaultExtractorsFactory'nin gerçek içeriği (sniffing) algılamasına izin ver.
         val mimeType = when {
-            lower.contains(".m3u8") || lower.contains("/hls/") -> MimeTypes.APPLICATION_M3U8
             lower.contains(".mpd") -> MimeTypes.APPLICATION_MPD
             lower.contains(".ism") -> MimeTypes.APPLICATION_SS
-            lower.contains(".mp4") -> MimeTypes.VIDEO_MP4
-            lower.contains(".mkv") -> MimeTypes.VIDEO_MATROSKA
-            lower.contains(".ts") || lower.endsWith("/ts") -> MimeTypes.VIDEO_MP2T
             else -> null
         }
         if (mimeType != null) {

@@ -734,10 +734,17 @@ class XtreamClient {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private fun apiBase(source: XtreamSource): String {
+    fun apiBase(source: XtreamSource): String {
         var server = source.server.trim().trimEnd('/')
-        if (!server.startsWith("http")) server = "http://$server"
-        return server
+        if (!server.startsWith("http://", ignoreCase = true) && !server.startsWith("https://", ignoreCase = true)) {
+            server = "http://$server"
+        }
+        val uri = runCatching { java.net.URI(server) }.getOrNull()
+        if (uri != null && !uri.host.isNullOrBlank()) {
+            val portPart = if (uri.port != -1) ":${uri.port}" else ""
+            return "${uri.scheme}://${uri.host}$portPart"
+        }
+        return server.removeSuffix("/player_api.php").removeSuffix("/get.php").trimEnd('/')
     }
 
     private fun playerApi(source: XtreamSource): String =

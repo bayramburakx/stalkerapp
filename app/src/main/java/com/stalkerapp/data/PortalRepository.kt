@@ -207,6 +207,16 @@ class PortalRepository(
         if (isDirectHttp && !isStalkerPlaceholder) {
             return direct
         }
+        if (store.activeSourceKind() == "xtream") {
+            val src = activeXtreamSource()
+            if (src != null && ch.id > 0) {
+                return XtreamClient().streamUrl(src, ch.id)
+            }
+        }
+        if (store.activeSourceKind() == "m3u") {
+            if (isDirectHttp) return direct
+            throw StalkerException(l10n("Kanal akış URL'si alınamadı"))
+        }
         StalkerClient.parseCmd(direct)?.let { u ->
             val isDirect = u.startsWith("http://", ignoreCase = true) || u.startsWith("https://", ignoreCase = true)
             val isPlaceholder = u.contains("localhost") || u.contains("127.0.0.1")
@@ -1738,6 +1748,21 @@ class PortalRepository(
                 epCmd.ifBlank { itemCmd }.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
             }
             "xtream" -> {
+                val src = activeXtreamSource()
+                if (src != null) {
+                    if (episode != null && episode.id > 0) {
+                        return XtreamClient().episodePlayUrlByEpisodeId(src, episode.id, "")
+                    }
+                    if (ExternalVod.isXtreamSeries(item.id)) {
+                        val realId = ExternalVod.realId(item.id)
+                        if (episode != null) {
+                            return XtreamClient().episodePlayUrl(src, realId, 1, episode.episodeNumber, "")
+                        }
+                    } else if (ExternalVod.isXtreamVod(item.id)) {
+                        val realId = ExternalVod.realId(item.id)
+                        return XtreamClient().vodPlayUrl(src, realId, "")
+                    }
+                }
                 epCmd.ifBlank { itemCmd }.ifBlank { throw StalkerException(l10n("Akış URL'si boş")) }
             }
             else -> stalkerVodStreamUrl(
