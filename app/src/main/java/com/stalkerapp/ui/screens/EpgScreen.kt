@@ -114,7 +114,7 @@ fun EpgScreen(
 
     val filteredChannels = remember(channels, selectedGenreId, searchQuery) {
         channels.filter { ch ->
-            val matchGenre = selectedGenreId == null || ch.tvGenreId == selectedGenreId?.toString() || ch.tvGenreTitle == genres.firstOrNull { it.id == selectedGenreId }?.title
+            val matchGenre = selectedGenreId == null || ch.tvGenreId == selectedGenreId || ch.tvGenreTitle == genres.firstOrNull { it.id == selectedGenreId }?.title
             val matchSearch = searchQuery.isBlank() || ch.name.contains(searchQuery, ignoreCase = true)
             matchGenre && matchSearch
         }
