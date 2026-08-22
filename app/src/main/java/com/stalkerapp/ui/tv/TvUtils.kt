@@ -4,9 +4,10 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 
 /**
@@ -25,11 +26,11 @@ fun isTvDevice(context: Context): Boolean {
  */
 fun isTvSelectKey(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyUp) return false
-    val code = event.nativeKeyEvent.keyCode
-    return code == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-        code == android.view.KeyEvent.KEYCODE_ENTER ||
-        code == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ||
-        code == android.view.KeyEvent.KEYCODE_BUTTON_A
+    val k = event.key
+    return k == Key.DirectionCenter ||
+        k == Key.Enter ||
+        k == Key.NumPadEnter ||
+        k == Key.ButtonA
 }
 
 /**
@@ -37,17 +38,17 @@ fun isTvSelectKey(event: KeyEvent): Boolean {
  */
 fun isTvBackKey(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyUp) return false
-    val code = event.nativeKeyEvent.keyCode
-    return code == android.view.KeyEvent.KEYCODE_BACK || code == android.view.KeyEvent.KEYCODE_ESCAPE
+    val k = event.key
+    return k == Key.Back || k == Key.Escape
 }
 
 /**
  * TV kumandasında yön (D-Pad) tuşuna basılıp basılmadığını kontrol eder.
  */
 fun isTvDirectionKey(event: KeyEvent): Boolean {
-    val code = event.nativeKeyEvent.keyCode
-    return code == android.view.KeyEvent.KEYCODE_DPAD_UP ||
-        code == android.view.KeyEvent.KEYCODE_DPAD_DOWN ||
-        code == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
-        code == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+    val k = event.key
+    return k == Key.DirectionUp ||
+        k == Key.DirectionDown ||
+        k == Key.DirectionLeft ||
+        k == Key.DirectionRight
 }
