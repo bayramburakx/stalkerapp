@@ -102,7 +102,6 @@ fun SettingsScreen(
     val lang = settings.language
 
     var showClearCacheConfirm by remember { mutableStateOf(false) }
-    var showPinDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Color.Black
@@ -177,28 +176,23 @@ fun SettingsScreen(
                     SettingsGroupHeader(title = L10n.t(lang, "Görünüm & Düzen"), icon = Icons.Default.Palette)
 
                     SettingsItem(
-                        title = L10n.t(lang, "Arayüz Düzeni"),
-                        subtitle = when (settings.preferredLayout) {
-                            "tv" -> "Android TV Düzeni"
-                            "mobile" -> "Mobil Düzen"
-                            else -> "Otomatik (Cihaza göre)"
+                        title = L10n.t(lang, "Ana Sayfa Düzeni"),
+                        subtitle = when (settings.homeLayout) {
+                            "compact" -> "Kompakt Düzen"
+                            "list" -> "Liste Düzeni"
+                            else -> "Geniş Satırlar"
                         },
                         trailing = {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 GlassChip(
-                                    selected = settings.preferredLayout == "auto",
-                                    onClick = { vm.updateSettings { it.copy(preferredLayout = "auto") } },
-                                    label = "Oto"
+                                    selected = settings.homeLayout == "rows",
+                                    onClick = { vm.saveSettings(settings.copy(homeLayout = "rows")) },
+                                    label = "Satır"
                                 )
                                 GlassChip(
-                                    selected = settings.preferredLayout == "mobile",
-                                    onClick = { vm.updateSettings { it.copy(preferredLayout = "mobile") } },
-                                    label = "Mobil"
-                                )
-                                GlassChip(
-                                    selected = settings.preferredLayout == "tv",
-                                    onClick = { vm.updateSettings { it.copy(preferredLayout = "tv") } },
-                                    label = "TV"
+                                    selected = settings.homeLayout == "compact",
+                                    onClick = { vm.saveSettings(settings.copy(homeLayout = "compact")) },
+                                    label = "Kompakt"
                                 )
                             }
                         }
@@ -210,29 +204,38 @@ fun SettingsScreen(
                     SettingsGroupHeader(title = L10n.t(lang, "Oynatıcı & Medya"), icon = Icons.Default.PlayCircle)
 
                     SettingsSwitchItem(
-                        title = L10n.t(lang, "Donanım Hızlandırma"),
+                        title = L10n.t(lang, "Donanım Çözücü"),
                         subtitle = L10n.t(lang, "Akıcı video oynatımı ve düşük pil tüketimi"),
-                        checked = settings.hardwareAcceleration,
+                        checked = settings.decoder == "hardware" || settings.decoder == "auto",
                         onCheckedChange = { checked ->
-                            vm.updateSettings { it.copy(hardwareAcceleration = checked) }
+                            vm.saveSettings(settings.copy(decoder = if (checked) "hardware" else "software"))
                         }
                     )
 
                     SettingsSwitchItem(
                         title = L10n.t(lang, "Arka Planda Oynatma"),
                         subtitle = L10n.t(lang, "Uygulama arka plana geçtiğinde ses çalmaya devam etsin"),
-                        checked = settings.playInBackground,
+                        checked = settings.backgroundPlayback,
                         onCheckedChange = { checked ->
-                            vm.updateSettings { it.copy(playInBackground = checked) }
+                            vm.saveSettings(settings.copy(backgroundPlayback = checked))
                         }
                     )
 
                     SettingsSwitchItem(
                         title = L10n.t(lang, "Resim İçinde Resim (PiP)"),
                         subtitle = L10n.t(lang, "Ana ekrana dönüldüğünde küçük pencerede oynat"),
-                        checked = settings.autoPipOnLeave,
+                        checked = settings.pipEnabled,
                         onCheckedChange = { checked ->
-                            vm.updateSettings { it.copy(autoPipOnLeave = checked) }
+                            vm.saveSettings(settings.copy(pipEnabled = checked))
+                        }
+                    )
+
+                    SettingsSwitchItem(
+                        title = L10n.t(lang, "Kaldığı Yerden Devam Et"),
+                        subtitle = L10n.t(lang, "Filmleri ve bölümleri kaldığın süreden başlat"),
+                        checked = settings.resumePlayback,
+                        onCheckedChange = { checked ->
+                            vm.saveSettings(settings.copy(resumePlayback = checked))
                         }
                     )
                 }
@@ -248,12 +251,12 @@ fun SettingsScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 GlassChip(
                                     selected = lang == "tr",
-                                    onClick = { vm.updateSettings { it.copy(language = "tr") } },
+                                    onClick = { vm.saveSettings(settings.copy(language = "tr")) },
                                     label = "TR"
                                 )
                                 GlassChip(
                                     selected = lang == "en",
-                                    onClick = { vm.updateSettings { it.copy(language = "en") } },
+                                    onClick = { vm.saveSettings(settings.copy(language = "en")) },
                                     label = "EN"
                                 )
                             }
@@ -270,7 +273,7 @@ fun SettingsScreen(
                         subtitle = L10n.t(lang, "+18 kanallar ve içerikler PIN ile kilitlensin"),
                         checked = settings.lockAdultWithPin,
                         onCheckedChange = { checked ->
-                            vm.updateSettings { it.copy(lockAdultWithPin = checked) }
+                            vm.saveSettings(settings.copy(lockAdultWithPin = checked))
                         }
                     )
                 }
