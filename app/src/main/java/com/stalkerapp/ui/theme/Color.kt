@@ -66,6 +66,7 @@ object PortioColors {
     val HairlineStrong = Color.White.copy(alpha = 0.22f)
     val FocusBorder = Color(0xFFFFFFFF)
     val FocusGlow = Color(0xFFFFFFFF)
+    val PrimaryGlow = Color(0xFF38BDF8)
 
     // Gradients
     val GlassGradient: Brush

@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stalkerapp.StalkerApp
+import com.stalkerapp.data.CatchupHelper
 import com.stalkerapp.data.Channel
 import com.stalkerapp.data.EpgProgram
 import com.stalkerapp.data.Genre
@@ -97,7 +97,7 @@ fun EpgScreen(
 
     var channels by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var selectedGenreId by remember { mutableStateOf<String?>(null) }
+    var selectedGenreId by remember { mutableStateOf<Long?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var selectedProgram by remember { mutableStateOf<Pair<Channel, EpgProgram>?>(null) }
@@ -114,7 +114,7 @@ fun EpgScreen(
 
     val filteredChannels = remember(channels, selectedGenreId, searchQuery) {
         channels.filter { ch ->
-            val matchGenre = selectedGenreId == null || ch.tvGenreId == selectedGenreId
+            val matchGenre = selectedGenreId == null || ch.tvGenreId == selectedGenreId.toString() || ch.tvGenreTitle == genres.firstOrNull { it.id == selectedGenreId }?.title
             val matchSearch = searchQuery.isBlank() || ch.name.contains(searchQuery, ignoreCase = true)
             matchGenre && matchSearch
         }
@@ -228,25 +228,25 @@ fun EpgScreen(
     // Program Detay & Oynatma Dialogu
     selectedProgram?.let { (ch, prog) ->
         val now = System.currentTimeMillis()
-        val isLive = now in prog.startTs..prog.endTs
-        val isPast = now > prog.endTs && ch.hasArchive
+        val isLive = now in prog.startTs..prog.stopTs
+        val isPast = now > prog.stopTs && (ch.isTvArchive || ch.archiveDuration > 0)
 
         AlertDialog(
             onDismissRequest = { selectedProgram = null },
             containerColor = PortioColors.SurfaceElevated,
             title = {
-                Text(prog.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(prog.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "${ch.name} • ${prog.timeFormatted()}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = PortioColors.PrimaryGlow,
+                        color = PortioColors.Accent,
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (prog.description.isNotBlank()) {
-                        Text(prog.description, style = MaterialTheme.typography.bodyMedium, color = PortioColors.TextSecondary)
+                    if (prog.desc.isNotBlank()) {
+                        Text(prog.desc, style = MaterialTheme.typography.bodyMedium, color = PortioColors.TextSecondary)
                     }
                     if (isLive) {
                         PortioBadge(text = "CANLI YAYIN", backgroundColor = PortioColors.AccentRed)
@@ -275,11 +275,9 @@ fun EpgScreen(
                     Button(
                         onClick = {
                             selectedProgram = null
-                            val idx = channels.indexOfFirst { it.id == ch.id }
-                            if (idx >= 0) {
-                                PlaybackManager.playArchive(channels, idx, prog.startTs, prog.endTs, profile)
-                                onOpenPlayer()
-                            }
+                            val catchupUrl = CatchupHelper.buildStalkerCatchupUrl(ch.cmd, prog.startTs / 1000, prog.stopTs / 1000)
+                            PlaybackManager.play(catchupUrl, prog.name, ch.logo, ch.name)
+                            onOpenPlayer()
                         }
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
@@ -309,7 +307,7 @@ private fun EpgChannelItem(
     var programs by remember { mutableStateOf<List<EpgProgram>>(emptyList()) }
     LaunchedEffect(channel.id) {
         if (profile != null) {
-            val list = runCatching { vm.repository.loadEpg(profile, channel.id) }.getOrDefault(emptyList())
+            val list = runCatching { vm.repository.loadEpg(profile, channel) }.getOrDefault(emptyList())
             programs = list
         }
     }
@@ -346,16 +344,16 @@ private fun EpgChannelItem(
             if (programs.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(programs.take(8), key = { it.id }) { prog ->
+                    items(programs.take(8), key = { "${it.chId}_${it.startTs}" }) { prog ->
                         val now = System.currentTimeMillis()
-                        val isLive = now in prog.startTs..prog.endTs
+                        val isLive = now in prog.startTs..prog.stopTs
                         Box(
                             modifier = Modifier
                                 .clip(PortioShape.Small)
-                                .background(if (isLive) PortioColors.PrimaryGlow.copy(alpha = 0.35f) else PortioColors.SurfaceRaised)
+                                .background(if (isLive) PortioColors.Accent.copy(alpha = 0.35f) else PortioColors.SurfaceRaised)
                                 .border(
                                     1.dp,
-                                    if (isLive) PortioColors.PrimaryGlow else PortioColors.Hairline,
+                                    if (isLive) PortioColors.Accent else PortioColors.Hairline,
                                     PortioShape.Small
                                 )
                                 .clickable { onSelectProgram(prog) }
@@ -374,7 +372,7 @@ private fun EpgChannelItem(
                                     )
                                 }
                                 Text(
-                                    prog.title,
+                                    prog.name,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (isLive) FontWeight.Bold else FontWeight.Normal,
                                     color = Color.White,
@@ -394,7 +392,7 @@ private fun EpgChannelItem(
 private fun EpgProgram.timeFormatted(): String {
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     val s = sdf.format(Date(startTs))
-    val e = sdf.format(Date(endTs))
+    val e = sdf.format(Date(stopTs))
     return "$s - $e"
 }
 
